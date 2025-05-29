@@ -1,4 +1,4 @@
-# USDA-Auburn
+# USDA-Auburn-Su25
 
 The summer continuation of the 24-25 USDA/Auburn CS Clinic project.
 
