@@ -1,8 +1,8 @@
 import numpy as np
 
 from pyqtgraph import *
-from PyQt6.QtWidgets import QGraphicsSimpleTextItem, QGraphicsItem
-from PyQt6.QtCore import QPointF, QRectF, QSizeF
+from PyQt6.QtWidgets import QGraphicsSimpleTextItem, QGraphicsItem, QGraphicsRectItem, QApplication
+from PyQt6.QtCore import QPointF, QTimer, QRectF
 from PyQt6.QtGui import QFont, QFontMetricsF
 
 from Settings import Settings
@@ -12,52 +12,58 @@ class LabelArea():
     """
     
     """
-    def __init__(self, time: float, dur: float, y_range: tuple[float, float], label: str,  plot_widget: PlotWidget):
+    def __init__(self, time: float, dur: float, label: str, plot_widget: PlotWidget):
         self.plot_widget: PlotWidget  # the parent PlotWidget
         self.viewbox: ViewBox # the ViewBox object that the LabelArea is being rendered in
         self.label: str  # the label string
-        self.label_text: QGraphicsSimpleTextItem
+        self.label_text: TextItem
         self.start_time: float # the time at the start of the label
         self.duration: float  # duration of the label in sec
-        self.duration_text: QGraphicsSimpleTextItem
+        self.duration_text: TextItem
         self.transition_line: PlotDataItem  # the vertical line starting the LabelArea
         self.area_lower_line: PlotDataItem  # the lower edge of the area
         self.area_upper_line: PlotDataItem  # the upper edge of the area
         self.area: FillBetweenItem   # the colored FillBetweenItem for the label
         
-        # initialize instance variables
+        # ----- initialize instance variables --------------------------
+    
         self.plot_widget = plot_widget
         self.viewbox = self.plot_widget.getPlotItem().getViewBox()
         _, (y_min, y_max) = self.viewbox.viewRange()
 
+        centered_x = time + dur / 2
+        label_y = y_min + 0.05 * (y_max - y_min)
+        duration_y = y_max - 0.05 * (y_max - y_min)
+
         font = QFont('Sans')
         font.setPointSize(10)
-        # font.setBold(True)
 
         self.label = label   
-        self.label_text = QGraphicsSimpleTextItem(label)
+        self.label_text = TextItem(label, color='black', anchor=(0.5, 0.5))
         self.label_text.setFont(font)
-        self.place_text_centered(self.label_text, time + dur/2, 0.05 * (y_max - y_min) + y_min)
-        self.label_text.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
-
+        self.label_text.setPos(centered_x, label_y)
+        self.viewbox.addItem(self.label_text)
+        
         self.start_time = time
-        self.duration = dur     
-        self.duration_text = QGraphicsSimpleTextItem(str(round(dur, 2)))
-        self.duration_text.setFont(font)
-        self.place_text_centered(self.duration_text, time + dur/2, 0.99 * ((y_max - y_min) + y_min))
 
-        self.duration_text.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
+        self.duration = dur
+        self.duration_text = TextItem(str(round(dur, 2)), color='black', anchor=(0.5, 0.5))
+        self.duration_text.setFont(font)
+        self.duration_text
+        self.duration_text.setPos(centered_x, duration_y)
+        self.viewbox.addItem(self.duration_text)
+        
         self.transition_line = PlotDataItem(
             x = [time, time],
             y = [y_min, y_max],
             pen=mkPen(color='black', width=2)
         )
         self.area_lower_line = PlotDataItem(
-            x = [time, time+dur],
+            x = [time, time + dur],
             y = [y_min, y_min]
         )
         self.area_upper_line = PlotDataItem(
-            x = [time, time+dur],
+            x = [time, time + dur],
             y = [y_max, y_max]
         )
         self.area = FillBetweenItem(
@@ -65,9 +71,29 @@ class LabelArea():
             self.area_upper_line, 
             brush=mkBrush(color=Settings.label_to_color[self.label])
         )
-   
 
+    def bounding_box(self, text_item: TextItem) -> QRectF:
+        # This is the local bounding box (0,0 at top-left of the text layout)
+        font = text_item.textItem.font()
+        text = text_item.toPlainText()
+        metrics = QFontMetricsF(font)
+        raw_rect = metrics.tightBoundingRect(text)
 
+        # Get anchor offset
+        anchor_x, anchor_y = text_item.anchor
+        offset_x = raw_rect.width() * anchor_x
+        offset_y = raw_rect.height() * anchor_y
+
+        # Shift origin so that (0, 0) maps to the anchor point
+        local_top_left = QPointF(-offset_x, -offset_y)
+        local_bottom_right = local_top_left + QPointF(raw_rect.width(), raw_rect.height())
+
+        # Map to scene coordinates
+        scene_top_left = text_item.mapToScene(local_top_left)
+        scene_bottom_right = text_item.mapToScene(local_bottom_right)
+
+        return QRectF(scene_top_left, scene_bottom_right)
+    
     def set_transition_line(self, x_val: float, y_range: tuple[float, float]):
         """
         Sets the LabelArea's transition line to the specified x-value and y_range.
@@ -98,7 +124,6 @@ class LabelArea():
             None
         """
         x_data = np.arange(x_range[0], x_range[1], 1 / sampling_rate)
-        print(x_data)
         y_data = np.full_like(x_data, y_val)
 
         if upper:
@@ -118,23 +143,23 @@ class LabelArea():
 
         NOTE: will the label itself ever need to be updated?
         """
-        self.viewbox = viewbox
-        _, (y_min, y_max) = viewbox.viewRange()
+        self.viewbox = self.plot_widget.getPlotItem().getViewBox()
+        _, (y_min, y_max) = self.viewbox.viewRange()
+
+        centered_x = self.start_time + self.duration / 2
+        label_y = y_min + 0.05 * (y_max - y_min)
+        duration_y = y_max - 0.05 * (y_max - y_min)
 
         self.area_lower_line.setData(x=self.area_lower_line.getData()[0], y = [y_min, y_min])
         self.area_upper_line.setData(x=self.area_upper_line.getData()[0], y = [y_max, y_max])
 
         self.area.setCurves(self.area_lower_line, self.area_upper_line)
-
         self.transition_line.setData(x = [self.start_time, self.start_time], y = [y_min, y_max])
+        dpi_scale = self.viewbox.scene().views()[0].devicePixelRatioF()
+        
+        self.label_text.setPos(centered_x, label_y)
+        self.duration_text.setPos(centered_x, duration_y)
 
-        self.place_text_centered(self.label_text, y = 0.05 * (y_max - y_min) + y_min)
-        self.place_text_centered(self.duration_text, y = 0.99 * (y_max - y_min) + y_min)
-
-        # self.label_text.setPos(y = 0.05 * (y_min - y_min) + y_min)
-        # self.duration_text.setPos(y = 0.8 * (y_min - y_min) + y_min)
-
-        #self.area.setBrush(color=Settings.label_to_color[self.label])
 
          
     def set_label(self, label: str) -> None:
@@ -145,27 +170,11 @@ class LabelArea():
         self.duration = duration
         self.duration_text.setText(duration)
 
-    def place_text_centered(self, text_item: QGraphicsSimpleTextItem, x: float = None, y: float = None) -> None :
-        """
-        Places a text object at the x/y coordinates centered on its own width/height.
-        """
-        if x is None:
-            x = self.start_time + self.duration / 2
-        if y is None:
-            y = text_item.pos().y()  # possible bug with compounding centerings?
-
-        # get the pixel-to-unit scaling
-        pixel_ratio = self.plot_widget.devicePixelRatioF()
-        pixel_width = self.viewbox.width() * pixel_ratio
-        pixel_height = self.viewbox.height() * pixel_ratio
-        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
-
-        x_unit_per_pix = (x_max - x_min) / pixel_width
-        y_unit_per_pix = (y_max - y_min) / pixel_height
-        
-        bounding_rect = text_item.boundingRect()
-
-        #print(text_item.text(), bounding_rect.width() * x_unit_per_pix / 2)
-        centered_point = QPointF(x - bounding_rect.width() * x_unit_per_pix / 2, 
-                                 y - bounding_rect.height() * y_unit_per_pix / 2)
-        text_item.setPos(centered_point)
+    # def place_text_centered(self, text_item: QGraphicsSimpleTextItem, x: float = None, y: float = None) -> None :
+    #     """
+    #     Places a text object at the x/y coordinates centered on its own width/height.
+    #     """
+    #     if x is None:
+    #         x = self.start_time + self.duration / 2
+    #     if y is None:
+    #         y = text_item.pos().y()  # possible bug with compounding centerings?

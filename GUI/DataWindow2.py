@@ -11,7 +11,6 @@ from EPGData import EPGData
 from Settings import Settings
 from LabelArea import LabelArea
 
-
 class PanZoomViewBox(ViewBox):
     """
     Helper class to override the default ViewBox behavior
@@ -49,9 +48,9 @@ class PanZoomViewBox(ViewBox):
         event.accept()
         datawindow.update_plot()
 
-    # def mouseDragEvent(self, event, axis=None) -> None:
-    #     # Disable all mouse drag panning/zooming
-    #     event.ignore()
+    def mouseDragEvent(self, event, axis=None) -> None:
+        # Disable all mouse drag panning/zooming
+        event.ignore()
 
 class DataWindow(PlotWidget):
     def __init__(self, epgdata: EPGData) -> None:
@@ -113,7 +112,7 @@ class DataWindow(PlotWidget):
 
         self.scatter.setVisible(False)
 
-
+        self.enable_debug = True
         self.debug_boxes = []
 
 
@@ -207,14 +206,14 @@ class DataWindow(PlotWidget):
             xRange=(min(time), max(time)), yRange=(min(volts), max(volts)), padding=0
         )
         self.update_plot()
-        self.update_compression()
-        self.update_zoom()
+
 
     def update_plot(self) -> None:
         """
         Updates the displayed data and compression/zoom indicators.
         """
         print("updating")
+
         (x_min, x_max), _ = self.viewbox.viewRange()
         self.downsample_visible(x_range=(x_min, x_max))
 
@@ -231,8 +230,68 @@ class DataWindow(PlotWidget):
 
         self.update_compression()
         self.update_zoom()
+
+        if self.enable_debug:
+            for box in self.debug_boxes:
+                self.scene().removeItem(box)
+            self.debug_boxes.clear()
+
         for label_area in self.labels:
             label_area.update_label_area(self.viewbox)
+
+        QTimer.singleShot(0, self.update_label_text)
+
+        # for label_area in self.labels:
+        #     
+
+        #     label_bbox = label_area.bounding_box(label_area.label_text)
+        #     dur_bbox = label_area.bounding_box(label_area.duration_text)
+
+        #     if self.enable_debug:
+        #         label_debug_box = self.draw_debug_box(label_bbox, self.scene())
+        #         dur_debug_box = self.draw_debug_box(dur_bbox, self.scene())
+        #         self.debug_boxes.append(label_debug_box)
+        #         self.debug_boxes.append(dur_debug_box)
+
+        #     label_overlapping = self.check_bbox_overlap(label_bbox, label_area.start_time)
+        #     label_area.label_text.setOpacity(not label_overlapping)
+
+        #     dur_overlapping = self.check_bbox_overlap(dur_bbox, label_area.start_time)
+        #     label_area.duration_text.setOpacity(not dur_overlapping)
+
+    def update_label_text(self):
+        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
+
+        for label_area in self.labels:
+            label_bbox = label_area.bounding_box(label_area.label_text)
+            dur_bbox = label_area.bounding_box(label_area.duration_text)
+
+            label_overlapping = self.check_bbox_overlap(label_bbox, label_area.start_time)
+            dur_overlapping = self.check_bbox_overlap(dur_bbox, label_area.start_time)
+
+            label_area.label_text.setOpacity(not label_overlapping)
+            label_area.duration_text.setOpacity(not dur_overlapping)
+
+            if self.enable_debug:
+                label_box = self.draw_debug_box(label_bbox, self.scene())
+                dur_box = self.draw_debug_box(dur_bbox, self.scene())
+                self.debug_boxes.append(label_box)
+                self.debug_boxes.append(dur_box)
+
+    def check_bbox_overlap(self, bbox: QRectF, transition_line_x: float):
+        bbox_left_coord = self.viewbox.mapSceneToView(self.mapToScene(round(bbox.left()), 0)).x()
+        bbox_right_coord = self.viewbox.mapSceneToView(self.mapToScene(round(bbox.right()), 0)).x()
+        return bbox_left_coord < transition_line_x < bbox_right_coord
+
+    
+
+    def draw_debug_box(self, bbox: QRectF, scene, color='red'):
+        box = QGraphicsRectItem(bbox)  # Use full QRectF with position
+        box.setPen(mkPen(color, width=1))
+        box.setZValue(1000)
+        scene.addItem(box)
+        return box
+    
 
 
     def update_compression(self) -> None:
@@ -422,6 +481,8 @@ class DataWindow(PlotWidget):
         # clear old labels if present
         for label_area in self.labels:
             self.plot_item.removeItem(label_area.area)
+            self.plot_item.removeItem(label_area.label_text)
+            self.plot_item.removeItem(label_area.duration_text)
             label_area.transition_line.clear()
         self.labels = []
 
@@ -430,8 +491,6 @@ class DataWindow(PlotWidget):
         df = self.epgdata.get_recording(self.file, self.prepost)
         time = df['time'].values
         volts = df[self.prepost + self.epgdata.prepost_suffix].values
-        # min_volts = min(volts)
-        # max_volts = max(volts)
         self.transitions = self.epgdata.get_transitions(self.file, self.transition_mode)
         _, (y_min, y_max) = self.viewbox.viewRange()
 
@@ -447,7 +506,7 @@ class DataWindow(PlotWidget):
         durations.append((self.transitions[-1][0], max(df['time']) - self.transitions[-1][0], self.transitions[-1][1]))
 
         for i, (time, dur, label) in enumerate(durations):
-            label_area = LabelArea(time, dur, (y_min, y_max), label, self)
+            label_area = LabelArea(time, dur, label, self)
 
             self.plot_item.addItem(label_area.transition_line)
             self.plot_item.addItem(label_area.area)
