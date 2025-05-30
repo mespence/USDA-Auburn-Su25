@@ -177,7 +177,7 @@ class EPGData():
                 new_labels = df.reset_index()[col].ffill()
                 self.dfs[file][col] = new_labels
                                 
-        def get_transitions(self, file, section_type):
+        def get_transitions(self, file: str, section_type: str) -> list[tuple[float, str]]: 
                 """
                 get_transitions looks at the labels from file and returns the times
                 where transitions occur and the state that follows them. Always has
