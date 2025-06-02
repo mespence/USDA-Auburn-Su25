@@ -3,7 +3,7 @@ from numpy.typing import NDArray
 from math import isclose
 
 from pyqtgraph import *
-from PyQt6.QtWidgets import QGraphicsRectItem, QApplication  # DEBUG ONLY TODO remove imports for testing
+from PyQt6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QApplication  # DEBUG ONLY TODO remove imports for testing
 from PyQt6.QtGui import QKeyEvent, QWheelEvent, QMouseEvent
 from PyQt6.QtCore import Qt, QPointF, QTimer, QRectF
 
@@ -98,7 +98,7 @@ class DataWindow(PlotWidget):
         self.plot_item.addItem(self.scatter)
         self.plot_item.setLabel("bottom", "<b>Time [s]</b>", color="black")
         self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color="black")
-        #self.plot_item.showGrid(x=Settings.show_grid, y=Settings.show_grid)
+        self.plot_item.showGrid(x=Settings.show_grid, y=Settings.show_grid)
         self.plot_item.layout.setContentsMargins(30, 30, 30, 20)
 
         # placeholder sine wave
@@ -108,15 +108,18 @@ class DataWindow(PlotWidget):
             self.xy_data[0], self.xy_data[1], pen=mkPen(color="b", width=2)
         )
 
-        #self.curve.setClipToView(True)
+        self.curve.setClipToView(True)
 
         self.scatter.setVisible(False)
 
-        self.enable_debug = True
+        QTimer.singleShot(0, self.deferred_init)
+
+        ## DEBUG/DEV TOOLS
+        self.enable_debug = False
         self.debug_boxes = []
 
 
-        QTimer.singleShot(0, self.deferred_init)
+        
 
     def deferred_init(self) -> None:
         """
@@ -219,80 +222,27 @@ class DataWindow(PlotWidget):
 
         x_data = self.xy_data[0]
         y_data = self.xy_data[1]
-
+        self.curve.setData(x_data, y_data)
         if len(x_data) <= 500:
             self.scatter.setVisible(True)
             self.scatter.setData(x_data, y_data)
-            self.curve.setData(x_data, y_data)
         else:
             self.scatter.setVisible(False)
-            self.curve.setData(x_data, y_data)
 
         self.update_compression()
         self.update_zoom()
+
+        for label_area in self.labels:
+           QTimer.singleShot(0, label_area.update_label_area)
+        
+        #self.update_label_visibility()
+        #QTimer.singleShot(0, self.update_label_visibility)
+
 
         if self.enable_debug:
             for box in self.debug_boxes:
                 self.scene().removeItem(box)
             self.debug_boxes.clear()
-
-        for label_area in self.labels:
-            label_area.update_label_area(self.viewbox)
-
-        QTimer.singleShot(0, self.update_label_text)
-
-        # for label_area in self.labels:
-        #     
-
-        #     label_bbox = label_area.bounding_box(label_area.label_text)
-        #     dur_bbox = label_area.bounding_box(label_area.duration_text)
-
-        #     if self.enable_debug:
-        #         label_debug_box = self.draw_debug_box(label_bbox, self.scene())
-        #         dur_debug_box = self.draw_debug_box(dur_bbox, self.scene())
-        #         self.debug_boxes.append(label_debug_box)
-        #         self.debug_boxes.append(dur_debug_box)
-
-        #     label_overlapping = self.check_bbox_overlap(label_bbox, label_area.start_time)
-        #     label_area.label_text.setOpacity(not label_overlapping)
-
-        #     dur_overlapping = self.check_bbox_overlap(dur_bbox, label_area.start_time)
-        #     label_area.duration_text.setOpacity(not dur_overlapping)
-
-    def update_label_text(self):
-        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
-
-        for label_area in self.labels:
-            label_bbox = label_area.bounding_box(label_area.label_text)
-            dur_bbox = label_area.bounding_box(label_area.duration_text)
-
-            label_overlapping = self.check_bbox_overlap(label_bbox, label_area.start_time)
-            dur_overlapping = self.check_bbox_overlap(dur_bbox, label_area.start_time)
-
-            label_area.label_text.setOpacity(not label_overlapping)
-            label_area.duration_text.setOpacity(not dur_overlapping)
-
-            if self.enable_debug:
-                label_box = self.draw_debug_box(label_bbox, self.scene())
-                dur_box = self.draw_debug_box(dur_bbox, self.scene())
-                self.debug_boxes.append(label_box)
-                self.debug_boxes.append(dur_box)
-
-    def check_bbox_overlap(self, bbox: QRectF, transition_line_x: float):
-        bbox_left_coord = self.viewbox.mapSceneToView(self.mapToScene(round(bbox.left()), 0)).x()
-        bbox_right_coord = self.viewbox.mapSceneToView(self.mapToScene(round(bbox.right()), 0)).x()
-        return bbox_left_coord < transition_line_x < bbox_right_coord
-
-    
-
-    def draw_debug_box(self, bbox: QRectF, scene, color='red'):
-        box = QGraphicsRectItem(bbox)  # Use full QRectF with position
-        box.setPen(mkPen(color, width=1))
-        box.setZValue(1000)
-        scene.addItem(box)
-        return box
-    
-
 
     def update_compression(self) -> None:
         """
@@ -326,6 +276,7 @@ class DataWindow(PlotWidget):
         self.compression = second_per_pix * 125
         self.compression_text.setText(f"Compression Level: {self.compression :.1f}")
 
+        # ----- CLINIC CODE -----------------
         # Update the compression readout.
         # Get the pixel distance of one second, we use a wide range to avoid rounding issues.
         # width = 1000
@@ -492,7 +443,6 @@ class DataWindow(PlotWidget):
         time = df['time'].values
         volts = df[self.prepost + self.epgdata.prepost_suffix].values
         self.transitions = self.epgdata.get_transitions(self.file, self.transition_mode)
-        _, (y_min, y_max) = self.viewbox.viewRange()
 
         # Only continue if the label column contains labels
         if self.epgdata.dfs[file][self.transition_mode].isna().all():
@@ -510,8 +460,10 @@ class DataWindow(PlotWidget):
 
             self.plot_item.addItem(label_area.transition_line)
             self.plot_item.addItem(label_area.area)
-            self.viewbox.addItem(label_area.label_text)
-            self.viewbox.addItem(label_area.duration_text)
+            self.plot_item.addItem(label_area.label_text)
+            self.plot_item.addItem(label_area.duration_text)
+            self.plot_item.addItem(label_area.label_background)
+            self.plot_item.addItem(label_area.duration_background)
 
             self.labels.append(label_area)
 
