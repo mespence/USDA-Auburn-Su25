@@ -1,0 +1,10 @@
+# for data augmentation plotter
+matplotlib
+numpy
+pandas
+scikit-learn
+scipy
+# Have to start with `python -m jupyter notebook` or else imports from within venv don't work, even though `which jupyter` shows the one in the venv. Bizarre...
+jupyter
+jupyterlab-vim
+pyqt6 # for %matplotlib qt
