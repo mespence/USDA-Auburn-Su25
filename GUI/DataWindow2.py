@@ -82,6 +82,8 @@ class DataWindow(PlotWidget):
         self.transition_mode: str = 'labels'
         self.labels: list[LabelArea] = []  # the list of LabelAreas
 
+        self.viewbox.sigRangeChanged.connect(self.update_plot)
+
         self.initUI()
 
     def initUI(self) -> None:
@@ -115,11 +117,11 @@ class DataWindow(PlotWidget):
         QTimer.singleShot(0, self.deferred_init)
 
         ## DEBUG/DEV TOOLS
-        self.enable_debug = False
+        self.enable_debug = True
         self.debug_boxes = []
+        Settings.show_durations = True
 
 
-        
 
     def deferred_init(self) -> None:
         """
@@ -146,17 +148,10 @@ class DataWindow(PlotWidget):
 
 
     def resizeEvent(self, event) -> None:
-        # resizeEvent is called automatically when the window is
-        # resized and handles rescaling everything. We just also
-        # want to update compression so we do that and then
-        # let everything get handled normally.
+        """
+        Handles window resizing.
+        """
         super().resizeEvent(event)
-
-        if not hasattr(self, "viewbox"):
-            return  # viewbox not assigned yet
-
-        self.update_compression()
-        # self.update_scrollbar()
 
     def window_to_chart(self, x: float, y: float) -> tuple[float, float]:
         """
@@ -208,7 +203,7 @@ class DataWindow(PlotWidget):
         self.viewbox.setRange(
             xRange=(min(time), max(time)), yRange=(min(volts), max(volts)), padding=0
         )
-        self.update_plot()
+        #self.update_plot()
 
 
     def update_plot(self) -> None:
@@ -233,16 +228,24 @@ class DataWindow(PlotWidget):
         self.update_zoom()
 
         for label_area in self.labels:
-           QTimer.singleShot(0, label_area.update_label_area)
-        
-        #self.update_label_visibility()
-        #QTimer.singleShot(0, self.update_label_visibility)
+           label_area.update_label_area()
+        #    if self.enable_debug:
+        #        label_area.draw_debug_box(label_area.label_bbox)
+        #        label_area.draw_debug_box(label_area.label_bbox)
+        #    #QTimer.singleShot(0, label_area.update_label_area)
+           
 
 
-        if self.enable_debug:
-            for box in self.debug_boxes:
-                self.scene().removeItem(box)
-            self.debug_boxes.clear()
+
+        # if self.enable_debug:
+
+        #     for box in self.debug_boxes:
+        #         self.scene().removeItem(box)
+        #     self.debug_boxes.clear()
+
+    # def update_label_areas(self):
+    #     for label_area in self.labels:
+    #         label_area.update_label_area()
 
     def update_compression(self) -> None:
         """
@@ -556,13 +559,12 @@ def main():
 
     epgdata = EPGData()
     epgdata.load_data("test_recording.csv")
-    # epgdata.load_data(r'C:\EPG-Project\Summer\Code\summer-code\smooth_18mil.csv')
+    # epgdata.load_data(r'C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv')
     print("Data Loaded")
-
+    
     window = DataWindow(epgdata)
     window.plot_recording(window.epgdata.current_file, 'post')
     window.plot_transitions(window.epgdata.current_file)
-
 
     window.showMaximized()
     sys.exit(app.exec())

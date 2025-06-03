@@ -18,20 +18,23 @@ class LabelArea():
         self.viewbox: ViewBox # the ViewBox object that the LabelArea is being rendered in
         self.text_metrics: QFontMetricsF  # metrics about the font for the text
         self.start_time: float # the time at the start of the label
+
         self.label: str  # the label string
         self.label_text: TextItem  # the text object holding the label string
         self.label_bbox: QRectF  # the bounding box around the label text
         self.label_background: QGraphicsRectItem  # the background fill for the label text
-        self.durations_enabled: bool  # whether to display durations at the top of label areas
+        self.label_debug_box: QGraphicsRectItem  # the debug bbox for the label
+
         self.duration: float  # duration of the label in sec
         self.duration_text: TextItem  # the text object holding the duration string
         self.duration_bbox: QRectF  # the bounding box around the duration text
         self.duration_background: QGraphicsRectItem  # the background fill for the dur text
+        self.duration_debug_box: QGraphicsRectItem  # the debug bbox for the duration
+
         self.transition_line: PlotDataItem  # the vertical line starting the LabelArea
         self.area_lower_line: PlotDataItem  # the lower edge of the area
         self.area_upper_line: PlotDataItem  # the upper edge of the area
         self.area: FillBetweenItem   # the colored FillBetweenItem for the label
-        
         
         
         # ----- initialize instance variables --------------------------
@@ -54,8 +57,6 @@ class LabelArea():
         self.label_text.setFont(font)
         self.label_text.setPos(centered_x, label_y)
         self.viewbox.addItem(self.label_text)
-
-        self.durations_enabled = True
 
         self.duration = dur
         self.duration_text = TextItem(str(round(dur, 2)), color='black', anchor=(0.5, 0.5))
@@ -91,8 +92,26 @@ class LabelArea():
         self.viewbox.addItem(self.label_background)
         self.viewbox.addItem(self.duration_background)
 
-    def set_duration_visibility():
-        pass
+        self.label_debug_box = QGraphicsRectItem(self.label_bbox)
+        self.label_debug_box.setPen(mkPen(color='red'))
+        self.label_debug_box.setVisible(self.plot_widget.enable_debug)
+        self.viewbox.addItem(self.label_debug_box)
+
+        self.duration_debug_box = QGraphicsRectItem(self.duration_bbox)
+        self.duration_debug_box.setPen(mkPen(color='red'))
+        self.duration_debug_box.setVisible(self.plot_widget.enable_debug)
+        self.viewbox.addItem(self.duration_debug_box)
+        
+
+        self.viewbox.sigTransformChanged.connect(self.update_label_area)
+
+    def set_duration_visibility(self, state: bool) -> None:
+        """
+        Toggles the visibility of the duration text and background.
+        """
+        self.duration_text.setVisible(state)
+        self.duration_background.setVisible(state)
+        self.update_visibility()  # to handle intersections
 
 
     def bounding_box(self, text_item: TextItem) -> QRectF:
@@ -120,7 +139,7 @@ class LabelArea():
         return QRectF(view_top_left, view_bottom_right)
 
     
-    def background_box(self, text_item: TextItem, color = None) -> QGraphicsRectItem:
+    def background_box(self, text_item: TextItem, color = None, opacity = 1) -> QGraphicsRectItem:
         """
         Returns the background box around a TextItem.
         """
@@ -129,13 +148,11 @@ class LabelArea():
 
         # NOTE: the grid renders transparency on its own, so an 
         # opacity of 1 will still render a faded grid.
-        opacity = 1
 
         bbox = self.bounding_box(text_item)
 
         # create QGraphicsRectItem
         bg_rect = QGraphicsRectItem(QRectF(0, 0, bbox.width(), bbox.height()))
-        
         bg_rect.setBrush(mkBrush(color))  # fill color
         bg_rect.setPen(QPen(Qt.PenStyle.NoPen))  # line color
         bg_rect.setOpacity(opacity)
@@ -177,65 +194,44 @@ class LabelArea():
         self.label_text.setPos(centered_x, label_y)
         self.duration_text.setPos(centered_x, duration_y)
 
-
         # update backgrounds
         self.label_bbox = self.bounding_box(self.label_text)
         self.duration_bbox = self.bounding_box(self.duration_text)
         
-        self.label_background.setRect(0, 0, self.label_bbox.width(), self.label_bbox.height())
-        self.duration_background.setRect(0, 0, self.duration_bbox.width(), self.duration_bbox.height())
-        
-        self.label_background.setPos(self.label_bbox.topLeft())       
-        self.duration_background.setPos(self.duration_bbox.topLeft())        
+        self.update_rect(self.label_background, self.label_bbox)
+        self.update_rect(self.duration_background, self.duration_bbox)
 
+        self.update_rect(self.label_debug_box, self.label_bbox)
+        self.update_rect(self.duration_debug_box, self.duration_bbox)
 
         self.update_visibility()
         
+    def update_rect(self, rect: QGraphicsRectItem, bbox: QRectF) -> None:
+        """
+        Updates a QGraphicsRectItem to a new QRectF.
+        """
+        rect.setRect(0, 0, bbox.width(), bbox.height())
+        rect.setPos(bbox.topLeft())
 
     def update_visibility(self) -> None:
         """
-        Updates the visibility of the labels and backgrounds 
+        Updates the visibility of the text and backgrounds 
         based on intersection with transition lines.
 
-        Also handles redrawing the text backgrounds, since for 
-        some reason doing it at this point in the rendering 
-        update prevents any desync.
+        Also handles hiding/showing durations based on the settings
         """
 
         label_overlapping = self.label_bbox.left() < self.start_time < self.label_bbox.right()
         dur_overlapping = self.duration_bbox.left() < self.start_time < self.duration_bbox.right()
 
         self.label_text.setOpacity(not label_overlapping)
-        self.duration_text.setOpacity(not dur_overlapping)
+        self.duration_text.setOpacity(not dur_overlapping and Settings.show_durations)
 
         self.label_background.setVisible(not label_overlapping)
-        self.duration_background.setVisible(not dur_overlapping)
-
-        if self.plot_widget.enable_debug:
-            label_box = self.draw_debug_box(self.label_bbox)
-            dur_box = self.draw_debug_box(self.duration_bbox)
-            self.plot_widget.debug_boxes.append(label_box)
-            self.plot_widget.debug_boxes.append(dur_box)
-
-    def draw_debug_box(self, bbox: QRectF, color='red') -> QGraphicsRectItem:
-        """
-        Adds a QRectF to the scene around a given bounding box.
-
-        Inputs:
-            bbox: A QRectF with size and position set
-            color: the color of the debug box (str or QColor)
-        """
-        box = QGraphicsRectItem(bbox)
-        box.setPen(mkPen(color, width=1))
-        box.setZValue(1000)
-        self.viewbox.addItem(box)
-        return box  
-    
+        self.duration_background.setVisible(not dur_overlapping and Settings.show_durations)
 
 
 
-
-    
     # functions for manually setting label properties
     # unused rn, but maybe could use for manual label editing.
 
