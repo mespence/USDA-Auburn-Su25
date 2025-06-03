@@ -1,6 +1,8 @@
-import numpy as np
-
-from pyqtgraph import *
+from pyqtgraph import (
+    PlotWidget, ViewBox,
+    TextItem, PlotDataItem, FillBetweenItem, 
+    mkPen, mkBrush,
+)
 from PyQt6.QtWidgets import QGraphicsRectItem
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QFont, QFontMetricsF, QPen, QColor
@@ -101,8 +103,6 @@ class LabelArea():
         self.duration_debug_box.setPen(mkPen(color='red'))
         self.duration_debug_box.setVisible(self.plot_widget.enable_debug)
         self.viewbox.addItem(self.duration_debug_box)
-        
-        print(self.duration_background.zValue())
 
         self.viewbox.sigTransformChanged.connect(self.update_label_area)
 

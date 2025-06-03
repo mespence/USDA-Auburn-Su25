@@ -1,15 +1,22 @@
 import numpy as np
 from numpy.typing import NDArray
-from math import isclose
 
-from pyqtgraph import *
-from PyQt6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QApplication  # DEBUG ONLY TODO remove imports for testing
+from pyqtgraph import (
+    PlotWidget, ViewBox, PlotItem, 
+    TextItem, PlotDataItem, ScatterPlotItem, 
+    mkPen,
+)
+
 from PyQt6.QtGui import QKeyEvent, QWheelEvent, QMouseEvent
-from PyQt6.QtCore import Qt, QPointF, QTimer, QRectF
+from PyQt6.QtCore import Qt, QPointF, QTimer
 
 from EPGData import EPGData
 from Settings import Settings
 from LabelArea import LabelArea
+
+# DEBUG ONLY TODO remove imports for testing
+from PyQt6.QtWidgets import QApplication  
+import sys
 
 class PanZoomViewBox(ViewBox):
     """
@@ -111,14 +118,9 @@ class DataWindow(PlotWidget):
         )
 
         self.curve.setClipToView(True)
-        print(self.curve.zValue())
-        self.curve.setZValue(-100)
-        print(self.curve.zValue())
-
-        self.scatter.setZValue(-99)
-
-
         self.scatter.setVisible(False)
+        self.curve.setZValue(-5)
+        self.scatter.setZValue(-4)
 
         QTimer.singleShot(0, self.deferred_init)
 
@@ -148,9 +150,8 @@ class DataWindow(PlotWidget):
         self.zoom_text.setPos(QPointF(80, 30))
         self.scene().addItem(self.zoom_text)
         
-
         # further defer update until the window is actually rendered to the screen
-        QTimer.singleShot(0, lambda: self.update_plot())
+        QTimer.singleShot(0, self.update_plot)
 
 
     def resizeEvent(self, event) -> None:
@@ -214,7 +215,8 @@ class DataWindow(PlotWidget):
 
     def update_plot(self) -> None:
         """
-        Updates the displayed data and compression/zoom indicators.
+        Updates the displayed data, labels, and compression/zoom 
+        indicators.
         """
         print("updating")
 
@@ -235,23 +237,7 @@ class DataWindow(PlotWidget):
 
         for label_area in self.labels:
            label_area.update_label_area()
-        #    if self.enable_debug:
-        #        label_area.draw_debug_box(label_area.label_bbox)
-        #        label_area.draw_debug_box(label_area.label_bbox)
-        #    #QTimer.singleShot(0, label_area.update_label_area)
-           
 
-
-
-        # if self.enable_debug:
-
-        #     for box in self.debug_boxes:
-        #         self.scene().removeItem(box)
-        #     self.debug_boxes.clear()
-
-    # def update_label_areas(self):
-    #     for label_area in self.labels:
-    #         label_area.update_label_area()
 
     def update_compression(self) -> None:
         """
@@ -322,7 +308,7 @@ class DataWindow(PlotWidget):
         self.zoom_level = pix_per_second / default_pix_per_second
 
         # leave off decimal if zoom level is int
-        if isclose(self.zoom_level, round(self.zoom_level), abs_tol=1e-9):
+        if abs(self.zoom_level - round(self.zoom_level)) < 1e-9:
             self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .0f}%")
         else:
             self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .1f}%")
@@ -386,7 +372,7 @@ class DataWindow(PlotWidget):
             visible_x = x[mask]
 
             if len(visible_x) <= 250: 
-                # render additional point  on each sideat very high zooms
+                # render additional point on each side at very high zooms
                 left_idx = np.searchsorted(x, x_min, side="left")
                 right_idx = np.searchsorted(x, x_max, side="right")
 
@@ -493,23 +479,15 @@ class DataWindow(PlotWidget):
         return
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        # if event.key() == Qt.Key.Key_Shift:
-        #     # holding shift allows for vertical zoom / scroll
-        #     self.vertical_mode = True
-        # elif event.key() == Qt.Key.Key_Control:
-        #     # holding control allows for zoom, otherwise
-        #     # scrolling scrolls the plot
-        #     self.zoom_mode = True
-        #elif event.key() == Qt.Key.Key_R:
         if event.key() == Qt.Key.Key_R:
-            # r resets zoom
-            self.reset_view()
+            self.reset_view()  
 
-    # def keyReleaseEvent(self, event: QKeyEvent) -> None:
-    #     if event.key() == Qt.Key.Key_Shift:
-    #         self.vertical_mode = False
-    #     elif event.key() == Qt.Key.Key_Control:
-    #         self.zoom_mode = False
+    def keyReleaseEvent(self, event: QKeyEvent) -> None:
+        return
+        if event.key() == Qt.Key.Key_Shift:
+            self.vertical_mode = False
+        elif event.key() == Qt.Key.Key_Control:
+            self.zoom_mode = False
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         super().mousePressEvent(event)
@@ -558,6 +536,7 @@ class DataWindow(PlotWidget):
     #     # if self.vertical_mode:
 
 
+# TODO: remove after feature-complete and integrated with main
 def main():
     print("Testing new DataWindow class")
     Settings()
