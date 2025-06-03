@@ -1,9 +1,9 @@
 import numpy as np
 
 from pyqtgraph import *
-from PyQt6.QtWidgets import QGraphicsRectItem, QGraphicsScene
+from PyQt6.QtWidgets import QGraphicsRectItem
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QFont, QFontMetricsF, QPen
+from PyQt6.QtGui import QFont, QFontMetricsF, QPen, QColor
 
 from Settings import Settings
 
@@ -102,6 +102,7 @@ class LabelArea():
         self.duration_debug_box.setVisible(self.plot_widget.enable_debug)
         self.viewbox.addItem(self.duration_debug_box)
         
+        print(self.duration_background.zValue())
 
         self.viewbox.sigTransformChanged.connect(self.update_label_area)
 
@@ -139,15 +140,20 @@ class LabelArea():
         return QRectF(view_top_left, view_bottom_right)
 
     
-    def background_box(self, text_item: TextItem, color = None, opacity = 1) -> QGraphicsRectItem:
+    def background_box(self, text_item: TextItem, color: QColor = None, alpha: int = 255) -> QGraphicsRectItem:
         """
         Returns the background box around a TextItem.
         """
         if color is None:
-            color = Settings.label_to_color[self.label].darker(150) # 50% darker
-
-        # NOTE: the grid renders transparency on its own, so an 
-        # opacity of 1 will still render a faded grid.
+            color = self.composite_on_white(Settings.label_to_color[self.label]) 
+            color = color.darker(110) # 10% darker
+            color = QColor.fromHsvF(
+                color.hueF(), 
+                color.saturationF() * 1.8,  # 80% more saturated
+                color.valueF(), 
+                color.alphaF()
+            )
+            color.setAlpha(200)
 
         bbox = self.bounding_box(text_item)
 
@@ -155,7 +161,6 @@ class LabelArea():
         bg_rect = QGraphicsRectItem(QRectF(0, 0, bbox.width(), bbox.height()))
         bg_rect.setBrush(mkBrush(color))  # fill color
         bg_rect.setPen(QPen(Qt.PenStyle.NoPen))  # line color
-        bg_rect.setOpacity(opacity)
 
         # Set Z-value below that of the TextItem, which 
         # renders at Z = 0 regardless of what you set it to.
@@ -163,6 +168,17 @@ class LabelArea():
         bg_rect.setZValue(-1)
 
         return bg_rect
+    
+    def composite_on_white(self, color: QColor) -> QColor:
+        """
+        Helps function to get the RGB value (no alpha) of 
+        an RGBA color displayed on a white background.
+        """
+        alpha = color.alpha() / 255.0
+        r = round(color.red() * alpha + 255 * (1 - alpha))
+        g = round(color.green() * alpha + 255 * (1 - alpha))
+        b = round(color.blue() * alpha + 255 * (1 - alpha))
+        return QColor(r, g, b)
     
     def update_label_area(self) -> None:
         """

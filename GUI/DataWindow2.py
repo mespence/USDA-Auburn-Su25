@@ -111,13 +111,19 @@ class DataWindow(PlotWidget):
         )
 
         self.curve.setClipToView(True)
+        print(self.curve.zValue())
+        self.curve.setZValue(-100)
+        print(self.curve.zValue())
+
+        self.scatter.setZValue(-99)
+
 
         self.scatter.setVisible(False)
 
         QTimer.singleShot(0, self.deferred_init)
 
         ## DEBUG/DEV TOOLS
-        self.enable_debug = True
+        self.enable_debug = False
         self.debug_boxes = []
         Settings.show_durations = True
 
