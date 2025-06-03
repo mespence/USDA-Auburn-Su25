@@ -15,4 +15,4 @@ with open(outfilename, "a", newline="", buffering=1) as csvfile:
         csvfile.flush()  # ensure data is written immediately
         os.fsync(csvfile.fileno())  # force write to disk
         counter += 1
-        sleep(0.5)
+        sleep(0.1)
