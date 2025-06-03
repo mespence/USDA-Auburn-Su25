@@ -22,6 +22,7 @@ class LabelArea():
         self.label_text: TextItem  # the text object holding the label string
         self.label_bbox: QRectF  # the bounding box around the label text
         self.label_background: QGraphicsRectItem  # the background fill for the label text
+        self.durations_enabled: bool  # whether to display durations at the top of label areas
         self.duration: float  # duration of the label in sec
         self.duration_text: TextItem  # the text object holding the duration string
         self.duration_bbox: QRectF  # the bounding box around the duration text
@@ -34,7 +35,7 @@ class LabelArea():
         
         
         # ----- initialize instance variables --------------------------
-    
+
         self.plot_widget = plot_widget
         self.viewbox = self.plot_widget.getPlotItem().getViewBox()
         self.start_time = time
@@ -53,6 +54,8 @@ class LabelArea():
         self.label_text.setFont(font)
         self.label_text.setPos(centered_x, label_y)
         self.viewbox.addItem(self.label_text)
+
+        self.durations_enabled = True
 
         self.duration = dur
         self.duration_text = TextItem(str(round(dur, 2)), color='black', anchor=(0.5, 0.5))
@@ -87,6 +90,9 @@ class LabelArea():
 
         self.viewbox.addItem(self.label_background)
         self.viewbox.addItem(self.duration_background)
+
+    def set_duration_visibility():
+        pass
 
 
     def bounding_box(self, text_item: TextItem) -> QRectF:
@@ -213,12 +219,10 @@ class LabelArea():
 
     def draw_debug_box(self, bbox: QRectF, color='red') -> QGraphicsRectItem:
         """
-        Adds a QRectF to the scene around a bounding box. The QRectF must have its position 
-        set correctly before being passed to this function.
+        Adds a QRectF to the scene around a given bounding box.
 
         Inputs:
             bbox: A QRectF with size and position set
-            scene: the graphics scene to add the box to
             color: the color of the debug box (str or QColor)
         """
         box = QGraphicsRectItem(bbox)
