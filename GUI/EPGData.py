@@ -108,13 +108,14 @@ class EPGData():
                 """
                 get_recording returns a pandas dataframe containing time
                 and voltage data only.
+
                 Inputs:
                         file: string containing the key of the recording
                         prepost: string containing either "pre" or "post"
                                  for either pre or post rectification data
+
                 Outputs:
-                        A pandas dataframe containing the desired data if
-                        request is valid.
+                        A tuple of numpy arrays containing the time and voltage data.
                 """
                 
                 if not prepost in ["pre", "post"]:
@@ -123,18 +124,22 @@ class EPGData():
                 elif not file in self.dfs:
                         raise Exception(f"{file} is not a key in self.dfs")
 
-                else:
-                        return self.dfs[file][['time', f'{prepost}{self.prepost_suffix}']]
+                else:   
+                        # return unpacked for optimization
+                        df = self.dfs[file]
+                        return df['time'].values, df[f'{prepost}{self.prepost_suffix}'].values
 
-        def set_labels(self, file, labels):
+        def set_labels(self, file: str, labels) -> None:
                 """
                 set_labels sets the labels of file to be those given in the
                 input labels
+
                 Inputs:
                         file: string containing the key of the recording
                         labels: a numpy array containing label strings of
                                 the same length as the number of columns
                                 in the recording dataframe
+
                 Returns:
                         None
                 """

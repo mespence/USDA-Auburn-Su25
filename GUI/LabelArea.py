@@ -33,6 +33,8 @@ class LabelArea():
         self.duration_background: QGraphicsRectItem  # the background fill for the dur text
         self.duration_debug_box: QGraphicsRectItem  # the debug bbox for the duration
 
+        self.enable_debug: bool # whether to show debug boxes
+
         self.transition_line: PlotDataItem  # the vertical line starting the LabelArea
         self.area_lower_line: PlotDataItem  # the lower edge of the area
         self.area_upper_line: PlotDataItem  # the upper edge of the area
@@ -65,12 +67,14 @@ class LabelArea():
         self.duration_text.setFont(font)
         self.duration_text.setPos(centered_x, duration_y)
         self.viewbox.addItem(self.duration_text)
-        
+
         self.transition_line = PlotDataItem(
             x = [time, time],
             y = [y_min, y_max],
             pen=mkPen(color='black', width=2)
         )
+        self.viewbox.addItem(self.transition_line)
+        
         self.area_lower_line = PlotDataItem(
             x = [time, time + dur],
             y = [y_min, y_min]
@@ -84,27 +88,46 @@ class LabelArea():
             self.area_upper_line, 
             brush=mkBrush(color=Settings.label_to_color[self.label])
         )
+        self.viewbox.addItem(self.area)
 
         self.label_bbox = self.bounding_box(self.label_text)
         self.duration_bbox = self.bounding_box(self.duration_text)
 
         self.label_background = self.background_box(self.label_text)
-        self.duration_background = self.background_box(self.duration_text)
-
         self.viewbox.addItem(self.label_background)
+        
+        self.duration_background = self.background_box(self.duration_text)
         self.viewbox.addItem(self.duration_background)
 
-        self.label_debug_box = QGraphicsRectItem(self.label_bbox)
-        self.label_debug_box.setPen(mkPen(color='red'))
-        self.label_debug_box.setVisible(self.plot_widget.enable_debug)
-        self.viewbox.addItem(self.label_debug_box)
-
-        self.duration_debug_box = QGraphicsRectItem(self.duration_bbox)
-        self.duration_debug_box.setPen(mkPen(color='red'))
-        self.duration_debug_box.setVisible(self.plot_widget.enable_debug)
-        self.viewbox.addItem(self.duration_debug_box)
+        self.enable_debug = self.plot_widget.enable_debug
 
         self.viewbox.sigTransformChanged.connect(self.update_label_area)
+    
+        if self.enable_debug:
+            self.toggle_debug_boxes()   
+
+    def toggle_debug_boxes(self) -> None:
+        if self.enable_debug:
+            if not hasattr(self, "label_debug_box"):
+                self.label_debug_box = QGraphicsRectItem(self.label_bbox)
+                self.label_debug_box.setPen(mkPen(color='red'))
+            else:   
+                self.update_rect(self.label_debug_box, self.label_bbox)
+            self.viewbox.addItem(self.label_debug_box)
+
+            if not hasattr(self, "duration_debug_box"):
+                self.duration_debug_box = QGraphicsRectItem(self.duration_bbox)
+                self.duration_debug_box.setPen(mkPen(color='red'))
+            else:
+                self.update_rect(self.duration_debug_box, self.duration_bbox)
+            self.viewbox.addItem(self.duration_debug_box)    
+
+        else:
+            if hasattr(self, "label_debug_box"):
+                self.viewbox.removeItem(self.label_debug_box)
+            if hasattr(self, "duration_debug_box"):
+                self.viewbox.removeItem(self.duration_debug_box)
+
 
     def set_duration_visibility(self, state: bool) -> None:
         """
@@ -190,7 +213,6 @@ class LabelArea():
         Output:
             None
 
-        NOTE: will the label itself ever need to be updated?
         """
         self.viewbox = self.plot_widget.getPlotItem().getViewBox()
         _, (y_min, y_max) = self.viewbox.viewRange()
@@ -217,8 +239,12 @@ class LabelArea():
         self.update_rect(self.label_background, self.label_bbox)
         self.update_rect(self.duration_background, self.duration_bbox)
 
-        self.update_rect(self.label_debug_box, self.label_bbox)
-        self.update_rect(self.duration_debug_box, self.duration_bbox)
+        if self.enable_debug:
+            self.toggle_debug_boxes()
+            # self.update_rect(self.label_debug_box, self.label_bbox)
+            # self.update_rect(self.duration_debug_box, self.duration_bbox)
+        else:
+            self.toggle_debug_boxes()
 
         self.update_visibility()
         
@@ -252,28 +278,31 @@ class LabelArea():
         Returns a list of the items added to the viewbox.
         """
         itemsToRemove = [
-            self.area, self.label_text, self.duration_text, 
+            self.area, self.label_text, self.duration_text, self.transition_line,
             self.label_background, self.duration_background
         ]
+
         if self.plot_widget.enable_debug:
             itemsToRemove.append(self.label_debug_box)
             itemsToRemove.append(self.duration_debug_box)
-            
+
         return itemsToRemove
 
     # functions for manually setting label properties
     # unused rn, but maybe could use for manual label editing.
 
 
-    # def set_transition_line(self, x_val: float, y_range: tuple[float, float]):
-    #     """
-    #     Sets the LabelArea's transition line to the specified x-value and y_range.
+    def set_transition_line(self, x_val: float, y_range: tuple[float, float] = None):
+        """
+        Sets the LabelArea's transition line to the specified x-value and y_range.
 
-    #     Inputs:
-    #         x_val: the x-value to draw the line at
-    #         y_range: a (y_min, x_max) pair specifying the range of the line
-    #     """
-    #     self.transition_line.setData([x_val, x_val], [y_range[0], y_range[1]])
+        Inputs:
+            x_val: the x-value to draw the line at
+            y_range: a (y_min, x_max) pair specifying the range of the line
+        """
+        if y_range is None:
+            _, y_range = self.transition_line.getData()
+        self.transition_line.setData([x_val, x_val], [y_range[0], y_range[1]])
 
     # def set_area_line(
     #         self, 

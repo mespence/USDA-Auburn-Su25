@@ -4,10 +4,13 @@ from numpy.typing import NDArray
 from pyqtgraph import (
     PlotWidget, ViewBox, PlotItem, 
     TextItem, PlotDataItem, ScatterPlotItem, InfiniteLine,
-    mkPen, mkBrush
+    mkPen, mkBrush, setConfigOptions
 )
 
-from PyQt6.QtGui import QKeyEvent, QWheelEvent, QMouseEvent, QColor
+from PyQt6.QtGui import (
+    QKeyEvent, QWheelEvent, QMouseEvent, QColor, 
+    QGuiApplication, QCursor
+)
 from PyQt6.QtCore import Qt, QPointF, QTimer
 
 from EPGData import EPGData
@@ -16,7 +19,14 @@ from LabelArea import LabelArea
 
 # DEBUG ONLY TODO remove imports for testing
 from PyQt6.QtWidgets import QApplication  
-import sys
+import sys, time
+
+
+import platform
+
+if platform.system() == "Windows":
+    print("Windows detected, running with OpenGL")
+    setConfigOptions(useOpenGL = True)
 
 class PanZoomViewBox(ViewBox):
     """
@@ -53,7 +63,7 @@ class PanZoomViewBox(ViewBox):
                 self.translateBy(x=delta * h_zoom_factor * (x_max - x_min))
 
         event.accept()
-        datawindow.update_plot()
+        #datawindow.update_plot()
 
     def mouseDragEvent(self, event, axis=None) -> None:
         # Disable all mouse drag panning/zooming
@@ -92,7 +102,16 @@ class DataWindow(PlotWidget):
 
         self.viewbox.sigRangeChanged.connect(self.update_plot)
 
+        # timer to handle showing loading cursor only after certain delay
+        self.loading_cursor_timer = None  
+        self.loading_cursor_showing = False
+
         self.initUI()
+
+    def show_loading_cursor(self):
+          self.loading_cursor_showing = True
+          QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
+          QGuiApplication.processEvents()
 
     def initUI(self) -> None:
         self.chart_width: int = 400
@@ -203,14 +222,24 @@ class DataWindow(PlotWidget):
         Returns:
             None
         """
-        df = self.epgdata.get_recording(self.file, self.prepost)
-        time = df["time"].values
-        volts = df[self.prepost + self.epgdata.prepost_suffix].values
+        times, volts = self.epgdata.get_recording(self.file, self.prepost)
 
-        self.viewbox.setRange(
-            xRange=(min(time), max(time)), yRange=(min(volts), max(volts)), padding=0
+        self.loading_cursor_showing = False
+        #self.loading_cursor_timer = QTimer.singleShot(250, self.show_loading_cursor)
+   
+        QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
+
+        QTimer.singleShot(0, lambda: self.viewbox.setRange(
+            xRange=(min(times), max(times)), 
+            yRange=(min(volts), max(volts)), 
+            padding=0
+            )
         )
-        #self.update_plot()
+
+        self.update_plot()     
+        QGuiApplication.processEvents()   
+        QGuiApplication.restoreOverrideCursor()
+
 
 
     def update_plot(self) -> None:
@@ -221,7 +250,11 @@ class DataWindow(PlotWidget):
         print("updating")
 
         (x_min, x_max), _ = self.viewbox.viewRange()
+
+        start = time.perf_counter()
         self.downsample_visible(x_range=(x_min, x_max))
+        end = time.perf_counter()
+        print(f"Total downsampling took {end - start:.6f}s")
 
         x_data = self.xy_data[0]
         y_data = self.xy_data[1]
@@ -328,22 +361,20 @@ class DataWindow(PlotWidget):
         """
         self.file = file
         self.prepost = prepost
-        df = self.epgdata.get_recording(self.file, self.prepost)
-        time = df["time"].values
-        volts = df[prepost + self.epgdata.prepost_suffix].values
+        times, volts = self.epgdata.get_recording(self.file, self.prepost)
 
-        self.xy_data[0] = time
+        self.xy_data[0] = times
         self.xy_data[1] = volts
         self.downsample_visible()
         self.curve.setData(self.xy_data[0], self.xy_data[1])
 
         self.viewbox.setRange(
-            xRange=(min(time), max(time)), yRange=(min(volts), max(volts)), padding=0
+            xRange=(min(times), max(times)), yRange=(min(volts), max(volts)), padding=0
         )
         self.update_plot()
 
     def downsample_visible(
-        self, x_range: tuple[float, float] = None, max_points=3000
+        self, x_range: tuple[float, float] = None, max_points=4000, method = None
     ) -> tuple[NDArray, NDArray]:
         """
         Downsamples the data displayed in x_range to max_points using
@@ -353,53 +384,70 @@ class DataWindow(PlotWidget):
         Inputs:
             x_range: a (x_min, x_max) tuple of the range of the data to be displayed
             max_points: the number of points (i.e., bins) to downsample to.
+            method: "subsample" or "peak", which downsampling method to use. If a method 
+                    not given, one is auto-selected.
 
         Output:
            None
-
-        TODO: Add other methods if this is too slow?
         """
-        df = self.epgdata.get_recording(self.file, self.prepost)
-        x = df["time"].values
-        y = df[self.prepost + self.epgdata.prepost_suffix].values
 
+        start = time.perf_counter()
+        
+        x, y = self.epgdata.get_recording(self.file, self.prepost)
+        c1 = time.perf_counter()
+        print(f"Load data took {c1 - start:.6f}s")
+
+        c2 = time.perf_counter()
+        print(f"Parsing DF took {c2 - c1:.6f}s")
 
         # Filter to x_range if provided
         if x_range is not None:
             x_min, x_max = x_range
 
-            mask = (x >= x_min) & (x <= x_max)
-            visible_x = x[mask]
+            left_idx = np.searchsorted(x, x_min, side="left")
+            right_idx = np.searchsorted(x, x_max, side="right")
 
-            if len(visible_x) <= 250: 
+            if right_idx - left_idx <= 250: 
                 # render additional point on each side at very high zooms
-                left_idx = np.searchsorted(x, x_min, side="left")
-                right_idx = np.searchsorted(x, x_max, side="right")
-
-                start = max(0, left_idx - 1)
-                end = min(len(x), right_idx + 1)
-
-                x = x[start:end]
-                y = y[start:end]
-            else:
-                x = x[mask]
-                y = y[mask]
-
+                left_idx = max(0, left_idx - 1)
+                right_idx = min(len(x), right_idx + 1)
+  
+            x = x[left_idx:right_idx]
+            y = y[left_idx:right_idx]   
+        
+        
         num_points = len(x)
 
         if num_points <= max_points or num_points < 2:  # no downsampling needed
             self.xy_data[0] = x
             self.xy_data[1] = y
             return
+        
+        c3 = time.perf_counter()        
+        print(f"Slicing took {c3 - c2:.6f}s")
 
-
-        # Peak decimation
+        # if num_points > 1e5:
+        #     # use subsampling method
+        #     print("subsampling")
+        #     stride = num_points // max_points
+        #     x_out = x[::stride]
+        #     y_out = y[::stride]
+        #if num_points > 1e0:
+            # use mean method
+            # print("mean")
+            #pass
+            # stride = num_points // max_points
+            # num_windows = num_points // stride
+            # start_idx = stride // 2
+            # x_out = x[start_idx : start_idx + num_windows * stride : stride] 
+            # y_out = y[:num_windows * stride].reshape(num_windows,stride).mean(axis=1)
+        #else:
+            # use peak decimation method
+        print("peak")
         stride = max(1, num_points // (max_points // 2))  # each window gives 2 points
         num_windows = num_points // stride
 
-        start_idx = (
-            stride // 2
-        )  # Choose a representative x (near center) for each window
+        start_idx = stride // 2  # Choose a representative x (near center) for each window
         x_win = x[start_idx : start_idx + num_windows * stride : stride]
         x_out = np.repeat(x_win, 2)  # repeated for (x, y_min), (x, y_max)
 
@@ -410,6 +458,9 @@ class DataWindow(PlotWidget):
 
         self.xy_data[0] = x_out
         self.xy_data[1] = y_out
+
+        c4 = time.perf_counter()
+        print(f"Alg took {c4 - c3:.6f}s")
 
     def plot_transitions(self, file: str) -> None:
         """
@@ -434,9 +485,7 @@ class DataWindow(PlotWidget):
 
 
         # load data
-        df = self.epgdata.get_recording(self.file, self.prepost)
-        time = df['time'].values
-        volts = df[self.prepost + self.epgdata.prepost_suffix].values
+        times, _ = self.epgdata.get_recording(self.file, self.prepost)
         self.transitions = self.epgdata.get_transitions(self.file, self.transition_mode)
 
         # Only continue if the label column contains labels
@@ -448,18 +497,10 @@ class DataWindow(PlotWidget):
             time, label = self.transitions[i]
             next_time, _ = self.transitions[i + 1]
             durations.append((time, next_time - time, label))
-        durations.append((self.transitions[-1][0], max(df['time']) - self.transitions[-1][0], self.transitions[-1][1]))
+        durations.append((self.transitions[-1][0], max(times) - self.transitions[-1][0], self.transitions[-1][1]))
 
         for i, (time, dur, label) in enumerate(durations):
-            label_area = LabelArea(time, dur, label, self)
-
-            self.plot_item.addItem(label_area.transition_line)
-            self.plot_item.addItem(label_area.area)
-            self.plot_item.addItem(label_area.label_text)
-            self.plot_item.addItem(label_area.duration_text)
-            self.plot_item.addItem(label_area.label_background)
-            self.plot_item.addItem(label_area.duration_background)
-
+            label_area = LabelArea(time, dur, label, self) # init. also adds items to viewbox
             self.labels.append(label_area)
 
         self.update_plot()
@@ -496,51 +537,49 @@ class DataWindow(PlotWidget):
         self.scatter.setPen(mkPen(color))  
 
 
-    def delete_label_area(self, label_area: LabelArea):
+    def delete_label_area(self, label_area: LabelArea) -> None:
         """
-        TODO FIXXXXXX
+        Deletes the selected label area.
         Inputs:
-            label: LabelArea deleted
+            label: the LabelArea to delete
         Returns:
             Nothing
         """ 
         print("deleting")
         current_idx = self.labels.index(label_area)
+        _, lower_ys = label_area.area_lower_line.getData()
+        _, upper_ys = label_area.area_upper_line.getData()
+        # print(current_idx)
+        # print(label_area.duration)
+        # print(label_area.label)
+        
 
         if label_area == self.labels[0]:
              # expand left
-            print(1, current_idx)
             expanded_label_area = self.labels[current_idx + 1]
-            expanded_label_area.start_time = label_area.start_time
+            new_start_time = label_area.start_time
+            new_x_range = [new_start_time, expanded_label_area.start_time +  expanded_label_area.duration]
 
-            expanded_label_area.area_lower_line.setData(
-                x=[label_area.start_time, expanded_label_area.start_time +  expanded_label_area.duration]
-            )
-            expanded_label_area.area_upper_line.setData(
-                x=[label_area.start_time, expanded_label_area.start_time +  expanded_label_area.duration]
-            )
+            expanded_label_area.start_time = new_start_time
+            expanded_label_area.set_transition_line(new_start_time)
+
         else: 
             # expand right
-            current_idx = self.labels.index(label_area)
             expanded_label_area = self.labels[current_idx - 1]
-            expanded_label_area.duration += label_area.duration
-            print(expanded_label_area.label)
-            expanded_label_area.area_lower_line.setData(
-                x=[expanded_label_area.start_time, label_area.start_time + label_area.duration]
-            )
-            expanded_label_area.area_upper_line.setData(
-                x=[expanded_label_area.start_time, label_area.start_time + label_area.duration]
-            )
+            new_x_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration]
+        
+        expanded_label_area.area_lower_line.setData(x=new_x_range, y=lower_ys)
+        expanded_label_area.area_upper_line.setData(x=new_x_range, y=upper_ys)
+        new_dur = expanded_label_area.duration + label_area.duration 
+        expanded_label_area.duration = new_dur
+        expanded_label_area.duration_text.setText(str(round(new_dur, 2)))
+
 
         for item in label_area.getItems():
-            self.removeItem(item)
+            self.viewbox.removeItem(item)   
 
-        #self.removeItem(label_area)
         del self.labels[current_idx]
-
-        
-
-
+        expanded_label_area.update_label_area()
 
 
 
@@ -548,10 +587,6 @@ class DataWindow(PlotWidget):
         """
         TODO: implement
         """
-    
-
-
-
 
     def handle_transitions(self):
         return
@@ -595,7 +630,7 @@ class DataWindow(PlotWidget):
         if event.key() == Qt.Key.Key_R:
             self.reset_view()  
         if event.key() == Qt.Key.Key_Delete:
-            self.delete_label_area(self.labels[4])
+            self.delete_label_area(self.labels[0])
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         return
@@ -637,18 +672,7 @@ class DataWindow(PlotWidget):
         # horizontal and vertical scrolling along with zoom.
         # """
         self.viewbox.wheelEvent(event)
-        # self.zoom_scroll(event)
 
-    # def zoom_scroll(self, event: QWheelEvent):
-    #     if self.zoom_mode:
-    #         if self.vertical_mode:
-    #             self.viewbox.setMouseEnabled(x=False, y=True)
-    #         else:
-    #             self.viewbox.setMouseEnabled(x=True, y=False)
-    #     else:
-    #         delta = event.angleDelta().y()
-    #         # center = self.viewbox.mapToView(event.pos()
-    #     # if self.vertical_mode:
 
 
 # TODO: remove after feature-complete and integrated with main
@@ -659,7 +683,7 @@ def main():
 
     epgdata = EPGData()
     epgdata.load_data("test_recording.csv")
-    # epgdata.load_data(r'C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv')
+    #epgdata.load_data(r'C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv')
     print("Data Loaded")
     
     window = DataWindow(epgdata)
