@@ -17,6 +17,7 @@ class EPGData():
                 self.prepost_suffix = "_rect"
                 self.current_file = "test_recording.csv"
                 self.dir_path = os.path.dirname(os.path.realpath(__file__))
+                self.dfs_numpy = []
 
         def load_data(self, file):
                 """
@@ -52,7 +53,7 @@ class EPGData():
                 elif re.search(r'\.csv$', file, re.IGNORECASE):
                         full_path = os.path.join(self.dir_path,file)
                         try:
-                                self.dfs[file] = read_csv(full_path)
+                                self.dfs[file] = read_csv(full_path)       
                         except FileNotFoundError:
                                 print(f"Could not find {full_path}")
                                 return False
@@ -126,7 +127,12 @@ class EPGData():
 
                 else:   
                         # return unpacked for optimization
+                        # if prepost == "pre":
+                        #         return self.dfs_numpy[0], self.dfs_numpy[1]
+                        # else:
+                        #         return self.dfs_numpy[0], self.dfs_numpy[2]
                         df = self.dfs[file]
+                        #print(type(df['time']), type(df[f'{prepost}{self.prepost_suffix}']))
                         return df['time'].values, df[f'{prepost}{self.prepost_suffix}'].values
 
         def set_labels(self, file: str, labels) -> None:

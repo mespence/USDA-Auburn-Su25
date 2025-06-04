@@ -11,7 +11,7 @@ from PyQt6.QtGui import (
     QKeyEvent, QWheelEvent, QMouseEvent, QColor, 
     QGuiApplication, QCursor
 )
-from PyQt6.QtCore import Qt, QPointF, QTimer
+from PyQt6.QtCore import Qt, QPointF, QTimer, QCoreApplication, QEventLoop
 
 from EPGData import EPGData
 from Settings import Settings
@@ -63,7 +63,7 @@ class PanZoomViewBox(ViewBox):
                 self.translateBy(x=delta * h_zoom_factor * (x_max - x_min))
 
         event.accept()
-        #datawindow.update_plot()
+        datawindow.update_plot()
 
     def mouseDragEvent(self, event, axis=None) -> None:
         # Disable all mouse drag panning/zooming
@@ -78,8 +78,8 @@ class DataWindow(PlotWidget):
         self.plot_item: PlotItem = (
             self.getPlotItem()
         )  # the plotting canvas (axes, grid, data, etc.)
-        self.xy_data: tuple[NDArray] = []  # x and y data actually rendered
-        self.curve: PlotDataItem = PlotDataItem(antialias=False)
+        self.xy_data: list[NDArray] = []  # x and y data actually rendered
+        self.curve: PlotDataItem = PlotDataItem(antialias=False) 
         self.scatter: ScatterPlotItem = ScatterPlotItem(
             symbol="o", size=4, brush="blue"
         )  # the discrete points shown at high zooms
@@ -107,8 +107,9 @@ class DataWindow(PlotWidget):
             )
         self.plot_item.addItem(self.baseline_preview)
         self.baseline_preview.hide()
-        self.baseline_preview_enabled: bool = True
+        self.baseline_preview_enabled: bool = False
         self.edit_mode_enabled: bool = True
+        self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
 
         self.viewbox.sigRangeChanged.connect(self.update_plot)
 
@@ -139,6 +140,7 @@ class DataWindow(PlotWidget):
         self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color="black")
         self.plot_item.showGrid(x=Settings.show_grid, y=Settings.show_grid)
         self.plot_item.layout.setContentsMargins(30, 30, 30, 20)
+        self.plot_item.enableAutoRange(False)
 
         # placeholder sine wave
         self.xy_data.append(np.linspace(0, 1, 10000))
@@ -147,7 +149,7 @@ class DataWindow(PlotWidget):
             self.xy_data[0], self.xy_data[1], pen=mkPen(color="b", width=2)
         )
 
-        self.curve.setClipToView(True)
+        self.curve.setClipToView(False)  # already done in manual downsampling
         self.scatter.setVisible(False)
         self.curve.setZValue(-5)
         self.scatter.setZValue(-4)
@@ -234,20 +236,22 @@ class DataWindow(PlotWidget):
         """
         times, volts = self.epgdata.get_recording(self.file, self.prepost)
 
-        self.loading_cursor_showing = False
-        #self.loading_cursor_timer = QTimer.singleShot(250, self.show_loading_cursor)
-   
         QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
 
-        QTimer.singleShot(0, lambda: self.viewbox.setRange(
-            xRange=(min(times), max(times)), 
-            yRange=(min(volts), max(volts)), 
+
+        self.xy_data = self.initial_downsampled_data
+        self.curve.setData(self.xy_data[0], self.xy_data[1])
+
+    
+        x_min, x_max = self.xy_data[0][0], self.xy_data[0][-1]
+        y_min, y_max = np.min(self.xy_data[1]), np.max(self.xy_data[1])
+
+        self.viewbox.setRange(
+            xRange=(x_min, x_max), 
+            yRange=(y_min, y_max), 
             padding=0
-            )
         )
 
-        self.update_plot()     
-        QGuiApplication.processEvents()   
         QGuiApplication.restoreOverrideCursor()
 
 
@@ -261,10 +265,9 @@ class DataWindow(PlotWidget):
 
         (x_min, x_max), _ = self.viewbox.viewRange()
 
-        start = time.perf_counter()
+        self.viewbox.setLimits(xMin=None, xMax=None, yMin=None, yMax=None) # clear stale data (avoids warning)
+
         self.downsample_visible(x_range=(x_min, x_max))
-        end = time.perf_counter()
-        print(f"Total downsampling took {end - start:.6f}s")
 
         x_data = self.xy_data[0]
         y_data = self.xy_data[1]
@@ -281,7 +284,6 @@ class DataWindow(PlotWidget):
         for label_area in self.labels:
            label_area.update_label_area()
 
-
     def update_compression(self) -> None:
         """
         update_compression updates the compression readout
@@ -290,6 +292,8 @@ class DataWindow(PlotWidget):
         obtained by experimentation with WINDAQ. Note that
         WINDAQ also has 'negative' compression levels for
         high levels of zooming out. We do not implement those here.
+
+        TODO: Verify this formula
 
         Inputs:
             None
@@ -377,14 +381,17 @@ class DataWindow(PlotWidget):
         self.xy_data[1] = volts
         self.downsample_visible()
         self.curve.setData(self.xy_data[0], self.xy_data[1])
+        self.initial_downsampled_data = [self.xy_data[0], self.xy_data[1]]
 
         self.viewbox.setRange(
-            xRange=(min(times), max(times)), yRange=(min(volts), max(volts)), padding=0
+            xRange=(np.min(self.xy_data[0]), np.max(self.xy_data[0])), 
+            yRange=(np.min(self.xy_data[1]), np.max(self.xy_data[1])), 
+            padding=0
         )
         self.update_plot()
 
     def downsample_visible(
-        self, x_range: tuple[float, float] = None, max_points=4000, method = None
+        self, x_range: tuple[float, float] = None, max_points=4000, method = 'peak'
     ) -> tuple[NDArray, NDArray]:
         """
         Downsamples the data displayed in x_range to max_points using
@@ -394,21 +401,14 @@ class DataWindow(PlotWidget):
         Inputs:
             x_range: a (x_min, x_max) tuple of the range of the data to be displayed
             max_points: the number of points (i.e., bins) to downsample to.
-            method: "subsample" or "peak", which downsampling method to use. If a method 
-                    not given, one is auto-selected.
+            method: "subsample" or "peak", which downsampling method to use.
 
         Output:
            None
+
+        TODO: decide whether to pick a default or adapt to zoom
         """
-
-        start = time.perf_counter()
-        
         x, y = self.epgdata.get_recording(self.file, self.prepost)
-        c1 = time.perf_counter()
-        print(f"Load data took {c1 - start:.6f}s")
-
-        c2 = time.perf_counter()
-        print(f"Parsing DF took {c2 - c1:.6f}s")
 
         # Filter to x_range if provided
         if x_range is not None:
@@ -432,45 +432,40 @@ class DataWindow(PlotWidget):
             self.xy_data[0] = x
             self.xy_data[1] = y
             return
-        
-        c3 = time.perf_counter()        
-        print(f"Slicing took {c3 - c2:.6f}s")
 
-        # if num_points > 1e5:
-        #     # use subsampling method
+        if method == 'subsampling':
         #     print("subsampling")
-        #     stride = num_points // max_points
-        #     x_out = x[::stride]
-        #     y_out = y[::stride]
-        #if num_points > 1e0:
-            # use mean method
+            stride = num_points // max_points
+            x_out = x[::stride]
+            y_out = y[::stride]
+        elif method == 'mean':
             # print("mean")
-            #pass
-            # stride = num_points // max_points
-            # num_windows = num_points // stride
-            # start_idx = stride // 2
-            # x_out = x[start_idx : start_idx + num_windows * stride : stride] 
-            # y_out = y[:num_windows * stride].reshape(num_windows,stride).mean(axis=1)
-        #else:
-            # use peak decimation method
-        print("peak")
-        stride = max(1, num_points // (max_points // 2))  # each window gives 2 points
-        num_windows = num_points // stride
+            stride = num_points // max_points
+            num_windows = num_points // stride
+            start_idx = stride // 2
+            x_out = x[start_idx : start_idx + num_windows * stride : stride] 
+            y_out = y[:num_windows * stride].reshape(num_windows,stride).mean(axis=1)
+        elif method == 'peak':
+            #print("peak decimation")
+            stride = max(1, num_points // (max_points // 2))  # each window gives 2 points
+            num_windows = num_points // stride
 
-        start_idx = stride // 2  # Choose a representative x (near center) for each window
-        x_win = x[start_idx : start_idx + num_windows * stride : stride]
-        x_out = np.repeat(x_win, 2)  # repeated for (x, y_min), (x, y_max)
+            start_idx = stride // 2  # Choose a representative x (near center) for each window
+            x_win = x[start_idx : start_idx + num_windows * stride : stride]
+            x_out = np.repeat(x_win, 2)  # repeated for (x, y_min), (x, y_max)
 
-        y_reshaped = y[: num_windows * stride].reshape(num_windows, stride)
-        y_out = np.empty(num_windows * 2)
-        y_out[::2] = y_reshaped.max(axis=1)
-        y_out[1::2] = y_reshaped.min(axis=1)
+            y_reshaped = y[: num_windows * stride].reshape(num_windows, stride)
+            y_out = np.empty(num_windows * 2)
+            y_out[::2] = y_reshaped.max(axis=1)
+            y_out[1::2] = y_reshaped.min(axis=1)
+        else:
+            raise ValueError(
+                'Invalid "method" arugment. ' \
+                'Please select either "subsampling", "mean", or "peak".'
+            )
 
         self.xy_data[0] = x_out
         self.xy_data[1] = y_out
-
-        c4 = time.perf_counter()
-        print(f"Alg took {c4 - c3:.6f}s")
 
     def plot_transitions(self, file: str) -> None:
         """
@@ -555,14 +550,10 @@ class DataWindow(PlotWidget):
         Returns:
             Nothing
         """ 
-        print("deleting")
         current_idx = self.labels.index(label_area)
         _, lower_ys = label_area.area_lower_line.getData()
         _, upper_ys = label_area.area_upper_line.getData()
-        # print(current_idx)
-        # print(label_area.duration)
-        # print(label_area.label)
-        
+
 
         if label_area == self.labels[0]:
              # expand left
@@ -654,25 +645,25 @@ class DataWindow(PlotWidget):
             self.zoom_mode = False
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        super().mousePressEvent(event)
-        return
+        #super().mousePressEvent(event)
+        # return
         # TODO: edit for when have edit mode functionality
         # For testing baseline preview
-        # if self.baseline_preview_enabled and event.button() == Qt.MouseButton.LeftButton:
-        #     self.set_baseline(event)
-        #     self.baseline_preview_enabled = False
-        #     self.baseline_preview.hide()
+        if self.baseline_preview_enabled and event.button() == Qt.MouseButton.LeftButton:
+            self.set_baseline(event)
+            self.baseline_preview_enabled = False
+            self.baseline_preview.hide()
 
-        # super().mousePressEvent(event)
+        super().mousePressEvent(event)
 
         # return
-        if event.button() == Qt.MouseButton.LeftButton:
-            if self.cursor_state == "normal":
-                self.handle_transitions(event, "press")
-            else:
-                self.set_baseline(event)
-        elif event.button() == Qt.MouseButton.RightButton:
-            self.add_drop_transitions(event)
+        # if event.button() == Qt.MouseButton.LeftButton:
+        #     if self.cursor_state == "normal":
+        #         self.handle_transitions(event, "press")
+        #     else:
+        #         self.set_baseline(event)
+        # elif event.button() == Qt.MouseButton.RightButton:
+        #     self.add_drop_transitions(event)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         return
@@ -680,24 +671,24 @@ class DataWindow(PlotWidget):
             self.handle_labels(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        super().mouseMoveEvent(event)
-        return
+        # super().mouseMoveEvent(event)
+        # return
         # TODO: edit for when have edit mode functionality
         # For testing baseline preview
-        # if self.baseline_preview_enabled:
-        #     point = self.window_to_chart(event.position())
-        #     y = point.y()
-        #     _, (y_min, y_max) = self.viewbox.viewRange()
+        if self.baseline_preview_enabled:
+            point = self.window_to_chart(event.position())
+            y = point.y()
+            _, (y_min, y_max) = self.viewbox.viewRange()
 
-        #     if y_min <= y <= y_max:
-        #         self.baseline_preview.setPos(y)
-        #         self.baseline_preview.show()
-        #     else:
-        #         self.baseline_preview.hide()
+            if y_min <= y <= y_max:
+                self.baseline_preview.setPos(y)
+                self.baseline_preview.show()
+            else:
+                self.baseline_preview.hide()
 
-        # super().mouseMoveEvent(event)
+        super().mouseMoveEvent(event)
 
-        # return
+        return
 
         self.handle_transitions(event, "move")
 
@@ -724,7 +715,6 @@ class DataWindow(PlotWidget):
 
 # TODO: remove after feature-complete and integrated with main
 def main():
-    print("Testing new DataWindow class")
     Settings()
     app = QApplication([])
 

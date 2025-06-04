@@ -18,7 +18,7 @@ def smooth_noise_generator(length: int, step: float = 0.01, seed: int | None = N
             print(f"{round(i / length * 100,2)}%")
         noise = np.random.randn()
         value = alpha * noise + (1 - alpha) * value
-        yield i * step, value
+        yield i * step, value, value + 8
 
 def write_csv(filename: str, length: int, chunk_size: int = 1_000_000):
     """
@@ -26,7 +26,7 @@ def write_csv(filename: str, length: int, chunk_size: int = 1_000_000):
     """
     with open(filename, mode='w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['time', 'value'])  # header
+        writer.writerow(['time', 'pre_rect', 'post_rect'])  # header
 
         gen = smooth_noise_generator(length)
 

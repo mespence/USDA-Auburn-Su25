@@ -128,14 +128,18 @@ class LabelArea():
             if hasattr(self, "duration_debug_box"):
                 self.viewbox.removeItem(self.duration_debug_box)
 
+    def setVisible(self, visible: bool) -> None:
+        for item in self.getItems():
+            item.setVisible(visible)
 
-    def set_duration_visibility(self, state: bool) -> None:
-        """
-        Toggles the visibility of the duration text and background.
-        """
-        self.duration_text.setVisible(state)
-        self.duration_background.setVisible(state)
-        self.update_visibility()  # to handle intersections
+
+    # def set_duration_visibility(self, state: bool) -> None:
+    #     """
+    #     Toggles the visibility of the duration text and background.
+    #     """
+    #     self.duration_text.setVisible(state)
+    #     self.duration_background.setVisible(state)
+    #     self.update_visibility()  # to handle intersections
 
 
     def bounding_box(self, text_item: TextItem) -> QRectF:
