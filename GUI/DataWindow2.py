@@ -3,7 +3,7 @@ from numpy.typing import NDArray
 
 from pyqtgraph import (
     PlotWidget, ViewBox, PlotItem, 
-    TextItem, PlotDataItem, ScatterPlotItem, 
+    TextItem, PlotDataItem, ScatterPlotItem, InfiniteLine,
     mkPen, mkBrush
 )
 
@@ -88,6 +88,7 @@ class DataWindow(PlotWidget):
         self.transitions: list[tuple[float, str]] = []   # the x-values of each label transition
         self.transition_mode: str = 'labels'
         self.labels: list[LabelArea] = []  # the list of LabelAreas
+        self.baseline: InfiniteLine = None
 
         self.viewbox.sigRangeChanged.connect(self.update_plot)
 
@@ -160,21 +161,20 @@ class DataWindow(PlotWidget):
         """
         super().resizeEvent(event)
 
-    def window_to_chart(self, x: float, y: float) -> tuple[float, float]:
+    def window_to_chart(self, point: QPointF) -> QPointF:
         """
-        Converts from window (global) coordinates to chart (data) coordinates.
+        Converts a point from window (global) coordinates to chart (data)
+        coordinates.
 
         Inputs:
-            x, y: x and y coordinate of the window coordinate
+            point: point in widget coodinates
 
         Returns:
-            (chart_x, chart_y): chart coordinates equivalent to
-            the window coordinates.
+            QPointF: corresponding point in chart (data) coordinates
         """
-
-        scene_pos = self.mapToScene(QPointF(x, y))
+        scene_pos = self.mapToScene(point.toPoint())
         data_pos = self.viewbox.mapSceneToView(scene_pos)
-        return data_pos.x(), data_pos.y()
+        return data_pos
 
     def chart_to_window(self, x: float, y: float) -> tuple[float, float]:
         """
@@ -559,7 +559,33 @@ class DataWindow(PlotWidget):
     def handle_labels(self):
         return
 
-    def set_baseline(self):
+    def set_baseline(self, event: QMouseEvent):
+        """
+        set_baseline creates a horizontal line where the
+        user indicates with a click on the graph
+        Inputs:
+            event: the mouse event and where it was clicked
+        Outputs:
+            None
+        """
+        point = self.window_to_chart(event.position())
+        x, y = point.x(), point.y()
+
+        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
+
+        if not (x_min <= x <= x_max and y_min <= y <= y_max):
+            return
+
+        if self.baseline is None:
+            self.baseline = InfiniteLine(
+                pos = y, angle = 0,
+                movable = False,
+                pen = mkPen("gray", width=2)
+            )
+            self.plot_item.addItem(self.baseline)
+        else:
+            self.baseline.setPos(y)
+    
         return
 
     def add_drop_transitions(self):
