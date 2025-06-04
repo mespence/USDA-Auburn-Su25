@@ -482,7 +482,10 @@ class DataWindow(PlotWidget):
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_R:
-            self.reset_view()  
+            self.reset_view()
+        if event.key() == Qt.Key.Key_A:
+            self.scroll_mode = True
+            self.autoScrollEvent() #yeet
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         return
@@ -540,13 +543,43 @@ class DataWindow(PlotWidget):
 
 
     def autoscrollEvent(self) -> None:
-        while True:
+        while True: #this is hella inefficient can we have it only loop when theres new stuff
             if self.scroll_mode == True: #if we can move this into the checking for the lines that call this rather than the def that would be swag
             # at the current zoom, have the rightmost value be the most recent one in a loop that constantly makes this true
                 pass
             else: break #for when scroll mode changes, Stop Doing That
             # TODO: find what calls datawindow and copy it to mess with, and also figure out exactly what code makes an autoscroller autoscroll
             # and also possibly make a version of the program that's fed data from testdata1 which i tell to run. three terminals timeee
+        def plot_recording(self, file: str, prepost: str = "post") -> None:
+        self.file = file
+        self.prepost = prepost
+        df = self.epgdata.get_recording(self.file, self.prepost)
+        time = df["time"].values
+        volts = df[prepost + self.epgdata.prepost_suffix].values
+
+        self.xy_data[0] = time
+        self.xy_data[1] = volts
+        self.downsample_visible()
+        self.curve.setData(self.xy_data[0], self.xy_data[1])
+
+        self.viewbox.setRange(
+            xRange=(min(time), max(time)), yRange=(min(volts), max(volts)), padding=0
+        )
+        self.update_plot()
+
+
+        df = self.epgdata.get_recording(self.file, self.prepost)
+        time = df["time"].values
+        volts = df[self.prepost + self.epgdata.prepost_suffix].values
+
+        self.viewbox.setRange(
+            xRange=(min(time), max(time)), yRange=(min(volts), max(volts)), padding=0
+        )
+        #self.update_plot()
+
+        (x_min, x_max), _ = self.viewbox.viewRange()
+
+
 
 
 # TODO: remove after feature-complete and integrated with main
