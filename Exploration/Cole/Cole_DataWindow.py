@@ -14,6 +14,9 @@ from EPGData import EPGData
 from Settings import Settings
 from LabelArea import LabelArea
 
+import time
+import pandas as pd
+
 # DEBUG ONLY TODO remove imports for testing
 from PyQt6.QtWidgets import QApplication  
 import sys
@@ -62,7 +65,7 @@ class PanZoomViewBox(ViewBox):
 class DataWindow(PlotWidget):
     def __init__(self, epgdata: EPGData) -> None:
         super().__init__(plotItem=PlotItem(viewBox=PanZoomViewBox()))
-        self.scroll_mode = True
+        self.scroll_mode = True # i added this
         self.epgdata: EPGData = epgdata
         self.file: str = None
         self.prepost: str = "post"
@@ -542,42 +545,57 @@ class DataWindow(PlotWidget):
     #     # if self.vertical_mode:
 
 
-    def autoscrollEvent(self) -> None:
-        while True: #this is hella inefficient can we have it only loop when theres new stuff
-            if self.scroll_mode == True: #if we can move this into the checking for the lines that call this rather than the def that would be swag
-            # at the current zoom, have the rightmost value be the most recent one in a loop that constantly makes this true
-                pass
-            else: break #for when scroll mode changes, Stop Doing That
-            # TODO: find what calls datawindow and copy it to mess with, and also figure out exactly what code makes an autoscroller autoscroll
-            # and also possibly make a version of the program that's fed data from testdata1 which i tell to run. three terminals timeee
-        def plot_recording(self, file: str, prepost: str = "post") -> None:
+    def autoscrollEvent(self, file: str, prepost: str = "post") -> None:
+        
+        # this all seems ok, or at least functional
         self.file = file
         self.prepost = prepost
         df = self.epgdata.get_recording(self.file, self.prepost)
-        time = df["time"].values
+        time = df["time"].values #can we make it add to an existing df instead of making a new one each loop?
         volts = df[prepost + self.epgdata.prepost_suffix].values
+        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange() # if this breaks, try deleting "viewbox"
+        x_zoomlevel = x_max - x_min # this gets the width of what will be translating across
+        y_zoomlevel = y_max - y_min # this shouldnt change but i want it stored..
 
+        # i dont think these things need to be changed
         self.xy_data[0] = time
         self.xy_data[1] = volts
         self.downsample_visible()
         self.curve.setData(self.xy_data[0], self.xy_data[1])
 
-        self.viewbox.setRange(
-            xRange=(min(time), max(time)), yRange=(min(volts), max(volts)), padding=0
-        )
-        self.update_plot()
+        while True: #this is hella inefficient can we have it only loop when theres new stuff
+            if self.scroll_mode == True: #if we can move this into the checking for the lines that call this rather than the def that would be swag
+            # at the current zoom, have the rightmost value be the most recent one in a loop that constantly makes this true
+                
+                with open("testdata1.csv", "r") as f:
+
+                    line = f.readline()
+                    if not line:
+                        # this assumes we want to check on a schedule rather than every time the csv is updated... the latter would probably be better
+                        time.sleep(0.01)  # Wait for new data
+                        continue
+                    else:
+                        dfline = pd.read_csv(line, sep = ",")
+                        df.loc[len(df)] = dfline #i think this is broken - iunno what line is exactly... i think it might just be text??
+
+                self.viewbox.setRange( # this is what's gonna get repeated a lot
+                    xRange=(max(time)-x_zoomlevel, max(time)), yRange=(y_min, y_max), padding=0
+                )
+                self.update_plot()
+            else: break #for when scroll mode changes, Stop Doing That
 
 
-        df = self.epgdata.get_recording(self.file, self.prepost)
-        time = df["time"].values
-        volts = df[self.prepost + self.epgdata.prepost_suffix].values
+            #do i even need these? i do hope not... but i might... im gonna get it working and THEN ill optimize it
+            #v_zoom_factor = 5e-4 #why?
+            #self.translateBy(y=delta * v_zoom_factor * (y_max - y_min))
+            #h_zoom_factor = 2e-4
+            #self.translateBy(x=delta * h_zoom_factor * (x_max - x_min))
+            
+            #TODO: find out what delta is in this specific case
 
-        self.viewbox.setRange(
-            xRange=(min(time), max(time)), yRange=(min(volts), max(volts)), padding=0
-        )
-        #self.update_plot()
-
-        (x_min, x_max), _ = self.viewbox.viewRange()
+            # TODO: find what calls datawindow and copy it to mess with, and also figure out exactly what code makes an autoscroller autoscroll
+            # and also possibly make a version of the program that's fed data from testdata1 which i tell to run. three terminals timeee
+            # currently it calls itself, i think
 
 
 
