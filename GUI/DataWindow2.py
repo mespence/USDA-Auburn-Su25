@@ -88,7 +88,17 @@ class DataWindow(PlotWidget):
         self.transitions: list[tuple[float, str]] = []   # the x-values of each label transition
         self.transition_mode: str = 'labels'
         self.labels: list[LabelArea] = []  # the list of LabelAreas
+
+        # TODO: may need to clean this up based on how want preview to show up and how edit mode works
         self.baseline: InfiniteLine = None
+        self.baseline_preview: InfiniteLine = InfiniteLine(
+                angle = 0, movable = False,
+                pen=mkPen("gray", style = Qt.PenStyle.DashLine, width = 2)
+            )
+        self.plot_item.addItem(self.baseline_preview)
+        self.baseline_preview.hide()
+        self.baseline_preview_enabled: bool = True
+        self.edit_mode_enabled: bool = True
 
         self.viewbox.sigRangeChanged.connect(self.update_plot)
 
@@ -567,7 +577,8 @@ class DataWindow(PlotWidget):
             event: the mouse event and where it was clicked
         Outputs:
             None
-        """
+        """ 
+        # TODO: edit for when have edit mode functionality
         point = self.window_to_chart(event.position())
         x, y = point.x(), point.y()
 
@@ -579,12 +590,15 @@ class DataWindow(PlotWidget):
         if self.baseline is None:
             self.baseline = InfiniteLine(
                 pos = y, angle = 0,
-                movable = False,
+                movable = self.edit_mode_enabled,
                 pen = mkPen("gray", width=2)
             )
             self.plot_item.addItem(self.baseline)
         else:
+            # if baseline already placed, update position based on click
+            # and be able to move it to a new position depending on edit mode
             self.baseline.setPos(y)
+            self.baseline.setMovable(self.edit_mode_enabled)
     
         return
 
@@ -607,6 +621,16 @@ class DataWindow(PlotWidget):
     def mousePressEvent(self, event: QMouseEvent) -> None:
         super().mousePressEvent(event)
         return
+        # TODO: edit for when have edit mode functionality
+        # For testing baseline preview
+        # if self.baseline_preview_enabled and event.button() == Qt.MouseButton.LeftButton:
+        #     self.set_baseline(event)
+        #     self.baseline_preview_enabled = False
+        #     self.baseline_preview.hide()
+
+        # super().mousePressEvent(event)
+
+        # return
         if event.button() == Qt.MouseButton.LeftButton:
             if self.cursor_state == "normal":
                 self.handle_transitions(event, "press")
@@ -623,7 +647,30 @@ class DataWindow(PlotWidget):
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         super().mouseMoveEvent(event)
         return
+        # TODO: edit for when have edit mode functionality
+        # For testing baseline preview
+        # if self.baseline_preview_enabled:
+        #     point = self.window_to_chart(event.position())
+        #     y = point.y()
+        #     _, (y_min, y_max) = self.viewbox.viewRange()
+
+        #     if y_min <= y <= y_max:
+        #         self.baseline_preview.setPos(y)
+        #         self.baseline_preview.show()
+        #     else:
+        #         self.baseline_preview.hide()
+
+        # super().mouseMoveEvent(event)
+
+        # return
+
         self.handle_transitions(event, "move")
+
+        self.baseline_preview: InfiniteLine = InfiniteLine(
+            angle = 0, movable = False, pen=mkPen("blue",
+                style = Qt.DashLine)
+        )
+        self.baseline_preview.hide()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         return
