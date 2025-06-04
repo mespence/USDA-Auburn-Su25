@@ -247,6 +247,19 @@ class LabelArea():
         self.duration_background.setVisible(not dur_overlapping and Settings.show_durations)
 
 
+    def getItems(self):
+        """
+        Returns a list of the items added to the viewbox.
+        """
+        itemsToRemove = [
+            self.area, self.label_text, self.duration_text, 
+            self.label_background, self.duration_background
+        ]
+        if self.plot_widget.enable_debug:
+            itemsToRemove.append(self.label_debug_box)
+            itemsToRemove.append(self.duration_debug_box)
+            
+        return itemsToRemove
 
     # functions for manually setting label properties
     # unused rn, but maybe could use for manual label editing.

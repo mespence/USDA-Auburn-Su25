@@ -4,10 +4,10 @@ from numpy.typing import NDArray
 from pyqtgraph import (
     PlotWidget, ViewBox, PlotItem, 
     TextItem, PlotDataItem, ScatterPlotItem, 
-    mkPen,
+    mkPen, mkBrush
 )
 
-from PyQt6.QtGui import QKeyEvent, QWheelEvent, QMouseEvent
+from PyQt6.QtGui import QKeyEvent, QWheelEvent, QMouseEvent, QColor
 from PyQt6.QtCore import Qt, QPointF, QTimer
 
 from EPGData import EPGData
@@ -464,7 +464,94 @@ class DataWindow(PlotWidget):
 
         self.update_plot()
 
+    
+    def change_label_color(self, label: str, color: QColor) -> None:
+        """
+        change_label_color is a slot for the signal emitted by the
+        SettingsWindow on changing a label color.
+
+        Inputs:
+            label: label for the waveform background to recolor.
+            color: color to change the label to.
+
+        Returns:
+            None
+        """
+        for label_area in self.labels:
+            if label_area.label == label:
+                label_area.area.setBrush(mkBrush(color))
+
+    def change_line_color(self, color: QColor) -> None:
+        """
+        change_line_color is a slot for the signal emitted by the
+        SettingsWindow on changing the line color.
+
+        Inputs:
+            color: color to which the recording line is to be changed
+
+        Returns:
+            None
+        """
+        self.curve.setPen(mkPen(color))
+        self.scatter.setPen(mkPen(color))  
+
+
+    def delete_label_area(self, label_area: LabelArea):
+        """
+        TODO FIXXXXXX
+        Inputs:
+            label: LabelArea deleted
+        Returns:
+            Nothing
+        """ 
+        print("deleting")
+        current_idx = self.labels.index(label_area)
+
+        if label_area == self.labels[0]:
+             # expand left
+            print(1, current_idx)
+            expanded_label_area = self.labels[current_idx + 1]
+            expanded_label_area.start_time = label_area.start_time
+
+            expanded_label_area.area_lower_line.setData(
+                x=[label_area.start_time, expanded_label_area.start_time +  expanded_label_area.duration]
+            )
+            expanded_label_area.area_upper_line.setData(
+                x=[label_area.start_time, expanded_label_area.start_time +  expanded_label_area.duration]
+            )
+        else: 
+            # expand right
+            current_idx = self.labels.index(label_area)
+            expanded_label_area = self.labels[current_idx - 1]
+            expanded_label_area.duration += label_area.duration
+            print(expanded_label_area.label)
+            expanded_label_area.area_lower_line.setData(
+                x=[expanded_label_area.start_time, label_area.start_time + label_area.duration]
+            )
+            expanded_label_area.area_upper_line.setData(
+                x=[expanded_label_area.start_time, label_area.start_time + label_area.duration]
+            )
+
+        for item in label_area.getItems():
+            self.removeItem(item)
+
+        #self.removeItem(label_area)
+        del self.labels[current_idx]
+
         
+
+
+
+
+
+    def delete_all_label_instances(self, label: str) -> None:
+        """
+        TODO: implement
+        """
+    
+
+
+
 
     def handle_transitions(self):
         return
@@ -481,6 +568,8 @@ class DataWindow(PlotWidget):
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_R:
             self.reset_view()  
+        if event.key() == Qt.Key.Key_Delete:
+            self.delete_label_area(self.labels[4])
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         return
@@ -548,7 +637,7 @@ def main():
     print("Data Loaded")
     
     window = DataWindow(epgdata)
-    window.plot_recording(window.epgdata.current_file, 'post')
+    window.plot_recording(window.epgdata.current_file, 'pre')
     window.plot_transitions(window.epgdata.current_file)
 
     window.showMaximized()
