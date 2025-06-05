@@ -621,32 +621,25 @@ class DataWindow(PlotWidget):
                 if self.selected_item is not None:
                     self.deselect(self.selected_item)
                 self.setCursor(Qt.CursorShape.OpenHandCursor)
-                transition_line.setPen(mkPen(width=4, color='red'))
+                transition_line.setPen(mkPen(width=6, color='#0D6EFD'))
                 self.selected_item = transition_line
         elif baseline_distance <= BASELINE_THRESHOLD * pixelRatio:
             if self.selected_item is None or self.selected_item != self.baseline:
                 if self.selected_item is not None:
                     self.deselect(self.selected_item)
                 self.setCursor(Qt.CursorShape.OpenHandCursor)
-                self.baseline.setPen(mkPen(width=4, color='red'))
+                self.baseline.setPen(mkPen(width=6, color='#0D6EFD'))
                 self.selected_item = self.baseline
         else:
-            if label_area == None:
+            if label_area is None:
                 self.deselect(self.selected_item)
                 return
             if self.selected_item is None or self.selected_item != label_area:  
                 if self.selected_item is not None:
                     self.deselect(self.selected_item)
-                #label_color = Settings.label_to_color[label_area.label]
                 label_color = self.composite_on_white(Settings.label_to_color[label_area.label])
-                selected_color = label_color.darker(100) # 10% darker
-                h, s, l, a = selected_color.getHslF()
-                selected_color = QColor.fromHslF(
-                    h, 
-                    min(s * 8, 1), # 80% more saturated
-                    l * 0.9,
-                    a
-                )  
+                h, s, l, a = label_color.getHslF()
+                selected_color = QColor.fromHslF(h, min(s * 8, 1), l * 0.9, a)  
                 selected_color.setAlpha(200)
                 label_area.area.setBrush(mkBrush(color=selected_color))
                 self.selected_item = label_area
@@ -815,6 +808,7 @@ class DataWindow(PlotWidget):
                 #     pass
  
             elif isinstance(self.selected_item, LabelArea):
+
                 pass
         
 
