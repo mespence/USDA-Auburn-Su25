@@ -1,3 +1,5 @@
+import sys
+sys.path.append("/Users/cathy/coding/bugs2025/USDA-Auburn-Su25/GUI")
 import numpy as np
 from numpy.typing import NDArray
 
@@ -15,11 +17,10 @@ from Settings import Settings
 from LabelArea import LabelArea
 
 import time
-import pandas as pd
+#import pandas as pd
 
 # DEBUG ONLY TODO remove imports for testing
 from PyQt6.QtWidgets import QApplication  
-import sys
 
 class PanZoomViewBox(ViewBox):
     """
@@ -65,7 +66,7 @@ class PanZoomViewBox(ViewBox):
 class DataWindow(PlotWidget):
     def __init__(self, epgdata: EPGData) -> None:
         super().__init__(plotItem=PlotItem(viewBox=PanZoomViewBox()))
-        self.scroll_mode = True # i added this
+        self.scroll_mode = False # i added this
         self.epgdata: EPGData = epgdata
         self.file: str = None
         self.prepost: str = "post"
@@ -575,8 +576,9 @@ class DataWindow(PlotWidget):
                         time.sleep(0.01)  # Wait for new data
                         continue
                     else:
-                        dfline = pd.read_csv(line, sep = ",")
-                        df.loc[len(df)] = dfline #i think this is broken - iunno what line is exactly... i think it might just be text??
+                        #dfline = pd.read_csv(line, sep = ",")
+                        #df.loc[len(df)] = dfline #i think this is broken - iunno what line is exactly... i think it might just be text??
+                        pass
 
                 self.viewbox.setRange( # this is what's gonna get repeated a lot
                     xRange=(max(time)-x_zoomlevel, max(time)), yRange=(y_min, y_max), padding=0

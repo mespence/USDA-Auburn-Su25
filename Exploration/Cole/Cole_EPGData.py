@@ -2,7 +2,7 @@ from pandas import read_csv, DataFrame
 import numpy as np
 import pandas as pd
 import re
-import windaq
+# import windaq
 import os
 
 class EPGData():
@@ -17,7 +17,6 @@ class EPGData():
                 self.prepost_suffix = "_rect"
                 self.current_file = "test_recording.csv"
                 self.dir_path = os.path.dirname(os.path.realpath(__file__))
-                self.dfs_numpy = []
 
         def load_data(self, file):
                 """
@@ -29,31 +28,31 @@ class EPGData():
                         True if successful, False otherwise
                 """
 
-                if re.search(r'\.(WDQ|DAQ)$', file, re.IGNORECASE):
-                        windaq_file = windaq.windaq(file)
-                        # TODO: don't hardcode channel count and names
-                        # TODO: add event markers as column
-                        df = DataFrame({
-                                "time":      windaq_file.time(),
-                                "pre_rect":  windaq_file.data(1),
-                                "post_rect": windaq_file.data(2),
-                        })
-                        # This will overwrite if there are multiple
-                        # markers pointing to the same index
-                        comments = [None for i in range(len(df))]
-                        for event in windaq_file.eventmarkers:
-                            if 'comment' in event:
-                                comments[event['index']] = event['comment']
-                            elif 'timestamp' in event:
-                                comments[event['index']] = event['timestamp']
-                            else:
-                                comments[event['index']] = ''
-                        df['comments'] = comments
-                        self.dfs[file] = df
-                elif re.search(r'\.csv$', file, re.IGNORECASE):
+                #if re.search(r'\.(WDQ|DAQ)$', file, re.IGNORECASE):
+                        # windaq_file = windaq.windaq(file)
+                        # # TODO: don't hardcode channel count and names
+                        # # TODO: add event markers as column
+                        # df = DataFrame({
+                        #         "time":      windaq_file.time(),
+                        #         "pre_rect":  windaq_file.data(1),
+                        #         "post_rect": windaq_file.data(2),
+                        # })
+                        # # This will overwrite if there are multiple
+                        # # markers pointing to the same index
+                        # comments = [None for i in range(len(df))]
+                        # for event in windaq_file.eventmarkers:
+                        #     if 'comment' in event:
+                        #         comments[event['index']] = event['comment']
+                        #     elif 'timestamp' in event:
+                        #         comments[event['index']] = event['timestamp']
+                        #     else:
+                        #         comments[event['index']] = ''
+                        # df['comments'] = comments
+                        # self.dfs[file] = df
+                if re.search(r'\.csv$', file, re.IGNORECASE):
                         full_path = os.path.join(self.dir_path,file)
                         try:
-                                self.dfs[file] = read_csv(full_path)       
+                                self.dfs[file] = read_csv(full_path)
                         except FileNotFoundError:
                                 print(f"Could not find {full_path}")
                                 return False
@@ -117,7 +116,7 @@ class EPGData():
 
                 Outputs:
                         A tuple of numpy arrays containing the time and voltage data.
-                """ # a numpy array isnt the same as a pandas dataframe, which should it return?
+                """
                 
                 if not prepost in ["pre", "post"]:
                         raise Exception(f"{prepost} is not either 'pre' or 'post'")
@@ -127,12 +126,7 @@ class EPGData():
 
                 else:   
                         # return unpacked for optimization
-                        # if prepost == "pre":
-                        #         return self.dfs_numpy[0], self.dfs_numpy[1]
-                        # else:
-                        #         return self.dfs_numpy[0], self.dfs_numpy[2]
                         df = self.dfs[file]
-                        #print(type(df['time']), type(df[f'{prepost}{self.prepost_suffix}']))
                         return df['time'].values, df[f'{prepost}{self.prepost_suffix}'].values
 
         def set_labels(self, file: str, labels) -> None:
