@@ -1,6 +1,6 @@
 from pyqtgraph import (
     PlotWidget, ViewBox,
-    TextItem, PlotDataItem, FillBetweenItem, 
+    TextItem, PlotDataItem, FillBetweenItem, InfiniteLine, LinearRegionItem,
     mkPen, mkBrush,
 )
 from PyQt6.QtWidgets import QGraphicsRectItem
@@ -35,10 +35,8 @@ class LabelArea():
 
         self.enable_debug: bool # whether to show debug boxes
 
-        self.transition_line: PlotDataItem  # the vertical line starting the LabelArea
-        self.area_lower_line: PlotDataItem  # the lower edge of the area
-        self.area_upper_line: PlotDataItem  # the upper edge of the area
-        self.area: FillBetweenItem   # the colored FillBetweenItem for the label
+        self.transition_line: InfiniteLine  # the vertical line starting the LabelArea
+        self.area: LinearRegionItem   # the colored FillBetweenItem for the label
         
         
         # ----- initialize instance variables --------------------------
@@ -68,26 +66,23 @@ class LabelArea():
         self.duration_text.setPos(centered_x, duration_y)
         self.viewbox.addItem(self.duration_text)
 
-        self.transition_line = PlotDataItem(
-            x = [time, time],
-            y = [y_min, y_max],
-            pen=mkPen(color='black', width=2)
+        self.transition_line = InfiniteLine(
+            pos=time,
+            angle=90,  # vertical
+            pen=mkPen(color='black', width=2),
+            hoverPen=None,
+            movable=False,
         )
         self.viewbox.addItem(self.transition_line)
-        
-        self.area_lower_line = PlotDataItem(
-            x = [time, time + dur],
-            y = [y_min, y_min]
+  
+        self.area = LinearRegionItem(
+            values = (time, time + dur),
+            orientation='vertical',
+            brush=mkBrush(color=Settings.label_to_color[self.label]),
+            hoverBrush=None,
+            movable=False,
         )
-        self.area_upper_line = PlotDataItem(
-            x = [time, time + dur],
-            y = [y_max, y_max]
-        )
-        self.area = FillBetweenItem(
-            self.area_lower_line, 
-            self.area_upper_line, 
-            brush=mkBrush(color=Settings.label_to_color[self.label])
-        )
+        self.area.setZValue(-10)
         self.viewbox.addItem(self.area)
 
         self.label_bbox = self.bounding_box(self.label_text)
@@ -224,13 +219,6 @@ class LabelArea():
         centered_x = self.start_time + self.duration / 2
         label_y = y_min + 0.05 * (y_max - y_min)
         duration_y = y_max - 0.05 * (y_max - y_min)
-
-        # update area and transition line
-        self.area_lower_line.setData(x=self.area_lower_line.getData()[0], y = [y_min, y_min])
-        self.area_upper_line.setData(x=self.area_upper_line.getData()[0], y = [y_max, y_max])
-        self.area.setCurves(self.area_lower_line, self.area_upper_line)
-        self.area.setZValue(-10)
-        self.transition_line.setData(x = [self.start_time, self.start_time], y = [y_min, y_max])
         
         # update text position
         self.label_text.setPos(centered_x, label_y)
@@ -296,44 +284,15 @@ class LabelArea():
     # unused rn, but maybe could use for manual label editing.
 
 
-    def set_transition_line(self, x_val: float, y_range: tuple[float, float] = None):
+    def set_transition_line(self, x_val: float):
         """
         Sets the LabelArea's transition line to the specified x-value and y_range.
 
         Inputs:
             x_val: the x-value to draw the line at
-            y_range: a (y_min, x_max) pair specifying the range of the line
         """
-        if y_range is None:
-            _, y_range = self.transition_line.getData()
-        self.transition_line.setData([x_val, x_val], [y_range[0], y_range[1]])
-
-    # def set_area_line(
-    #         self, 
-    #         x_range: tuple[float, float], 
-    #         y_val: float, 
-    #         upper: bool = False, 
-    #         sampling_rate: float = 100
-    #     ) -> None:
-    #     """
-    #     Sets the corresponding area line based on the given x_range and y-value.
-
-    #     Inputs:
-    #         x_range: a (x_min, x_max) pair specifying the length of the line
-    #         y_val: the y-value to plot the line at
-    #         upper: whether to update the upper or lower area line.
-    #         sampling_rate: the rate/sec that the data was sampled at  
-
-    #     Output:
-    #         None
-    #     """
-    #     x_data = np.arange(x_range[0], x_range[1], 1 / sampling_rate)
-    #     y_data = np.full_like(x_data, y_val)
-
-    #     if upper:
-    #         self.area_upper_line.setData(x_data, y_data)
-    #     else:
-    #         self.area_lower_line.setData(x_data, y_data)
+        
+        self.transition_line.setValue(x_val)
 
 
     # def set_label(self, label: str) -> None:

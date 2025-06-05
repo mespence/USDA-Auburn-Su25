@@ -109,20 +109,12 @@ class DataWindow(PlotWidget):
         self.baseline_preview.hide()
         self.baseline_preview_enabled: bool = False
         self.edit_mode_enabled: bool = True
+        self.selected_item = None
         self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
 
         self.viewbox.sigRangeChanged.connect(self.update_plot)
 
-        # timer to handle showing loading cursor only after certain delay
-        self.loading_cursor_timer = None  
-        self.loading_cursor_showing = False
-
         self.initUI()
-
-    def show_loading_cursor(self):
-          self.loading_cursor_showing = True
-          QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
-          QGuiApplication.processEvents()
 
     def initUI(self) -> None:
         self.chart_width: int = 400
@@ -191,6 +183,7 @@ class DataWindow(PlotWidget):
         Handles window resizing.
         """
         super().resizeEvent(event)
+        #self.update_compression()
 
     def window_to_chart(self, point: QPointF) -> QPointF:
         """
@@ -234,12 +227,13 @@ class DataWindow(PlotWidget):
         Returns:
             None
         """
-        times, volts = self.epgdata.get_recording(self.file, self.prepost)
-
         QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
 
+        self.xy_data = [
+            self.initial_downsampled_data[0].copy(), 
+            self.initial_downsampled_data[1].copy()
+        ]
 
-        self.xy_data = self.initial_downsampled_data
         self.curve.setData(self.xy_data[0], self.xy_data[1])
 
     
@@ -261,7 +255,7 @@ class DataWindow(PlotWidget):
         Updates the displayed data, labels, and compression/zoom 
         indicators.
         """
-        print("updating")
+        #print("updating")
 
         (x_min, x_max), _ = self.viewbox.viewRange()
 
@@ -381,7 +375,8 @@ class DataWindow(PlotWidget):
         self.xy_data[1] = volts
         self.downsample_visible()
         self.curve.setData(self.xy_data[0], self.xy_data[1])
-        self.initial_downsampled_data = [self.xy_data[0], self.xy_data[1]]
+        init_x, init_y = self.xy_data[0].copy(), self.xy_data[1].copy()
+        self.initial_downsampled_data = [init_x, init_y]
 
         self.viewbox.setRange(
             xRange=(np.min(self.xy_data[0]), np.max(self.xy_data[0])), 
@@ -551,15 +546,15 @@ class DataWindow(PlotWidget):
             Nothing
         """ 
         current_idx = self.labels.index(label_area)
-        _, lower_ys = label_area.area_lower_line.getData()
-        _, upper_ys = label_area.area_upper_line.getData()
+        # _, lower_ys = label_area.area_lower_line.getData()
+        # _, upper_ys = label_area.area_upper_line.getData()
 
 
         if label_area == self.labels[0]:
              # expand left
             expanded_label_area = self.labels[current_idx + 1]
             new_start_time = label_area.start_time
-            new_x_range = [new_start_time, expanded_label_area.start_time +  expanded_label_area.duration]
+            new_range = [new_start_time, expanded_label_area.start_time +  expanded_label_area.duration]
 
             expanded_label_area.start_time = new_start_time
             expanded_label_area.set_transition_line(new_start_time)
@@ -567,10 +562,13 @@ class DataWindow(PlotWidget):
         else: 
             # expand right
             expanded_label_area = self.labels[current_idx - 1]
-            new_x_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration]
+            new_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration]
         
-        expanded_label_area.area_lower_line.setData(x=new_x_range, y=lower_ys)
-        expanded_label_area.area_upper_line.setData(x=new_x_range, y=upper_ys)
+
+
+        # expanded_label_area.area_lower_line.setData(x=new_x_range, y=lower_ys)
+        # expanded_label_area.area_upper_line.setData(x=new_x_range, y=upper_ys)
+        expanded_label_area.area.setRegion(new_range)
         new_dur = expanded_label_area.duration + label_area.duration 
         expanded_label_area.duration = new_dur
         expanded_label_area.duration_text.setText(str(round(new_dur, 2)))
@@ -582,6 +580,84 @@ class DataWindow(PlotWidget):
         del self.labels[current_idx]
         expanded_label_area.update_label_area()
 
+    def highlight_item(self, event: QMouseEvent) -> None:
+        """
+        transition line > baseline > area
+        """
+        TRANSITION_THRESHOLD = 6
+        BASELINE_THRESHOLD = 6
+
+        point = self.window_to_chart(event.position())
+        x, y = point.x(), point.y()
+
+        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
+        pixelRatio = self.devicePixelRatioF()
+
+        if not (x_min <= x <= x_max and y_min <= y <= y_max):
+            return
+        
+        transition_idx, transition_distance = self.get_closest_transition(x)
+        baseline_distance = self.get_baseline_distance(y)
+        area_label =  self.get_closest_area_label(x)
+
+        print(TRANSITION_THRESHOLD * pixelRatio)
+        if transition_distance <= TRANSITION_THRESHOLD * pixelRatio:
+            self.labels[transition_idx].transition_line.setPen(mkPen(width=3, color='red'))
+            self.selected_item = self.labels[transition_idx].transition_line
+        elif baseline_distance <= BASELINE_THRESHOLD * pixelRatio:
+            self.baseline.setPen(mkPen(width=3, color='red'))
+            self.selected_item = self.baseline
+        else:
+            area_label.area.setBrush(None) # TODO: add color here
+            self.selected_item = area_label
+        
+
+        
+
+        
+    def get_closest_transition(self, x: float) -> tuple[int, float]:
+        """
+        Returns the index and pixel distance from a given x coordinate 
+        to the closest transition line.
+
+        Inputs: 
+            x: the queried viewbox x-coordinate
+
+        Outputs:
+            index, x_distance: the index of and distance in pixels to the closest transition line
+        """  
+        transition_xs = np.array([label.start_time for label in self.labels])
+        idx = np.searchsorted(transition_xs, x)
+        transition_x, _ = self.chart_to_window(transition_xs[idx].value(), 0)
+        return idx, transition_x
+
+    def get_baseline_distance(self, y: float) -> float:
+        """
+        Returns the pixel distance from a given y coordinate 
+        to the baseline.
+
+        Inputs: 
+            y: the queried viewbox x-coordinate
+
+        Outputs:
+            y_distance: the distance in pixels to the baseline
+        """
+        viewbox_distance = abs(y - self.baseline.value())
+        return self.chart_to_window(0, viewbox_distance)
+    
+    def get_closest_area_label(self, x: float) -> LabelArea:
+        label_starts = np.array([label.start_time for label in self.labels])
+        label_ends = np.array([label.start_time + label.duration for label in self.labels])
+        idx = np.searchsorted(label_ends, x, side='right') - 1
+        if label_starts[idx] < x <= label_ends[idx]:
+            return self.labels[idx]
+        else:
+            return self.labels[-1]
+    
+
+        
+
+        
 
 
     def delete_all_label_instances(self, label: str) -> None:
@@ -635,7 +711,7 @@ class DataWindow(PlotWidget):
         if event.key() == Qt.Key.Key_R:
             self.reset_view()  
         if event.key() == Qt.Key.Key_Delete:
-            self.delete_label_area(self.labels[0])
+            self.delete_label_area(self.labels[3])
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         return
