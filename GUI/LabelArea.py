@@ -1,6 +1,6 @@
 from pyqtgraph import (
     PlotWidget, ViewBox,
-    TextItem, PlotDataItem, FillBetweenItem, InfiniteLine, LinearRegionItem,
+    TextItem, InfiniteLine, LinearRegionItem,
     mkPen, mkBrush,
 )
 from PyQt6.QtWidgets import QGraphicsRectItem

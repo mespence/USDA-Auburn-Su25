@@ -9,9 +9,11 @@ from pyqtgraph import (
 
 from PyQt6.QtGui import (
     QKeyEvent, QWheelEvent, QMouseEvent, QColor, 
-    QGuiApplication, QCursor, QPainter
+    QGuiApplication, QCursor, 
 )
-from PyQt6.QtCore import Qt, QPointF, QTimer, QCoreApplication, QEventLoop
+from PyQt6.QtCore import Qt, QPointF, QTimer
+
+from PyQt6.QtWidgets import QGraphicsRectItem
 
 from EPGData import EPGData
 from Settings import Settings
@@ -95,7 +97,7 @@ class DataWindow(PlotWidget):
         self.compression_text: TextItem = TextItem()
         self.zoom_level: float = 1
         self.zoom_text: TextItem = TextItem()
-        self.transitions: list[tuple[float, str]] = []   # the x-values of each label transition
+        #self.transitions: list[tuple[float, str]] = []   # the x-values of each label transition
         self.transition_mode: str = 'labels'
         self.labels: list[LabelArea] = []  # the list of LabelAreas
 
@@ -114,16 +116,18 @@ class DataWindow(PlotWidget):
         self.addItem(self.baseline_preview)
         self.baseline_preview.setVisible(False)
 
-        self.baseline_preview_enabled: bool = True
+        self.baseline_preview_enabled: bool = False
         self.edit_mode_enabled: bool = True
         self.moving_mode: bool = False  # whether an interactice item is being moved
+        self.hovered_item = None
         self.selected_item = None
+
+        self.selected_labels_rect = QGraphicsRectItem()
+        self.scene().addItem(self.selected_labels_rect)
+
         self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
 
         self.viewbox.sigRangeChanged.connect(self.update_plot)
-
-        view = self.getPlotItem().getViewBox().scene().views()[0]
-        view.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
         self.initUI()
 
@@ -499,18 +503,18 @@ class DataWindow(PlotWidget):
 
         # load data
         times, _ = self.epgdata.get_recording(self.file, self.prepost)
-        self.transitions = self.epgdata.get_transitions(self.file, self.transition_mode)
+        transitions = self.epgdata.get_transitions(self.file, self.transition_mode)
 
         # Only continue if the label column contains labels
         if self.epgdata.dfs[file][self.transition_mode].isna().all():
             return
 
         durations = []  # elements of (label_start_time, label_duration, label)
-        for i in range(len(self.transitions) - 1):
-            time, label = self.transitions[i]
-            next_time, _ = self.transitions[i + 1]
+        for i in range(len(transitions) - 1):
+            time, label = transitions[i]
+            next_time, _ = transitions[i + 1]
             durations.append((time, next_time - time, label))
-        durations.append((self.transitions[-1][0], max(times) - self.transitions[-1][0], self.transitions[-1][1]))
+        durations.append((transitions[-1][0], max(times) - transitions[-1][0], transitions[-1][1]))
 
         for i, (time, dur, label) in enumerate(durations):
             label_area = LabelArea(time, dur, label, self) # init. also adds items to viewbox
@@ -559,39 +563,35 @@ class DataWindow(PlotWidget):
             Nothing
         """ 
         current_idx = self.labels.index(label_area)
-        # _, lower_ys = label_area.area_lower_line.getData()
-        # _, upper_ys = label_area.area_upper_line.getData()
-
-
-        if label_area == self.labels[0]:
-             # expand left
-            expanded_label_area = self.labels[current_idx + 1]
-            new_start_time = label_area.start_time
-            new_range = [new_start_time, expanded_label_area.start_time +  expanded_label_area.duration]
-
-            expanded_label_area.start_time = new_start_time
-            expanded_label_area.set_transition_line(new_start_time)
-
-        else: 
-            # expand right
-            expanded_label_area = self.labels[current_idx - 1]
-            new_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration]
         
+        if len(self.labels) > 1:
+            if label_area == self.labels[0]:
+                # expand left
+                expanded_label_area = self.labels[current_idx + 1]
+                new_start_time = label_area.start_time
+                new_range = [new_start_time, expanded_label_area.start_time +  expanded_label_area.duration]
 
+                expanded_label_area.start_time = new_start_time
+                expanded_label_area.set_transition_line(new_start_time)
 
-        # expanded_label_area.area_lower_line.setData(x=new_x_range, y=lower_ys)
-        # expanded_label_area.area_upper_line.setData(x=new_x_range, y=upper_ys)
-        expanded_label_area.area.setRegion(new_range)
-        new_dur = expanded_label_area.duration + label_area.duration 
-        expanded_label_area.duration = new_dur
-        expanded_label_area.duration_text.setText(str(round(new_dur, 2)))
+            else: 
+                # expand right
+                expanded_label_area = self.labels[current_idx - 1]
+                new_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration]
+
+            # expanded_label_area.area_lower_line.setData(x=new_x_range, y=lower_ys)
+            # expanded_label_area.area_upper_line.setData(x=new_x_range, y=upper_ys)
+            expanded_label_area.area.setRegion(new_range)
+            new_dur = expanded_label_area.duration + label_area.duration 
+            expanded_label_area.duration = new_dur
+            expanded_label_area.duration_text.setText(str(round(new_dur, 2)))
 
 
         for item in label_area.getItems():
             self.viewbox.removeItem(item)   
 
         del self.labels[current_idx]
-        del self.transitions[current_idx]
+        #del self.transitions[current_idx]
         expanded_label_area.update_label_area()
 
     def highlight_item(self, event: QMouseEvent) -> None:
@@ -601,14 +601,17 @@ class DataWindow(PlotWidget):
         TRANSITION_THRESHOLD = 3
         BASELINE_THRESHOLD = 3
 
+        
+
         point = self.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
 
         (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
         pixelRatio = self.devicePixelRatioF()
 
+
         if not (x_min <= x <= x_max and y_min <= y <= y_max):
-            self.deselect(self.selected_item)
+            self.unhover(self.hovered_item)
             #self.scene().update()
             return
         
@@ -617,35 +620,35 @@ class DataWindow(PlotWidget):
         label_area = self.get_closest_label_area(x)
        
         if transition_distance <= TRANSITION_THRESHOLD * pixelRatio:
-            if self.selected_item is None or self.selected_item != transition_line:
-                if self.selected_item is not None:
-                    self.deselect(self.selected_item)
+            if self.hovered_item is None or self.hovered_item != transition_line:
+                if self.hovered_item is not None:
+                    self.unhover(self.hovered_item)
                 self.setCursor(Qt.CursorShape.OpenHandCursor)
                 transition_line.setPen(mkPen(width=6, color='#0D6EFD'))
-                self.selected_item = transition_line
+                self.hovered_item = transition_line
         elif baseline_distance <= BASELINE_THRESHOLD * pixelRatio:
-            if self.selected_item is None or self.selected_item != self.baseline:
-                if self.selected_item is not None:
-                    self.deselect(self.selected_item)
+            if self.hovered_item is None or self.hovered_item != self.baseline:
+                if self.hovered_item is not None:
+                    self.unhover(self.hovered_item)
                 self.setCursor(Qt.CursorShape.OpenHandCursor)
                 self.baseline.setPen(mkPen(width=6, color='#0D6EFD'))
-                self.selected_item = self.baseline
+                self.hovered_item = self.baseline
         else:
             if label_area is None:
-                self.deselect(self.selected_item)
+                self.unhover(self.hovered_item)
                 return
-            if self.selected_item is None or self.selected_item != label_area:  
-                if self.selected_item is not None:
-                    self.deselect(self.selected_item)
+            if self.hovered_item is None or self.hovered_item != label_area:  
+                if self.hovered_item is not None:
+                    self.unhover(self.hovered_item)
                 label_color = self.composite_on_white(Settings.label_to_color[label_area.label])
                 h, s, l, a = label_color.getHslF()
                 selected_color = QColor.fromHslF(h, min(s * 8, 1), l * 0.9, a)  
                 selected_color.setAlpha(200)
                 label_area.area.setBrush(mkBrush(color=selected_color))
-                self.selected_item = label_area
+                self.hovered_item = label_area
 
     
-    def deselect(self, item):
+    def unhover(self, item):
         if isinstance(item, InfiniteLine):
             self.setCursor(Qt.CursorShape.ArrowCursor)
             if item == self.baseline:
@@ -655,7 +658,7 @@ class DataWindow(PlotWidget):
         if isinstance(item, LabelArea):
             item.area.setBrush(mkBrush(color=Settings.label_to_color[item.label]))
 
-        self.selected_item = None
+        self.hovered_item = None
 
     def composite_on_white(self, color: QColor) -> QColor:
         """
@@ -688,18 +691,18 @@ class DataWindow(PlotWidget):
         Outputs:
             index, x_distance: the index of and distance in pixels to the closest transition line
         """  
-        transition_xs = np.array([t[0] for t in self.transitions])
-        idx = np.searchsorted(transition_xs, x)
+        transitions = np.array([label_area.start_time for label_area in self.labels])
+        idx = np.searchsorted(transitions, x)
 
         zero_point = self.viewbox_to_window(QPointF(0,0)).x()
         
-        if idx == len(transition_xs):
-            dist = abs(self.transitions[idx-1][0] - x)
+        if idx == len(transitions):
+            dist = abs(transitions[idx-1] - x)
             return self.labels[idx-1].transition_line, self.viewbox_to_window(QPointF(dist, 0)).x() - zero_point
         else:
             # Check which of the two neighbors is closer
-            dist_to_left = abs(x - self.transitions[idx-1][0])
-            dist_to_right = abs(self.transitions[idx][0] - x)
+            dist_to_left = abs(x - transitions[idx-1])
+            dist_to_right = abs(transitions[idx] - x)
 
             if dist_to_left <= dist_to_right:
                 return self.labels[idx-1].transition_line, self.viewbox_to_window(QPointF(dist_to_left, 0)).x()- zero_point
@@ -779,8 +782,22 @@ class DataWindow(PlotWidget):
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_R:
             self.reset_view()  
+        if event.key() == Qt.Key.Key_B:
+            self.baseline_preview_enabled = True
+            self.baseline_preview.setVisible(True)
+            pos = self.viewbox.mapSceneToView(self.mapToScene(self.mapFromGlobal(QCursor.pos()))).y()
+            self.baseline_preview.setPos(pos)
         if event.key() == Qt.Key.Key_Delete:
-            self.delete_label_area(self.labels[3])
+            if isinstance(self.selected_item, LabelArea):
+                self.delete_label_area(self.selected_item)
+                self.selected_item = None
+            elif (
+                isinstance(self.selected_item, list) 
+                and all(isinstance(item, LabelArea) for item in self.selected_item)
+            ):
+                for label_area in self.selected_item:
+                    self.delete_label_area(label_area)
+                self.selected_item = None
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         return
@@ -797,19 +814,32 @@ class DataWindow(PlotWidget):
                 self.set_baseline(event)
                 self.baseline_preview_enabled = False
                 self.baseline_preview.setVisible(False)
-            elif isinstance(self.selected_item, InfiniteLine):
+
+            elif isinstance(self.hovered_item, InfiniteLine):
                 self.moving_mode = True
+                self.selected_item = self.hovered_item
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
-                # if self.selected_item == self.baseline:
+                # if self.hovered_item == self.baseline:
                 #     self.moving_mode = True
                 #     return
                 # else:
                 #     pass
  
-            elif isinstance(self.selected_item, LabelArea):
+            elif isinstance(self.hovered_item, LabelArea):
+                self.selected_item = self.hovered_item
+                idx = self.labels.index(self.selected_item)
+                left_line = self.labels[idx].transition_line
+                if self.labels[idx] == self.labels[-1]:
+                    right_line = left_line  # TODO: fix this to work with whatever we decide for last line
+                else:
+                    right_line = self.labels[idx+1].transition_line
 
-                pass
+                left_line.setPen(mkPen(width=6, color='#0D6EFD'))
+                right_line.setPen(mkPen(width=6, color='#0D6EFD'))
+                self.selected_item.area.setBrush(mkBrush(color='#0D6EFD80'))
+                self.selected_item.label_background.setBrush(mkBrush(color='#0D6EFD90'))
+                self.selected_item.duration_background.setBrush(mkBrush(color='#0D6EFD90'))
         
 
         super().mousePressEvent(event)
@@ -826,7 +856,9 @@ class DataWindow(PlotWidget):
         super().mouseReleaseEvent(event)
         if self.moving_mode:
             self.moving_mode = False
+            self.selected_item = None
             self.setCursor(Qt.CursorShape.OpenHandCursor)
+        
         return
         if event.button() == Qt.MouseButton.LeftButton:
             self.handle_transitions(event, "release")
@@ -860,7 +892,7 @@ class DataWindow(PlotWidget):
                 self.baseline_preview.setVisible(False)
 
         if self.moving_mode:
-            if self.selected_item == self.baseline:
+            if self.hovered_item == self.baseline:
                 point = self.window_to_viewbox(event.position())
                 y = point.y()
                 self.baseline.setPos(y)
