@@ -605,6 +605,7 @@ class DataWindow(PlotWidget):
 
         if not (x_min <= x <= x_max and y_min <= y <= y_max):
             self.deselect(self.selected_item)
+            #self.scene().update()
             return
         
         transition_line, transition_distance = self.get_closest_transition(x)
@@ -626,7 +627,7 @@ class DataWindow(PlotWidget):
                 self.baseline.setPen(mkPen(width=4, color='red'))
                 self.selected_item = self.baseline
         else:
-            if label_area is None:
+            if label_area == None:
                 self.deselect(self.selected_item)
                 return
             if self.selected_item is None or self.selected_item != label_area:  
@@ -646,8 +647,7 @@ class DataWindow(PlotWidget):
                 label_area.area.setBrush(mkBrush(color='red'))
                 self.selected_item = label_area
 
-        
-
+    
     def deselect(self, item):
         if isinstance(item, InfiniteLine):
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -733,13 +733,7 @@ class DataWindow(PlotWidget):
         idx = np.searchsorted(label_ends, x)  # idk why this works
         if idx >= len(label_ends):
             return self.labels[-1]
-        return self.labels[idx]
-
-    
-
-        
-
-        
+        return self.labels[idx]      
 
 
     def delete_all_label_instances(self, label: str) -> None:
@@ -804,9 +798,9 @@ class DataWindow(PlotWidget):
         # TODO: edit for when have edit mode functionality
         # For testing baseline preview
         if self.baseline_preview_enabled and event.button() == Qt.MouseButton.LeftButton:
-            #self.set_baseline(event)
+            self.set_baseline(event)
             self.baseline_preview_enabled = False
-            #self.baseline_preview.setVisible(False)
+            self.baseline_preview.setVisible(False)
 
         super().mousePressEvent(event)
 
@@ -831,12 +825,10 @@ class DataWindow(PlotWidget):
         # For testing baseline preview
 
         if self.edit_mode_enabled:
-            self.highlight_item(event)
-
-       
+            self.highlight_item(event) 
+            self.scene().update()    
         
 
-        #self.baseline_preview_enabled = True
         if self.baseline_preview_enabled:
             point = self.window_to_viewbox(event.position())
             y = point.y()
