@@ -100,13 +100,20 @@ class DataWindow(PlotWidget):
         self.labels: list[LabelArea] = []  # the list of LabelAreas
 
         # TODO: may need to clean this up based on how want preview to show up and how edit mode works
-        self.baseline: InfiniteLine = None
+        self.baseline: InfiniteLine = InfiniteLine(
+            angle = 0, movable=False, pen=mkPen("gray", width = 2)
+        )
+        self.plot_item.addItem(self.baseline)
+        self.baseline.setVisible(False)
+        
         self.baseline_preview: InfiniteLine = InfiniteLine(
-                angle = 0, movable = False,
-                pen=mkPen("gray", style = Qt.PenStyle.DashLine, width = 2),
-            )
-        self.plot_item.addItem(self.baseline_preview)
-        self.baseline_preview.hide()
+            angle = 0, movable = False,
+            pen=mkPen("gray", style = Qt.PenStyle.DashLine, width = 2),
+        )
+
+        self.addItem(self.baseline_preview)
+        self.baseline_preview.setVisible(False)
+
         self.baseline_preview_enabled: bool = True
         self.edit_mode_enabled: bool = True
         self.selected_item = None
@@ -198,8 +205,8 @@ class DataWindow(PlotWidget):
         """
         scene_pos = self.mapToScene(point.toPoint())
         data_pos = self.viewbox.mapSceneToView(scene_pos)
-        data_pos1 = self.viewbox.mapSceneToView(point)
-        return data_pos1
+        #data_pos1 = self.viewbox.mapSceneToView(point)
+        return data_pos
 
     def viewbox_to_window(self, point: QPointF) -> QPointF:
         """
@@ -590,18 +597,14 @@ class DataWindow(PlotWidget):
         TRANSITION_THRESHOLD = 3
         BASELINE_THRESHOLD = 3
 
-        # # reset current selection
-        #
-
-
         point = self.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
-        #print(round(x, 2), round(y, 2))
 
         (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
         pixelRatio = self.devicePixelRatioF()
 
         if not (x_min <= x <= x_max and y_min <= y <= y_max):
+            self.deselect(self.selected_item)
             return
         
         transition_line, transition_distance = self.get_closest_transition(x)
@@ -609,47 +612,40 @@ class DataWindow(PlotWidget):
         label_area = self.get_closest_label_area(x)
        
         if transition_distance <= TRANSITION_THRESHOLD * pixelRatio:
-            if (
-                self.selected_item is None  # no current selection
-                or self.selected_item != transition_line  # not currently selected
-            ):
-                self.deselect(self.selected_item)
+            if self.selected_item is None or self.selected_item != transition_line:
+                if self.selected_item is not None:
+                    self.deselect(self.selected_item)
                 self.setCursor(Qt.CursorShape.OpenHandCursor)
                 transition_line.setPen(mkPen(width=4, color='red'))
                 self.selected_item = transition_line
         elif baseline_distance <= BASELINE_THRESHOLD * pixelRatio:
-            if (
-                self.selected_item is None  # no current selection
-                or self.selected_item != self.baseline  # not currently selected
-            ):
-                self.deselect(self.selected_item)
+            if self.selected_item is None or self.selected_item != self.baseline:
+                if self.selected_item is not None:
+                    self.deselect(self.selected_item)
                 self.setCursor(Qt.CursorShape.OpenHandCursor)
                 self.baseline.setPen(mkPen(width=4, color='red'))
                 self.selected_item = self.baseline
         else:
             if label_area is None:
                 self.deselect(self.selected_item)
-                self.selected_item = None
                 return
-            if (
-                self.selected_item is None  # no current selection
-                or self.selected_item != label_area  # not currently selected
-            ):
-                self.deselect(self.selected_item)
+            if self.selected_item is None or self.selected_item != label_area:  
+                if self.selected_item is not None:
+                    self.deselect(self.selected_item)
                 #label_color = Settings.label_to_color[label_area.label]
                 label_color = self.composite_on_white(Settings.label_to_color[label_area.label])
                 selected_color = label_color.darker(100) # 10% darker
-                print(selected_color.saturationF())
-                
+                h, s, l, a = selected_color.getHslF()
                 selected_color = QColor.fromHslF(
-                    selected_color.hueF(), 
-                    min(selected_color.saturationF() * 9, 1), # 80% more saturated
-                    selected_color.lightnessF() * 0.9,
-                    selected_color.alphaF()
+                    h, 
+                    min(s * 8, 1), # 80% more saturated
+                    l * 0.9,
+                    a
                 )  
                 selected_color.setAlpha(200)
-                label_area.area.setBrush(mkBrush(color=selected_color, opacity=0.8))
+                label_area.area.setBrush(mkBrush(color='red'))
                 self.selected_item = label_area
+
         
 
     def deselect(self, item):
@@ -661,6 +657,8 @@ class DataWindow(PlotWidget):
                 item.setPen(mkPen(color='black', width=2))
         if isinstance(item, LabelArea):
             item.area.setBrush(mkBrush(color=Settings.label_to_color[item.label]))
+
+        self.selected_item = None
 
     def composite_on_white(self, color: QColor) -> QColor:
         """
@@ -773,18 +771,14 @@ class DataWindow(PlotWidget):
         if not (x_min <= x <= x_max and y_min <= y <= y_max):
             return
 
-        if self.baseline is None:
-            self.baseline = InfiniteLine(
-                pos = y, angle = 0,
-                movable = False,
-                pen = mkPen("gray", width=2)
-            )
-            self.plot_item.addItem(self.baseline)
-        else:
-            # if baseline already placed, update position based on click
-            # and be able to move it to a new position depending on edit mode
+        if self.baseline.getPos() == [0, 0]:
             self.baseline.setPos(y)
-            self.baseline.setMovable(self.edit_mode_enabled)
+            self.baseline.setVisible(True)
+        # else:
+        #     # if baseline already placed, update position based on click
+        #     # and be able to move it to a new position depending on edit mode
+        #     self.baseline.setPos(y)
+        #     #self.baseline.setMovable(self.edit_mode_enabled)
     
         return
 
@@ -810,9 +804,9 @@ class DataWindow(PlotWidget):
         # TODO: edit for when have edit mode functionality
         # For testing baseline preview
         if self.baseline_preview_enabled and event.button() == Qt.MouseButton.LeftButton:
-            self.set_baseline(event)
+            #self.set_baseline(event)
             self.baseline_preview_enabled = False
-            self.baseline_preview.hide()
+            #self.baseline_preview.setVisible(False)
 
         super().mousePressEvent(event)
 
@@ -831,24 +825,27 @@ class DataWindow(PlotWidget):
             self.handle_labels(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        # super().mouseMoveEvent(event)
+        #super().mouseMoveEvent(event)
         # return
         # TODO: edit for when have edit mode functionality
         # For testing baseline preview
+
         if self.edit_mode_enabled:
             self.highlight_item(event)
 
+       
+        
+
+        #self.baseline_preview_enabled = True
         if self.baseline_preview_enabled:
             point = self.window_to_viewbox(event.position())
             y = point.y()
             _, (y_min, y_max) = self.viewbox.viewRange()
-
             if y_min <= y <= y_max:
                 self.baseline_preview.setPos(y)
-                self.baseline_preview.show()
+                self.baseline_preview.setVisible(True)
             else:
-                self.baseline_preview.hide()
-
+                self.baseline_preview.setVisible(False)
         super().mouseMoveEvent(event)
 
         return
