@@ -9,7 +9,7 @@ from pyqtgraph import (
 
 from PyQt6.QtGui import (
     QKeyEvent, QWheelEvent, QMouseEvent, QColor, 
-    QGuiApplication, QCursor
+    QGuiApplication, QCursor, QPainter
 )
 from PyQt6.QtCore import Qt, QPointF, QTimer, QCoreApplication, QEventLoop
 
@@ -116,10 +116,14 @@ class DataWindow(PlotWidget):
 
         self.baseline_preview_enabled: bool = True
         self.edit_mode_enabled: bool = True
+        self.moving_mode: bool = False  # whether an interactice item is being moved
         self.selected_item = None
         self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
 
         self.viewbox.sigRangeChanged.connect(self.update_plot)
+
+        view = self.getPlotItem().getViewBox().scene().views()[0]
+        view.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
         self.initUI()
 
@@ -644,7 +648,7 @@ class DataWindow(PlotWidget):
                     a
                 )  
                 selected_color.setAlpha(200)
-                label_area.area.setBrush(mkBrush(color='red'))
+                label_area.area.setBrush(mkBrush(color=selected_color))
                 self.selected_item = label_area
 
     
@@ -793,17 +797,29 @@ class DataWindow(PlotWidget):
             self.zoom_mode = False
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        #super().mousePressEvent(event)
-        # return
         # TODO: edit for when have edit mode functionality
         # For testing baseline preview
-        if self.baseline_preview_enabled and event.button() == Qt.MouseButton.LeftButton:
-            self.set_baseline(event)
-            self.baseline_preview_enabled = False
-            self.baseline_preview.setVisible(False)
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self.baseline_preview_enabled:
+                self.set_baseline(event)
+                self.baseline_preview_enabled = False
+                self.baseline_preview.setVisible(False)
+            elif isinstance(self.selected_item, InfiniteLine):
+                self.moving_mode = True
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+
+                # if self.selected_item == self.baseline:
+                #     self.moving_mode = True
+                #     return
+                # else:
+                #     pass
+ 
+            elif isinstance(self.selected_item, LabelArea):
+                pass
+        
 
         super().mousePressEvent(event)
-
+    
         # return
         # if event.button() == Qt.MouseButton.LeftButton:
         #     if self.cursor_state == "normal":
@@ -812,6 +828,17 @@ class DataWindow(PlotWidget):
         #         self.set_baseline(event)
         # elif event.button() == Qt.MouseButton.RightButton:
         #     self.add_drop_transitions(event)
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        super().mouseReleaseEvent(event)
+        if self.moving_mode:
+            self.moving_mode = False
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+        return
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.handle_transitions(event, "release")
+
+        
+        
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         return
@@ -824,10 +851,9 @@ class DataWindow(PlotWidget):
         # TODO: edit for when have edit mode functionality
         # For testing baseline preview
 
-        if self.edit_mode_enabled:
+        if self.edit_mode_enabled and not self.moving_mode:
             self.highlight_item(event) 
-            self.scene().update()    
-        
+            self.scene().update()            
 
         if self.baseline_preview_enabled:
             point = self.window_to_viewbox(event.position())
@@ -838,6 +864,16 @@ class DataWindow(PlotWidget):
                 self.baseline_preview.setVisible(True)
             else:
                 self.baseline_preview.setVisible(False)
+
+        if self.moving_mode:
+            if self.selected_item == self.baseline:
+                point = self.window_to_viewbox(event.position())
+                y = point.y()
+                self.baseline.setPos(y)
+                return
+
+
+
         super().mouseMoveEvent(event)
 
         return
@@ -850,10 +886,7 @@ class DataWindow(PlotWidget):
         )
         self.baseline_preview.hide()
 
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        return
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.handle_transitions(event, "release")
+    
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         # """
