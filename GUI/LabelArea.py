@@ -167,7 +167,7 @@ class LabelArea():
         Returns the background box around a TextItem.
         """
         if color is None:
-            color = self.composite_on_white(Settings.label_to_color[self.label]) 
+            color = self.plot_widget.composite_on_white(Settings.label_to_color[self.label]) 
             color = color.darker(110) # 10% darker
             color = QColor.fromHsvF(
                 color.hueF(), 
@@ -191,16 +191,7 @@ class LabelArea():
 
         return bg_rect
     
-    def composite_on_white(self, color: QColor) -> QColor:
-        """
-        Helps function to get the RGB value (no alpha) of 
-        an RGBA color displayed on a white background.
-        """
-        alpha = color.alpha() / 255.0
-        r = round(color.red() * alpha + 255 * (1 - alpha))
-        g = round(color.green() * alpha + 255 * (1 - alpha))
-        b = round(color.blue() * alpha + 255 * (1 - alpha))
-        return QColor(r, g, b)
+    
     
     def update_label_area(self) -> None:
         """

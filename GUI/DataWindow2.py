@@ -103,11 +103,11 @@ class DataWindow(PlotWidget):
         self.baseline: InfiniteLine = None
         self.baseline_preview: InfiniteLine = InfiniteLine(
                 angle = 0, movable = False,
-                pen=mkPen("gray", style = Qt.PenStyle.DashLine, width = 2)
+                pen=mkPen("gray", style = Qt.PenStyle.DashLine, width = 2),
             )
         self.plot_item.addItem(self.baseline_preview)
         self.baseline_preview.hide()
-        self.baseline_preview_enabled: bool = False
+        self.baseline_preview_enabled: bool = True
         self.edit_mode_enabled: bool = True
         self.selected_item = None
         self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
@@ -185,36 +185,38 @@ class DataWindow(PlotWidget):
         super().resizeEvent(event)
         #self.update_compression()
 
-    def window_to_chart(self, point: QPointF) -> QPointF:
+    def window_to_viewbox(self, point: QPointF) -> QPointF:
         """
-        Converts a point from window (global) coordinates to chart (data)
+        Converts a point from window (screen) coordinates to viewbox (data)
         coordinates.
 
         Inputs:
             point: point in widget coodinates
 
         Returns:
-            QPointF: corresponding point in chart (data) coordinates
+            QPointF: corresponding point in viewbox (data) coordinates
         """
         scene_pos = self.mapToScene(point.toPoint())
         data_pos = self.viewbox.mapSceneToView(scene_pos)
-        return data_pos
+        data_pos1 = self.viewbox.mapSceneToView(point)
+        return data_pos1
 
-    def chart_to_window(self, x: float, y: float) -> tuple[float, float]:
+    def viewbox_to_window(self, point: QPointF) -> QPointF:
         """
-        Converts from chart (data) coordinates to window (widget) coordinates.
+        Converts from viewbox (data) coordinates to window (widget) coordinates.
 
         Inputs:
-            x, y: x and y coordinates in chart coordinates
+            x, y: x and y coordinates in viewbox coordinates
 
         Returns:
             (window_x, window_y): window coordinates equivalent
-            to the chart coordinates.
+            to the viewbox coordinates.
         """
-
+        return self.viewbox.mapViewToScene(point)
         scene_pos = self.viewbox.mapViewToScene(QPointF(x, y))
-        widget_pos = self.mapFromScene(scene_pos)
-        return widget_pos.x(), widget_pos.y()
+        return scene_pos.x(), scene_pos.y()
+        #widget_pos = self.mapFromScene(scene_pos)
+        #return widget_pos.x(), widget_pos.y()
 
     def reset_view(self) -> None:
         """
@@ -578,17 +580,23 @@ class DataWindow(PlotWidget):
             self.viewbox.removeItem(item)   
 
         del self.labels[current_idx]
+        del self.transitions[current_idx]
         expanded_label_area.update_label_area()
 
     def highlight_item(self, event: QMouseEvent) -> None:
         """
         transition line > baseline > area
         """
-        TRANSITION_THRESHOLD = 6
-        BASELINE_THRESHOLD = 6
+        TRANSITION_THRESHOLD = 3
+        BASELINE_THRESHOLD = 3
 
-        point = self.window_to_chart(event.position())
+        # # reset current selection
+        #
+
+
+        point = self.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
+        #print(round(x, 2), round(y, 2))
 
         (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
         pixelRatio = self.devicePixelRatioF()
@@ -596,24 +604,83 @@ class DataWindow(PlotWidget):
         if not (x_min <= x <= x_max and y_min <= y <= y_max):
             return
         
-        transition_idx, transition_distance = self.get_closest_transition(x)
+        transition_line, transition_distance = self.get_closest_transition(x)
         baseline_distance = self.get_baseline_distance(y)
-        area_label =  self.get_closest_area_label(x)
-
-        print(TRANSITION_THRESHOLD * pixelRatio)
+        label_area = self.get_closest_label_area(x)
+       
         if transition_distance <= TRANSITION_THRESHOLD * pixelRatio:
-            self.labels[transition_idx].transition_line.setPen(mkPen(width=3, color='red'))
-            self.selected_item = self.labels[transition_idx].transition_line
+            if (
+                self.selected_item is None  # no current selection
+                or self.selected_item != transition_line  # not currently selected
+            ):
+                self.deselect(self.selected_item)
+                self.setCursor(Qt.CursorShape.OpenHandCursor)
+                transition_line.setPen(mkPen(width=4, color='red'))
+                self.selected_item = transition_line
         elif baseline_distance <= BASELINE_THRESHOLD * pixelRatio:
-            self.baseline.setPen(mkPen(width=3, color='red'))
-            self.selected_item = self.baseline
+            if (
+                self.selected_item is None  # no current selection
+                or self.selected_item != self.baseline  # not currently selected
+            ):
+                self.deselect(self.selected_item)
+                self.setCursor(Qt.CursorShape.OpenHandCursor)
+                self.baseline.setPen(mkPen(width=4, color='red'))
+                self.selected_item = self.baseline
         else:
-            area_label.area.setBrush(None) # TODO: add color here
-            self.selected_item = area_label
+            if label_area is None:
+                self.deselect(self.selected_item)
+                self.selected_item = None
+                return
+            if (
+                self.selected_item is None  # no current selection
+                or self.selected_item != label_area  # not currently selected
+            ):
+                self.deselect(self.selected_item)
+                #label_color = Settings.label_to_color[label_area.label]
+                label_color = self.composite_on_white(Settings.label_to_color[label_area.label])
+                selected_color = label_color.darker(100) # 10% darker
+                print(selected_color.saturationF())
+                
+                selected_color = QColor.fromHslF(
+                    selected_color.hueF(), 
+                    min(selected_color.saturationF() * 9, 1), # 80% more saturated
+                    selected_color.lightnessF() * 0.9,
+                    selected_color.alphaF()
+                )  
+                selected_color.setAlpha(200)
+                label_area.area.setBrush(mkBrush(color=selected_color, opacity=0.8))
+                self.selected_item = label_area
         
 
-        
+    def deselect(self, item):
+        if isinstance(item, InfiniteLine):
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            if item == self.baseline:
+                item.setPen(mkPen("gray", width=2))
+            else:
+                item.setPen(mkPen(color='black', width=2))
+        if isinstance(item, LabelArea):
+            item.area.setBrush(mkBrush(color=Settings.label_to_color[item.label]))
 
+    def composite_on_white(self, color: QColor) -> QColor:
+        """
+        Helps function to get the RGB value (no alpha) of 
+        an RGBA color displayed on a white background.
+        """
+        alpha = color.alpha() / 255.0
+        r = round(color.red() * alpha + 255 * (1 - alpha))
+        g = round(color.green() * alpha + 255 * (1 - alpha))
+        b = round(color.blue() * alpha + 255 * (1 - alpha))
+        return QColor(r, g, b)
+    
+    def darker_hsl(self, color: QColor, amount: float) -> QColor:
+        """
+        Returns a darker color by reducing HSL lightness by `amount`.
+        """
+        h, s, l, a = color.getHsl()
+        new_l = max(0, l - int(amount * 255))
+        new_color = QColor.fromHsl(h, s, new_l, a)
+        return new_color
         
     def get_closest_transition(self, x: float) -> tuple[int, float]:
         """
@@ -626,11 +693,24 @@ class DataWindow(PlotWidget):
         Outputs:
             index, x_distance: the index of and distance in pixels to the closest transition line
         """  
-        transition_xs = np.array([label.start_time for label in self.labels])
+        transition_xs = np.array([t[0] for t in self.transitions])
         idx = np.searchsorted(transition_xs, x)
-        transition_x, _ = self.chart_to_window(transition_xs[idx].value(), 0)
-        return idx, transition_x
 
+        zero_point = self.viewbox_to_window(QPointF(0,0)).x()
+        
+        if idx == len(transition_xs):
+            dist = abs(self.transitions[idx-1][0] - x)
+            return self.labels[idx-1].transition_line, self.viewbox_to_window(QPointF(dist, 0)).x() - zero_point
+        else:
+            # Check which of the two neighbors is closer
+            dist_to_left = abs(x - self.transitions[idx-1][0])
+            dist_to_right = abs(self.transitions[idx][0] - x)
+
+            if dist_to_left <= dist_to_right:
+                return self.labels[idx-1].transition_line, self.viewbox_to_window(QPointF(dist_to_left, 0)).x()- zero_point
+            else:
+                return self.labels[idx].transition_line, self.viewbox_to_window(QPointF(dist_to_right, 0)).x()- zero_point
+            
     def get_baseline_distance(self, y: float) -> float:
         """
         Returns the pixel distance from a given y coordinate 
@@ -642,17 +722,21 @@ class DataWindow(PlotWidget):
         Outputs:
             y_distance: the distance in pixels to the baseline
         """
+        if self.baseline is None:
+            return float('inf')
+        zero_point = self.viewbox_to_window(QPointF(0,0)).y()
         viewbox_distance = abs(y - self.baseline.value())
-        return self.chart_to_window(0, viewbox_distance)
+        return zero_point - self.viewbox_to_window(QPointF(0, viewbox_distance)).y()
     
-    def get_closest_area_label(self, x: float) -> LabelArea:
-        label_starts = np.array([label.start_time for label in self.labels])
+    def get_closest_label_area(self, x: float) -> LabelArea:
+        if x < self.labels[0].start_time or x > (self.labels[-1].start_time + self.labels[-1].duration):
+            return None  # outside the labels
         label_ends = np.array([label.start_time + label.duration for label in self.labels])
-        idx = np.searchsorted(label_ends, x, side='right') - 1
-        if label_starts[idx] < x <= label_ends[idx]:
-            return self.labels[idx]
-        else:
+        idx = np.searchsorted(label_ends, x)  # idk why this works
+        if idx >= len(label_ends):
             return self.labels[-1]
+        return self.labels[idx]
+
     
 
         
@@ -681,7 +765,7 @@ class DataWindow(PlotWidget):
             None
         """ 
         # TODO: edit for when have edit mode functionality
-        point = self.window_to_chart(event.position())
+        point = self.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
 
         (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
@@ -692,7 +776,7 @@ class DataWindow(PlotWidget):
         if self.baseline is None:
             self.baseline = InfiniteLine(
                 pos = y, angle = 0,
-                movable = self.edit_mode_enabled,
+                movable = False,
                 pen = mkPen("gray", width=2)
             )
             self.plot_item.addItem(self.baseline)
@@ -751,8 +835,11 @@ class DataWindow(PlotWidget):
         # return
         # TODO: edit for when have edit mode functionality
         # For testing baseline preview
+        if self.edit_mode_enabled:
+            self.highlight_item(event)
+
         if self.baseline_preview_enabled:
-            point = self.window_to_chart(event.position())
+            point = self.window_to_viewbox(event.position())
             y = point.y()
             _, (y_min, y_max) = self.viewbox.viewRange()
 
