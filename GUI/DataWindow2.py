@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import QGraphicsRectItem
 from EPGData import EPGData
 from Settings import Settings
 from LabelArea import LabelArea
+from CommentMarker import CommentMarker
 
 # DEBUG ONLY TODO remove imports for testing
 from PyQt6.QtWidgets import QApplication  
@@ -100,6 +101,8 @@ class DataWindow(PlotWidget):
         #self.transitions: list[tuple[float, str]] = []   # the x-values of each label transition
         self.transition_mode: str = 'labels'
         self.labels: list[LabelArea] = []  # the list of LabelAreas
+        self.comments: list[CommentMarker] = [] # the list of Comments
+        self.comments_enabled = True
 
         # TODO: may need to clean this up based on how want preview to show up and how edit mode works
         self.baseline: InfiniteLine = InfiniteLine(
@@ -403,6 +406,31 @@ class DataWindow(PlotWidget):
         )
         self.update_plot()
 
+    def plot_comments(self) -> None:
+        df = self.epgdata.dfs[self.file]
+
+        if 'comments' not in df.columns:
+            return
+        
+        comments_df = df[~df["comments"].isnull()]
+        if comments_df.empty:
+            return
+        
+        exists_already = {round(c.time, 5): c for c in self.comments}
+        for time, text in zip(comments_df["time"].values, comments_df["comments"].values):
+            rounded_time = round(time, 5)
+            if rounded_time in exists_already:
+                if exists_already[rounded_time].text != text:
+                    exists_already[rounded_time].set_text(text)
+            else:
+                marker = CommentMarker(time, text, self)
+                self.comments.append(marker)
+        
+        return
+
+    # def add_comment(self, even: QMouseEvent):
+
+
     def downsample_visible(
         self, x_range: tuple[float, float] = None, max_points=4000, method = 'peak'
     ) -> tuple[NDArray, NDArray]:
@@ -521,9 +549,16 @@ class DataWindow(PlotWidget):
             label_area = LabelArea(time, dur, label, self) # init. also adds items to viewbox
             self.labels.append(label_area)
 
+        time, dur, _ = durations[-1]
+        end_start_time = time + dur
+
+        label_area = LabelArea(end_start_time, 0, 'empty', self)
+        self.labels.append(label_area)
+        label_area.label_text.setVisible(False)
+        label_area.duration_text.setVisible(False)
+
         self.update_plot()
 
-    
     def change_label_color(self, label: str, color: QColor) -> None:
         """
         change_label_color is a slot for the signal emitted by the
@@ -650,7 +685,6 @@ class DataWindow(PlotWidget):
                 label_area.area.setBrush(mkBrush(color=selected_color))
                 self.hovered_item = label_area
 
-    
     def unhover(self, item):
         if isinstance(item, InfiniteLine):
             self.setCursor(Qt.CursorShape.ArrowCursor)

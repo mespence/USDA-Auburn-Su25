@@ -4,15 +4,16 @@ class Settings:
     def __init__(self):
         Settings.alpha = 30
         Settings.label_to_color = {
-			'NP' : QColor(  0, 255,   0, Settings.alpha),
-            'P'  : QColor(255,   0,   0, Settings.alpha),
-			'J'  : QColor(  0,   0, 255, Settings.alpha),
-			'K'  : QColor(  0, 255,   0, Settings.alpha),
-			'L'  : QColor(128,   0, 128, Settings.alpha),
-			'M'  : QColor(255, 192, 203, Settings.alpha),
-			'N'  : QColor(  0, 255, 255, Settings.alpha),
-			'W'  : QColor(255, 215,   0, Settings.alpha),
-			'Z'  : QColor(255, 215,   0, Settings.alpha)
+			'NP'    : QColor(  0, 255,   0, Settings.alpha),
+            'P'     : QColor(255,   0,   0, Settings.alpha),
+			'J'     : QColor(  0,   0, 255, Settings.alpha),
+			'K'     : QColor(  0, 255,   0, Settings.alpha),
+			'L'     : QColor(128,   0, 128, Settings.alpha),
+			'M'     : QColor(255, 192, 203, Settings.alpha),
+			'N'     : QColor(  0, 255, 255, Settings.alpha),
+			'W'     : QColor(255, 215,   0, Settings.alpha),
+			'Z'     : QColor(255, 215,   0, Settings.alpha),
+            'empty' : QColor(  0,   0,   0, 0)
 		}
         Settings.labels_to_show = {
 			'NP' : True,
