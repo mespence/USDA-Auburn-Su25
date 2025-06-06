@@ -2,7 +2,7 @@ from pandas import read_csv, DataFrame
 import numpy as np
 import pandas as pd
 import re
-# import windaq
+import windaq
 import os
 
 class EPGData():
@@ -28,27 +28,27 @@ class EPGData():
                         True if successful, False otherwise
                 """
 
-                #if re.search(r'\.(WDQ|DAQ)$', file, re.IGNORECASE):
-                        # windaq_file = windaq.windaq(file)
-                        # # TODO: don't hardcode channel count and names
-                        # # TODO: add event markers as column
-                        # df = DataFrame({
-                        #         "time":      windaq_file.time(),
-                        #         "pre_rect":  windaq_file.data(1),
-                        #         "post_rect": windaq_file.data(2),
-                        # })
-                        # # This will overwrite if there are multiple
-                        # # markers pointing to the same index
-                        # comments = [None for i in range(len(df))]
-                        # for event in windaq_file.eventmarkers:
-                        #     if 'comment' in event:
-                        #         comments[event['index']] = event['comment']
-                        #     elif 'timestamp' in event:
-                        #         comments[event['index']] = event['timestamp']
-                        #     else:
-                        #         comments[event['index']] = ''
-                        # df['comments'] = comments
-                        # self.dfs[file] = df
+                if re.search(r'\.(WDQ|DAQ)$', file, re.IGNORECASE):
+                        windaq_file = windaq.windaq(file)
+                        # TODO: don't hardcode channel count and names
+                        # TODO: add event markers as column
+                        df = DataFrame({
+                                "time":      windaq_file.time(),
+                                "pre_rect":  windaq_file.data(1),
+                                "post_rect": windaq_file.data(2),
+                        })
+                        # This will overwrite if there are multiple
+                        # markers pointing to the same index
+                        comments = [None for i in range(len(df))]
+                        for event in windaq_file.eventmarkers:
+                            if 'comment' in event:
+                                comments[event['index']] = event['comment']
+                            elif 'timestamp' in event:
+                                comments[event['index']] = event['timestamp']
+                            else:
+                                comments[event['index']] = ''
+                        df['comments'] = comments
+                        self.dfs[file] = df
                 if re.search(r'\.csv$', file, re.IGNORECASE):
                         full_path = os.path.join(self.dir_path,file)
                         try:

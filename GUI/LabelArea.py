@@ -96,7 +96,7 @@ class LabelArea():
 
         self.enable_debug = self.plot_widget.enable_debug
 
-        self.viewbox.sigTransformChanged.connect(self.update_label_area)
+        self.viewbox.sigTransformChanged.connect(self.update_label_area)  # bug here after deleting all areas
     
         if self.enable_debug:
             self.toggle_debug_boxes()   

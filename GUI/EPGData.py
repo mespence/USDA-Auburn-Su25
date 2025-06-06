@@ -107,7 +107,7 @@ class EPGData():
 
         def get_recording(self, file, prepost):
                 """
-                get_recording returns a pandas dataframe containing time
+                get_recording returns a tuple of numpy arrays containing time
                 and voltage data only.
 
                 Inputs:
@@ -117,7 +117,7 @@ class EPGData():
 
                 Outputs:
                         A tuple of numpy arrays containing the time and voltage data.
-                """ # a numpy array isnt the same as a pandas dataframe, which should it return?
+                """
                 
                 if not prepost in ["pre", "post"]:
                         raise Exception(f"{prepost} is not either 'pre' or 'post'")
