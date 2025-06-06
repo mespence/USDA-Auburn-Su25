@@ -116,7 +116,7 @@ class DataWindow(PlotWidget):
         self.addItem(self.baseline_preview)
         self.baseline_preview.setVisible(False)
 
-        self.baseline_preview_enabled: bool = False
+        self.baseline_preview_enabled: bool = True
         self.edit_mode_enabled: bool = True
         self.moving_mode: bool = False  # whether an interactice item is being moved
         self.hovered_item = None
@@ -877,8 +877,6 @@ class DataWindow(PlotWidget):
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         #super().mouseMoveEvent(event)
         # return
-        # TODO: edit for when have edit mode functionality
-        # For testing baseline preview
 
         if self.edit_mode_enabled and not self.moving_mode:
             self.highlight_item(event) 
@@ -894,44 +892,58 @@ class DataWindow(PlotWidget):
             else:
                 self.baseline_preview.setVisible(False)
 
-        if self.moving_mode:
+        if self.moving_mode and isinstance(self.selected_item, InfiniteLine):
+            point = event.position()
+            x = point.x()
+            y = point.y()
             if self.hovered_item == self.baseline:
-                point = self.window_to_viewbox(event.position())
-                y = point.y()
                 self.baseline.setPos(y)
                 return
-            elif isinstance(self.selected_item, InfiniteLine): # must be transition line
-                point = self.window_to_viewbox(event.position())
-                x = point.x()
-                # TODO could make this more efficient maybe ?
-                for idx in range(len(self.labels)):
-                    label = self.labels[idx]
+            else: # must be transition line
+                PIXEL_THRESHOLD = 2
+                pixelRatio = self.devicePixelRatioF()
+                
+                for idx, label in enumerate(self.labels):
                     if self.selected_item == label.transition_line:
-                        old_start = label.start_time
-                        old_duration = label.duration
+                        min_x = float("-inf")
+                        max_x = float("inf")
 
-                        label.start_time = x
-                        label.set_transition_line(x)
+                        if idx > 0:
+                            prev_label = self.labels[idx-1]
+                            prev_x = self.viewbox_to_window(QPointF(prev_label.start_time, 0))
+                            min_x = prev_x.x() + PIXEL_THRESHOLD * pixelRatio
+                        if idx < len(self.labels) - 1:
+                            next_label = self.labels[idx+1]
+                            next_x = self.viewbox_to_window(QPointF(next_label.start_time, 0))
+                            max_x = next_x.x() - PIXEL_THRESHOLD * pixelRatio
 
-                        label.duration = old_duration + (old_start - label.start_time)
+                        bounding_window_x = max(min_x, min(x, max_x))
+                        bounding_viewbox_x = self.window_to_viewbox(QPointF(bounding_window_x, y)).x()
 
-                        if idx != 0:
-                            # first transition line dont have to edit left fill
-                            previous_label = self.labels[idx-1]
-                            prev_old_duration = previous_label.duration
-                            previous_label.duration = prev_old_duration - (old_start - label.start_time)
-                            previous_label.area.setRegion((previous_label.start_time, previous_label.start_time + previous_label.duration))
-                            previous_label.duration_text # TODO edit duration text
-                            previous_label.update_label_area()
+                        delta_x = label.start_time - bounding_viewbox_x
 
+                        label.start_time = bounding_viewbox_x
+                        label.set_transition_line(bounding_viewbox_x)
+
+                        print("bounding_vb", bounding_viewbox_x)
+                        print("x_vb", x)
+                        print("bounding_win", bounding_window_x)
+                        print("x_win", event.position().x())
+
+                        label.duration += delta_x
                         label.area.setRegion((label.start_time, label.start_time + label.duration))
-
+                        label.duration_text.setText(str(round(label.duration, 2)))
                         label.update_label_area()
+
+                        if idx > 0:
+                            prev_label.duration -= delta_x
+                            prev_label.area.setRegion((prev_label.start_time,
+                                                           prev_label.start_time + prev_label.duration))
+                            prev_label.duration_text.setText(str(round(prev_label.duration, 2)))
+                            prev_label.update_label_area()
 
                         return
                 # TODO:
-                    # update transition line loc
-                    # edit duration text
                     # cant move past anoter transition line, stop pixels away
                     # add an end transition line with an end label area
 
