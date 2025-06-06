@@ -292,6 +292,7 @@ class DataWindow(PlotWidget):
         self.update_compression()
         self.update_zoom()
 
+        print(self.labels)
         for label_area in self.labels:
            label_area.update_label_area()
 
@@ -563,7 +564,7 @@ class DataWindow(PlotWidget):
             Nothing
         """ 
         current_idx = self.labels.index(label_area)
-        
+
         if len(self.labels) > 1:
             if label_area == self.labels[0]:
                 # expand left
@@ -585,6 +586,7 @@ class DataWindow(PlotWidget):
             new_dur = expanded_label_area.duration + label_area.duration 
             expanded_label_area.duration = new_dur
             expanded_label_area.duration_text.setText(str(round(new_dur, 2)))
+            expanded_label_area.update_label_area()
 
 
         for item in label_area.getItems():
@@ -592,7 +594,7 @@ class DataWindow(PlotWidget):
 
         del self.labels[current_idx]
         #del self.transitions[current_idx]
-        expanded_label_area.update_label_area()
+        
 
     def highlight_item(self, event: QMouseEvent) -> None:
         """
@@ -601,7 +603,9 @@ class DataWindow(PlotWidget):
         TRANSITION_THRESHOLD = 3
         BASELINE_THRESHOLD = 3
 
-        
+        if len(self.labels) == 0:  # nothing to highlight
+            return 
+
 
         point = self.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
@@ -610,9 +614,8 @@ class DataWindow(PlotWidget):
         pixelRatio = self.devicePixelRatioF()
 
 
-        if not (x_min <= x <= x_max and y_min <= y <= y_max):
+        if not (x_min <= x <= x_max and y_min <= y <= y_max):  # cursor outside viewbox
             self.unhover(self.hovered_item)
-            #self.scene().update()
             return
         
         transition_line, transition_distance = self.get_closest_transition(x)
