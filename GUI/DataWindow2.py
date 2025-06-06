@@ -903,10 +903,10 @@ class DataWindow(PlotWidget):
             elif isinstance(self.selected_item, InfiniteLine): # must be transition line
                 point = self.window_to_viewbox(event.position())
                 x = point.x()
+                # TODO could make this more efficient maybe ?
                 for idx in range(len(self.labels)):
                     label = self.labels[idx]
                     if self.selected_item == label.transition_line:
-                            # first transition line dont have to edit left fill
                         old_start = label.start_time
                         old_duration = label.duration
 
@@ -916,24 +916,24 @@ class DataWindow(PlotWidget):
                         label.duration = old_duration + (old_start - label.start_time)
 
                         if idx != 0:
+                            # first transition line dont have to edit left fill
                             previous_label = self.labels[idx-1]
                             prev_old_duration = previous_label.duration
                             previous_label.duration = prev_old_duration - (old_start - label.start_time)
                             previous_label.area.setRegion((previous_label.start_time, previous_label.start_time + previous_label.duration))
-                            previous_label.duration_text # edit duration text
+                            previous_label.duration_text # TODO edit duration text
                             previous_label.update_label_area()
-                            # previous_label.update_visibility()
 
                         label.area.setRegion((label.start_time, label.start_time + label.duration))
 
                         label.update_label_area()
 
                         return
-
-                # update transition line loc
-                # edit duration text
-                # cant move past anoter transition line, stop pixels away
-                # add an end transition line with an end label area
+                # TODO:
+                    # update transition line loc
+                    # edit duration text
+                    # cant move past anoter transition line, stop pixels away
+                    # add an end transition line with an end label area
 
             
             
