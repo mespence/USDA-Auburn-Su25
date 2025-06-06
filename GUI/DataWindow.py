@@ -220,7 +220,7 @@ class DataWindow(QChartView):
         """
         # Check if click occurred in region with data
         click_x, _ = self.window_to_chart(event.pos().x(), event.pos().y())
-        max_time = max(self.epgdata.get_recording(self.file, self.prepost)['time'])
+        max_time = max(self.epgdata.get_recording(self.file, self.prepost)[0])
         if click_x < 0 or click_x > max_time:
             return # outside of labeled region
 
@@ -256,7 +256,7 @@ class DataWindow(QChartView):
         """
         # Check if click occurred in region with data
         click_x, _ = self.window_to_chart(event.pos().x(), event.pos().y())
-        max_time = max(self.epgdata.get_recording(self.file, self.prepost)['time'])
+        max_time = max(self.epgdata.get_recording(self.file, self.prepost)[0])
         if click_x < 0 or click_x > max_time:
             return # outside of labeled region
         
@@ -280,12 +280,12 @@ class DataWindow(QChartView):
                     del self.labels[transition_index]
                     del self.durations[transition_index]
                     # Make the transition before the one we deleted longer 
-                    df = self.epgdata.get_recording(self.file, self.prepost)
+                    times, volts = self.epgdata.get_recording(self.file, self.prepost)
                     next_transition = None
                     # Handle the case where we delete the
                     # last transition
                     if transition_index >= len(self.transitions):
-                        next_transition = max(df['time'].values)
+                        next_transition = max(times)
                     else:
                         next_transition = self.transitions[transition_index][0]
                     b_upper = self.area_upper_lines[transition_index - 1]
@@ -337,13 +337,13 @@ class DataWindow(QChartView):
                 self.durations[last_transition_index].replace(duration_point)
 
                 # Add in a shaded area and text label for this transition
-                df = self.epgdata.get_recording(self.file, self.prepost)
+                times, volts= self.epgdata.get_recording(self.file, self.prepost)
                 volts = df[self.prepost + self.epgdata.prepost_suffix].values
                 max_volts = max(volts)
                 min_volts = min(volts)
                 next_transition_time = None
                 if last_transition_index + 2 >= len(self.transitions):
-                    next_transition_time = max(df['time'].values)
+                    next_transition_time = max(times)
                 else:
                     next_transition_time = self.transitions[last_transition_index + 2][0]
                 duration = next_transition_time - click_x
@@ -443,7 +443,7 @@ class DataWindow(QChartView):
             # Only allow movement between other transitions,
             # keep a buffer between them.
             prev_transition = self.transitions[self.tracked_transition - 1][0] + self.transition_buffer
-            max_time = max(self.epgdata.get_recording(self.file, self.prepost)['time'])
+            max_time = max(self.epgdata.get_recording(self.file, self.prepost)[0])
             next_transition = None
             if self.tracked_transition == len(self.transitions) - 1:
                 next_transition = max_time
@@ -730,9 +730,7 @@ class DataWindow(QChartView):
         """
         # Load data
         self.file = file
-        df = self.epgdata.get_recording(self.file, prepost)
-        time = df['time'].values
-        volts = df[prepost + self.epgdata.prepost_suffix].values
+        time, volts = self.epgdata.get_recording(self.file, prepost)
 
         # Plot data
         points = [QPointF(t, v)  for t, v in zip(time, volts)]
@@ -769,8 +767,7 @@ class DataWindow(QChartView):
         #Load data
         self.file = file
         self.prepost = prepost
-        df = self.epgdata.get_recording(self.file, prepost)
-        volts = df[prepost + self.epgdata.prepost_suffix].values
+        times, volts = self.epgdata.get_recording(self.file, prepost)
         min_volts = min(volts)
         max_volts = max(volts)
         self.transitions = self.epgdata.get_transitions(self.file, self.transition_mode)
@@ -787,7 +784,7 @@ class DataWindow(QChartView):
             time, label = self.transitions[i]
             next_time, _ = self.transitions[i + 1]
             durations.append((time, next_time - time, label))
-        durations.append((self.transitions[-1][0], max(df['time']), self.transitions[-1][1]))
+        durations.append((self.transitions[-1][0], max(times), self.transitions[-1][1]))
 
         self.areas = []
         self.area_upper_lines = []

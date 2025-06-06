@@ -875,8 +875,7 @@ class DataWindow(PlotWidget):
             self.handle_labels(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        #super().mouseMoveEvent(event)
-        # return
+        super().mouseMoveEvent(event)
 
         if self.edit_mode_enabled and not self.moving_mode:
             self.highlight_item(event) 
@@ -901,7 +900,7 @@ class DataWindow(PlotWidget):
                 return
             else: # must be transition line
                 PIXEL_THRESHOLD = 2
-                pixelRatio = self.devicePixelRatioF()
+                pixelRatio =  self.devicePixelRatioF()
                 
                 for idx, label in enumerate(self.labels):
                     if self.selected_item == label.transition_line:
@@ -925,11 +924,6 @@ class DataWindow(PlotWidget):
                         label.start_time = bounding_viewbox_x
                         label.set_transition_line(bounding_viewbox_x)
 
-                        print("bounding_vb", bounding_viewbox_x)
-                        print("x_vb", x)
-                        print("bounding_win", bounding_window_x)
-                        print("x_win", event.position().x())
-
                         label.duration += delta_x
                         label.area.setRegion((label.start_time, label.start_time + label.duration))
                         label.duration_text.setText(str(round(label.duration, 2)))
@@ -943,16 +937,6 @@ class DataWindow(PlotWidget):
                             prev_label.update_label_area()
 
                         return
-                # TODO:
-                    # cant move past anoter transition line, stop pixels away
-                    # add an end transition line with an end label area
-
-            
-            
-
-
-
-        super().mouseMoveEvent(event)
 
         return
 
