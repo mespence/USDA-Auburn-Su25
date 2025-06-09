@@ -13,7 +13,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtCore import Qt, QPointF, QTimer
 
-from PyQt6.QtWidgets import QGraphicsRectItem
+from PyQt6.QtWidgets import QGraphicsRectItem, QInputDialog, QMessageBox
 
 from EPGData import EPGData
 from Settings import Settings
@@ -101,7 +101,7 @@ class DataWindow(PlotWidget):
         #self.transitions: list[tuple[float, str]] = []   # the x-values of each label transition
         self.transition_mode: str = 'labels'
         self.labels: list[LabelArea] = []  # the list of LabelAreas
-        self.comments: list[CommentMarker] = [] # the list of Comments
+        self.comments: dict[float, CommentMarker] = {} # the dict of Comments
         self.comments_enabled = True
 
         # TODO: may need to clean this up based on how want preview to show up and how edit mode works
@@ -398,38 +398,90 @@ class DataWindow(PlotWidget):
         self.curve.setData(self.xy_data[0], self.xy_data[1])
         init_x, init_y = self.xy_data[0].copy(), self.xy_data[1].copy()
         self.initial_downsampled_data = [init_x, init_y]
+        df = self.epgdata.dfs[file]
+
+        # create a comments column if doesn't yet exist
+        if 'comments' not in df.columns:
+            df['comments'] = None
+
+        # testing comment appearance
+        # tar_time = 420
+        # nearest_idx = (df['time'] - tar_time).abs().idxmin()
+        # df.at[nearest_idx, 'comments'] = "Test comment"
 
         self.viewbox.setRange(
             xRange=(np.min(self.xy_data[0]), np.max(self.xy_data[0])), 
             yRange=(np.min(self.xy_data[1]), np.max(self.xy_data[1])), 
             padding=0
         )
-        self.update_plot()
 
-    def plot_comments(self) -> None:
+        self.update_plot()
+        self.plot_comments(file)
+
+    def plot_comments(self, file: str) -> None:
+        if file is not None:
+            self.file = file
+
         df = self.epgdata.dfs[self.file]
 
-        if 'comments' not in df.columns:
-            return
+        for marker in self.comments:
+            marker.remove()
+        self.comments.clear()
         
         comments_df = df[~df["comments"].isnull()]
-        if comments_df.empty:
-            return
-        
-        exists_already = {round(c.time, 5): c for c in self.comments}
-        for time, text in zip(comments_df["time"].values, comments_df["comments"].values):
-            rounded_time = round(time, 5)
-            if rounded_time in exists_already:
-                if exists_already[rounded_time].text != text:
-                    exists_already[rounded_time].set_text(text)
-            else:
-                marker = CommentMarker(time, text, self)
-                self.comments.append(marker)
+        for time, text in zip(comments_df["time"], comments_df["comments"]):
+            marker = CommentMarker(time, text, self)
+            self.comments[time] = marker
         
         return
 
-    # def add_comment(self, even: QMouseEvent):
+    def add_comment(self, event: QMouseEvent) -> None:
+        point = self.window_to_viewbox(event.position())
+        x = point.x()
 
+        df = self.epgdata.dfs[self.file]
+        nearest_idx = (df['time'] - x).abs().idxmin()
+        comment_time = df.at[nearest_idx, 'time']
+        existing = df.at[nearest_idx, 'comments']
+        
+        if existing and str(existing).strip():
+            confirm = QMessageBox.Question(
+                self,
+                "Overwrite Comment?",
+                f"A comment already exists at {df.at[nearest_idx, 'time']:.2f}s:\n\n\"{existing}\"\n\nReplace it?",
+                QMessageBox.Yes | QMessageBox.No
+                )
+            if confirm != QMessageBox.Yes:
+                return
+
+        text, ok = QInputDialog.getText(self, "Add Comment", f"Comment at {x:.2f} s:")
+        if not ok or not text.strip():
+            return
+
+        df.at[nearest_idx, 'comments'] = text
+        
+        marker = self.comments.get(comment_time)
+        if marker:
+            marker.set_text(text)
+        else:
+            new_marker = CommentMarker(comment_time, text, self)
+            self.comments[comment_time] = new_marker
+        
+        return
+
+# TODO need to implement when understand format of comment
+    # def delete_comment(self, time: float) -> None:
+    #     df = self.epgdata.dfs[self.file]
+    #     nearest_idx = (df['time'] - time).abs().idxmin()
+    #     comment_time = df.at[nearest_idx, 'time']
+    #     df.at[nearest_idx, 'comments'] = None
+
+    #     marker = self.comments.pop(comment_time, None)
+    #     if marker:
+    #         marker.remove()
+    #     return
+    
+    # def update_comment(self, )
 
     def downsample_visible(
         self, x_range: tuple[float, float] = None, max_points=4000, method = 'peak'
@@ -878,6 +930,9 @@ class DataWindow(PlotWidget):
                 self.selected_item.label_background.setBrush(mkBrush(color='#0D6EFD90'))
                 self.selected_item.duration_background.setBrush(mkBrush(color='#0D6EFD90'))
         
+        # testing add_comment
+        # if event.button() == Qt.MouseButton.RightButton:
+        #     self.add_comment(event)
 
         super().mousePressEvent(event)
     
