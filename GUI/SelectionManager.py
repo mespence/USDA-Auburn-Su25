@@ -304,23 +304,34 @@ class Selection:
         after_idx = current_idx + 1
 
         if len(labels) > 1:
-            if label_area == labels[0]:  # expand left
+            merging_adjacent = False
+
+            if label_area == labels[0] and after_idx < len(labels):  # expand left
                 expanded_label_area = labels[after_idx]
                 new_start_time = label_area.start_time
                 new_range = [new_start_time, expanded_label_area.start_time +  expanded_label_area.duration]
-
+                new_dur = expanded_label_area.duration + label_area.duration
                 expanded_label_area.start_time = new_start_time
                 expanded_label_area.set_transition_line(new_start_time)
 
             else:  # expand right
                 expanded_label_area = labels[before_idx]
-                if labels[before_idx].label == labels[after_idx].label:
-                    # if labels next to each other are the same, merge
-                    new_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration + labels[after_idx].duration]
-                new_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration]
+                if after_idx < len(labels):
+                    after_label = labels[after_idx]
+                    merging_adjacent = (expanded_label_area.label == after_label.label)
 
-            expanded_label_area.area.setRegion(new_range)
-            new_dur = expanded_label_area.duration + label_area.duration 
+                    if merging_adjacent:
+                        new_range = [expanded_label_area.start_time, after_label.start_time + after_label.duration]
+                        new_dur = expanded_label_area.duration + label_area.duration + after_label.duration
+
+                        for item in after_label.getItems():
+                            self.datawindow.viewbox.removeItem(item)
+                        del self.datawindow.labels[after_idx]
+                    else:
+                        new_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration]
+                        new_dur = expanded_label_area.duration + label_area.duration
+
+            expanded_label_area.area.setRegion(new_range) 
             expanded_label_area.duration = new_dur
             expanded_label_area.duration_text.setText(str(round(new_dur, 2)))
             expanded_label_area.update_label_area()
