@@ -33,10 +33,12 @@ class LabelArea:
         self.duration_background: QGraphicsRectItem  # the background fill for the dur text
         self.duration_debug_box: QGraphicsRectItem  # the debug bbox for the duration
 
-        self.enable_debug: bool # whether to show debug boxes
-
         self.transition_line: InfiniteLine  # the vertical line starting the LabelArea
         self.area: LinearRegionItem   # the colored FillBetweenItem for the label
+
+        self.is_end_area: bool # whether this label area is the zero-width end area
+
+        self.enable_debug: bool # whether to show debug boxes
         
         
         # ----- initialize instance variables --------------------------
@@ -98,6 +100,8 @@ class LabelArea:
 
         self.viewbox.sigTransformChanged.connect(self.update_label_area)  # bug here after deleting all areas
     
+        self.is_end_area = (dur == 0 and label == 'empty')
+
         if self.enable_debug:
             self.toggle_debug_boxes()   
 
@@ -206,6 +210,11 @@ class LabelArea:
             None
 
         """
+
+        if self.is_end_area: # clamp end area to zero width
+            self.area.setRegion((self.start_time, self.start_time))
+            return
+        
         self.viewbox = self.plot_widget.getPlotItem().getViewBox()
         _, (y_min, y_max) = self.viewbox.viewRange()
 
@@ -255,6 +264,8 @@ class LabelArea:
 
         Also handles hiding/showing durations based on the settings
         """
+        if self.is_end_area:
+            return  # keep end area hidden
 
         label_overlapping = self.label_bbox.left() < self.start_time < self.label_bbox.right()
         dur_overlapping = self.duration_bbox.left() < self.start_time < self.duration_bbox.right()

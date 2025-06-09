@@ -620,7 +620,9 @@ class DataWindow(PlotWidget):
 
         label_area = LabelArea(end_start_time, 0, 'empty', self)
         label_area.label_text.setVisible(False)
+        label_area.label_background.setVisible(False)
         label_area.duration_text.setVisible(False)
+        label_area.duration_background.setVisible(False)
         self.labels.append(label_area)
         
         self.update_plot()
@@ -873,10 +875,12 @@ class DataWindow(PlotWidget):
         Helps function to get the RGB value (no alpha) of 
         an RGBA color displayed on a white background.
         """
-        r, g, b, a = color.getRgbF()
+        r, g, b, a = color.getRgb()
+        a = a / 255
+
         new_r = round(r * a + 255 * (1 - a))
         new_g = round(g * a + 255 * (1 - a))
-        new_b = round(b * a + 255 * (1 - a))
+        new_b = round(b * a + 255 * (1- a))
         return QColor(new_r, new_g, new_b)
     
     def darker_hsl(self, color: QColor, amount: float) -> QColor:
@@ -899,6 +903,9 @@ class DataWindow(PlotWidget):
         Outputs:
             index, x_distance: the index of and distance in pixels to the closest transition line
         """  
+        if not self.labels:
+            return float('inf')  # no labels present
+        
         transitions = np.array([label_area.start_time for label_area in self.labels])
         idx = np.searchsorted(transitions, x)
 
@@ -929,8 +936,10 @@ class DataWindow(PlotWidget):
         return self.baseline, zero_point - self.viewbox_to_window(QPointF(0, viewbox_distance)).y()
     
     def get_closest_label_area(self, x: float) -> LabelArea:
+        if not self.labels:
+            return float('inf')  # no labels present
         if x < self.labels[0].start_time or x > (self.labels[-1].start_time + self.labels[-1].duration):
-            return None  # outside the labels
+            return float('inf')  # outside the labels
         label_ends = np.array([label.start_time + label.duration for label in self.labels])
         idx = np.searchsorted(label_ends, x)  # idk why this works
         if idx >= len(label_ends):

@@ -86,7 +86,7 @@ class Selection:
         self.datawindow.viewbox.update()
 
     def deselect_item(self, item):
-        if isinstance(item ,InfiniteLine):
+        if isinstance(item ,InfiniteLine) and item != self.highlighted_item:
             if item == self.datawindow.baseline:
                 item.setPen(self.default_style['baseline'])
             else:
@@ -155,6 +155,7 @@ class Selection:
         if event.key() == Qt.Key.Key_Delete or event.key() == Qt.Key.Key_Backspace:
             for item in self.selected_items[:]: # shallow copy
                 if isinstance(item, LabelArea):
+                    print(f"Deleting: {item.label}")
                     self.delete_label_area(item)
 
             # if all(isinstance(item, LabelArea) for item in self.selected_items):
@@ -172,6 +173,7 @@ class Selection:
             self.datawindow.scene().update()
             return
         
+        
         # ----------- LEFT CLICK -----------
         if event.button() == Qt.MouseButton.LeftButton:
             # Left-clicked InfiniteLine 
@@ -188,7 +190,11 @@ class Selection:
 
             # Left-clicked LabelArea
             elif isinstance(self.hovered_item, LabelArea):
+                if self.hovered_item.is_end_area:
+                    return  # can't select end area
+                
                 print('Clicked LabelArea')
+
                 # normal click
                 if event.modifiers() == Qt.KeyboardModifier.NoModifier:
                     self.deselect_all()
@@ -196,6 +202,8 @@ class Selection:
 
                 # shift-click
                 elif event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                    if not any(isinstance(item, LabelArea) for item in self.selected_items):
+                        self.deselect_all()  # only label areas can have multi selection
                     self.select(self.hovered_item)
                 
     def mouse_move_event(self, event: QMouseEvent) -> None:
@@ -214,15 +222,42 @@ class Selection:
         x, y = point.x(), point.y()
 
         if self.moving_mode:
-            self.deselect_item(self.dragged_line)
-            self.hover(x,y)
-            #self.update_highlight(self.dragged_line)
-        
+            if self.dragged_line == self.datawindow.baseline:
+                self.dragged_line.setPen(self.highlighted_style['baseline'])
+                self.highlighted_item = self.dragged_line
+                self.deselect_item(self.dragged_line)
+            else:
+                labels = self.datawindow.labels
+
+                # get the index of the label area the dragged line belongs to
+                idx = next(
+                    (i for i, label_area in enumerate(labels)
+                    if self.dragged_line == label_area.transition_line
+                    or (i > 0 and self.dragged_line == labels[i + 1].transition_line)),
+                    None # default index
+                )
+
+                if idx is not None:
+                    left_selected = self.is_selected(labels[idx]) if idx > 0 else False
+                    right_selected = self.is_selected(labels[idx + 1]) if idx < len(labels) else False
+                    if left_selected or right_selected:
+                        pass  # already selected: don't update pen
+                elif self.dragged_line == self.hovered_item: # standalone selection
+                    self.dragged_line.setPen(self.highlighted_style['transition line'])
+                    self.highlighted_item = self.dragged_line
+                    self.deselect_item(self.dragged_line)
+                
             self.moving_mode = False
             self.dragged_line = None
             self.datawindow.setCursor(Qt.CursorShape.OpenHandCursor)
-        return
-    
+
+            self.hover(x,y)
+        return     
+           
+
+
+
+        
     def apply_drag(self, x: float, y: float) -> None:
         """
         Applies drag movement to the currently selected line (transition or baseline).
@@ -232,13 +267,13 @@ class Selection:
         if line is None:
             return
 
-        # Handle dragging the baseline
+        # Dragging the baseline
         if line == self.datawindow.baseline:
             self.datawindow.baseline.setPos(y)
             return
     
-        # Handle dragging a transition line
-        MIN_PIXEL_DISTANCE = 2 * self.datawindow.devicePixelRatioF() # pixels
+        # Dragging a transition line
+        MIN_PIXEL_DISTANCE = 2 * self.datawindow.devicePixelRatioF()
         labels = self.datawindow.labels
         viewbox = self.datawindow.viewbox
 
@@ -247,17 +282,20 @@ class Selection:
                 if i == 0:
                     return  # can't drag the leftmost edge
 
-                left = labels[i - 1]
-                right = label
+                left = labels[i - 1]  # label area to the left of the line
+                right = label  # label area to the right of the line
 
-                right_end_time =right.start_time + right.duration
-
+                # minimum of the clamp
                 min_x_scene = viewbox.mapViewToScene(QPointF(left.start_time, 0)).x() + MIN_PIXEL_DISTANCE
-                max_x_scene = viewbox.mapViewToScene(QPointF(right_end_time,  0)).x() - MIN_PIXEL_DISTANCE
-                min_x = viewbox.mapSceneToView(QPointF(min_x_scene, 0)).x()
-                max_x = viewbox.mapSceneToView(QPointF(max_x_scene, 0)).x()
-
-                x = max(min_x, min(x, max_x)) # clamp x to range (min_x, max_x)
+                min_x = viewbox.mapSceneToView(QPointF(min_x_scene, 0)).x()     
+                   
+                if right.is_end_area: # no right clamp if next label is end area
+                    x = max(x, min_x)
+                else:  # clamp to right
+                    right_end_time =right.start_time + right.duration
+                    max_x_scene = viewbox.mapViewToScene(QPointF(right_end_time, 0)).x() - MIN_PIXEL_DISTANCE
+                    max_x = viewbox.mapSceneToView(QPointF(max_x_scene, 0)).x()
+                    x = max(min_x, min(x, max_x)) # clamp x to range (min_x, max_x)
 
                 delta = x - right.start_time
                 left.duration += delta
@@ -270,25 +308,6 @@ class Selection:
 
         return
 
-            # # Case 2: dragging right edge of label[i]  (skips rightmost edge)
-            # if i < len(labels) - 1 and labels[i + 1].transition_line == line:
-            #     left = labels[i]
-            #     right = labels[i + 1]
-
-            #     min_x_scene = viewbox.mapViewToScene(QPointF(left.start_time,0)).x() + MIN_PIXEL_DISTANCE
-            #     max_x_scene = viewbox.mapViewToScene(QPointF(right.start_time + right.duration,0)).x() - MIN_PIXEL_DISTANCE
-            #     min_x = viewbox.mapSceneToView(QPointF(min_x_scene, 0)).x()
-            #     max_x = viewbox.mapSceneToView(QPointF(max_x_scene, 0)).x()
-            #     x = max(min_x, min(x, max_x))
-
-            #     left.duration = x - left.start_time
-            #     right.start_time = x
-            #     right.duration -= x - right.start_time
-            #     right.set_transition_line(x)
-
-            #     left.update_label_area()
-            #     right.update_label_area()
-            #     return
 
 
     def delete_label_area(self, label_area: LabelArea) -> None:
@@ -339,9 +358,6 @@ class Selection:
         for item in label_area.getItems():
             self.datawindow.viewbox.removeItem(item)   
 
-        # if current_idx != len(self.labels):
-        #     self.datawindow.labels[current_idx + 1].transition_line.setPen(mkPen(color='black', width=2))
-
         del self.datawindow.labels[current_idx]
 
     def hover(self, x: float, y: float):
@@ -351,9 +367,6 @@ class Selection:
         """
         TRANSITION_HIGHLIGHT_THRESHOLD = 3 * self.datawindow.devicePixelRatioF() # pixels
         BASELINE_HIGHLIGHT_THRESHOLD = 3 * self.datawindow.devicePixelRatioF()
-
-        if not self.datawindow.labels:
-            return  # nothing to highlight
         
         (x_min, x_max), (y_min, y_max) = self.datawindow.viewbox.viewRange()
 
@@ -367,6 +380,9 @@ class Selection:
         transition_line, transition_distance = self.datawindow.get_closest_transition(x)
         baseline, baseline_distance = self.datawindow.get_baseline_distance(y)
         label_area = self.datawindow.get_closest_label_area(x)
+
+        if not self.datawindow.baseline.isVisible():
+            baseline_distance = float('inf')
 
         if transition_distance <= TRANSITION_HIGHLIGHT_THRESHOLD * pixel_ratio:
             if transition_line == self.datawindow.labels[0].transition_line:
@@ -388,8 +404,9 @@ class Selection:
             self.datawindow.setCursor(Qt.CursorShape.ArrowCursor)  # default
 
         if self.is_selected(item):
+            self.unhighlight_item(self.highlighted_item)
             return  # don't highlight already selected items
-        
+
         # check if highlighted item needs to change:
         if self.highlighted_item != item:
             if self.highlighted_item is not None:
@@ -402,13 +419,22 @@ class Selection:
                     item.setPen(self.highlighted_style['transition line'])
 
             elif isinstance(item, LabelArea):
-                label_color = self.datawindow.composite_on_white(Settings.label_to_color[item.label])
-                h, s, l, a = label_color.getHslF()
-                selected_color = QColor.fromHslF(h, min(s * 8, 1), l * 0.9, a)  
-                selected_color.setAlpha(200)
-                item.area.setBrush(mkBrush(color=selected_color))
+                label_area_color = self.datawindow.composite_on_white(Settings.label_to_color[item.label])
+                text_background_color = item.label_background.brush().color()
+
+                highlighted_area_color = self.get_highlighted_color(label_area_color)
+                highlighted_background_color = self.get_highlighted_color(text_background_color)
+                item.area.setBrush(mkBrush(color=highlighted_area_color))
+                item.label_background.setBrush(mkBrush(highlighted_background_color))
+                item.duration_background.setBrush(mkBrush(highlighted_background_color))
 
             self.highlighted_item = item
+
+    def get_highlighted_color(self, color: QColor) -> QColor:
+        h, s, l, a = color.getHslF()
+        highlighted_color = QColor.fromHslF(h, min(s * 8, 1), l * 0.9, a)  
+        highlighted_color.setAlpha(200)
+        return highlighted_color
 
     def unhighlight_item(self, item):
         if isinstance(item ,InfiniteLine):
@@ -418,5 +444,7 @@ class Selection:
                 item.setPen(self.default_style['transition line'])
         if isinstance(item, LabelArea):
             item.area.setBrush(mkBrush(color=Settings.label_to_color[item.label]))
+            item.label_background.setBrush(mkBrush(color=item.get_background_color()))
+            item.duration_background.setBrush(mkBrush(color=item.get_background_color()))
 
         self.highlighted_item = None
