@@ -9,7 +9,7 @@ from PyQt6.QtGui import QFont, QFontMetricsF, QPen, QColor
 
 from Settings import Settings
 
-class LabelArea():
+class LabelArea:
     """
     A class handling everything pertaining to EPG labels.
     Includes the label and duration text, the plot objects 
@@ -167,16 +167,7 @@ class LabelArea():
         Returns the background box around a TextItem.
         """
         if color is None:
-            color = self.plot_widget.composite_on_white(Settings.label_to_color[self.label]) 
-            color = color.darker(110) # 10% darker
-            color = QColor.fromHsvF(
-                color.hueF(), 
-                color.saturationF() * 1.8,  # 80% more saturated
-                color.valueF(), 
-                color.alphaF()
-            )
-            color.setAlpha(200)
-
+            color = self.get_background_color()
         bbox = self.bounding_box(text_item)
 
         # create QGraphicsRectItem
@@ -191,6 +182,17 @@ class LabelArea():
 
         return bg_rect
     
+    def get_background_color(self) -> QColor:
+        """
+        Returns the color for a label background in this label.
+        """
+        color = self.plot_widget.composite_on_white(Settings.label_to_color[self.label]) 
+        color = color.darker(110) # 10% darker
+        h, s, v, f = color.getHsvF()
+        color = QColor.fromHsvF(h, s * 1.8, v, f)
+        color.setAlpha(200)
+        return color
+            
     
     
     def update_label_area(self) -> None:
@@ -211,11 +213,19 @@ class LabelArea():
         label_y = y_min + 0.05 * (y_max - y_min)
         duration_y = y_max - 0.05 * (y_max - y_min)
         
-        # update text position
+
+        # update text and area if changed
+        if self.label_text.toPlainText() != self.label:  # label changed
+            self.label_text.setText(self.label)
+        if self.duration_text.toPlainText() != str(round(self.duration, 2)):  # duration changed
+            self.duration_text.setText(str(round(self.duration, 2)))
+            self.area.setRegion((self.start_time, self.start_time + self.duration))
+
+        # update text pos
         self.label_text.setPos(centered_x, label_y)
         self.duration_text.setPos(centered_x, duration_y)
 
-        # update backgrounds
+        # update text backgrounds
         self.label_bbox = self.bounding_box(self.label_text)
         self.duration_bbox = self.bounding_box(self.duration_text)
         

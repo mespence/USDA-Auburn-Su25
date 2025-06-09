@@ -1,5 +1,6 @@
 import numpy as np
 from numpy.typing import NDArray
+import os
 
 from pyqtgraph import (
     PlotWidget, ViewBox, PlotItem, 
@@ -19,15 +20,17 @@ from EPGData import EPGData
 from Settings import Settings
 from LabelArea import LabelArea
 from CommentMarker import CommentMarker
+from SelectionManager import Selection
+
 
 # DEBUG ONLY TODO remove imports for testing
 from PyQt6.QtWidgets import QApplication  
 import sys, time
 
 
-import platform
 
-if platform.system() == "Windows":
+
+if os.name == "nt":
     print("Windows detected, running with OpenGL")
     setConfigOptions(useOpenGL = True)
 
@@ -58,12 +61,23 @@ class PanZoomViewBox(ViewBox):
                 self.scaleBy((1 / zoom_factor, 1), center)
         else:
             (x_min, x_max), (y_min, y_max) = self.viewRange()
+            width, height = x_max - x_min, y_max - y_min
+
             if shift_held:
                 v_zoom_factor = 5e-4
-                self.translateBy(y=delta * v_zoom_factor * (y_max - y_min))
+                dy = delta * v_zoom_factor * height
+                self.translateBy(y=dy)
             else:
                 h_zoom_factor = 2e-4
-                self.translateBy(x=delta * h_zoom_factor * (x_max - x_min))
+                dx = delta * h_zoom_factor * width
+
+                new_x_min = x_min + dx
+
+                # don't pan if it moves x=0 more than halfway across the ViewBox
+                if 0 > new_x_min + 0.5 * width:
+                    pass  
+                else:
+                    self.translateBy(x=dx)
 
         event.accept()
         datawindow.update_plot()
@@ -104,6 +118,8 @@ class DataWindow(PlotWidget):
         self.comments: list[CommentMarker] = [] # the list of Comments
         self.comments_enabled = True
 
+        self.selection: Selection = Selection(self)
+
         # TODO: may need to clean this up based on how want preview to show up and how edit mode works
         self.baseline: InfiniteLine = InfiniteLine(
             angle = 0, movable=False, pen=mkPen("gray", width = 2)
@@ -119,14 +135,9 @@ class DataWindow(PlotWidget):
         self.addItem(self.baseline_preview)
         self.baseline_preview.setVisible(False)
 
-        self.baseline_preview_enabled: bool = True
+        self.baseline_preview_enabled: bool = False
         self.edit_mode_enabled: bool = True
         self.moving_mode: bool = False  # whether an interactice item is being moved
-        self.hovered_item = None
-        self.selected_item = None
-
-        self.selected_labels_rect = QGraphicsRectItem()
-        self.scene().addItem(self.selected_labels_rect)
 
         self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
 
@@ -275,8 +286,6 @@ class DataWindow(PlotWidget):
         Updates the displayed data, labels, and compression/zoom 
         indicators.
         """
-        #print("updating")
-
         (x_min, x_max), _ = self.viewbox.viewRange()
 
         self.viewbox.setLimits(xMin=None, xMax=None, yMin=None, yMax=None) # clear stale data (avoids warning)
@@ -295,7 +304,6 @@ class DataWindow(PlotWidget):
         self.update_compression()
         self.update_zoom()
 
-        print(self.labels)
         for label_area in self.labels:
            label_area.update_label_area()
 
@@ -436,18 +444,21 @@ class DataWindow(PlotWidget):
     ) -> tuple[NDArray, NDArray]:
         """
         Downsamples the data displayed in x_range to max_points using
-        peak decimation (plotting both the max and min of each window).
+        the specifed downsampling method.
         Modifies self.xy_data in-place.
 
         Inputs:
             x_range: a (x_min, x_max) tuple of the range of the data to be displayed
             max_points: the number of points (i.e., bins) to downsample to.
-            method: "subsample" or "peak", which downsampling method to use.
+            method: `subsample`, `mean`, or `peak`, which downsampling method to use.
 
         Output:
            None
 
-        TODO: decide whether to pick a default or adapt to zoom
+        NOTE: 
+            `subsample` samples the first point of each bin (fastest)
+            `mean` averages each bin
+            `peak` returns the min and max point of each bin (slowest, best looking)
         """
         x, y = self.epgdata.get_recording(self.file, self.prepost)
 
@@ -465,8 +476,7 @@ class DataWindow(PlotWidget):
   
             x = x[left_idx:right_idx]
             y = y[left_idx:right_idx]   
-        
-        
+    
         num_points = len(x)
 
         if num_points <= max_points or num_points < 2:  # no downsampling needed
@@ -474,20 +484,17 @@ class DataWindow(PlotWidget):
             self.xy_data[1] = y
             return
 
-        if method == 'subsampling':
-        #     print("subsampling")
+        if method == 'subsampling': 
             stride = num_points // max_points
             x_out = x[::stride]
             y_out = y[::stride]
         elif method == 'mean':
-            # print("mean")
             stride = num_points // max_points
             num_windows = num_points // stride
             start_idx = stride // 2
             x_out = x[start_idx : start_idx + num_windows * stride : stride] 
             y_out = y[:num_windows * stride].reshape(num_windows,stride).mean(axis=1)
         elif method == 'peak':
-            #print("peak decimation")
             stride = max(1, num_points // (max_points // 2))  # each window gives 2 points
             num_windows = num_points // stride
 
@@ -524,9 +531,15 @@ class DataWindow(PlotWidget):
         # clear old labels if present
         for label_area in self.labels:
             self.plot_item.removeItem(label_area.area)
+            self.plot_item.removeItem(label_area.transition_line)
             self.plot_item.removeItem(label_area.label_text)
+            self.plot_item.removeItem(label_area.label_background)
             self.plot_item.removeItem(label_area.duration_text)
-            label_area.transition_line.clear()
+            self.plot_item.removeItem(label_area.duration_background)
+            if self.enable_debug:
+                self.plot_item.removeItem(label_area.label_debug_box)
+                self.plot_item.removeItem(label_area.duration_debug_box)
+            
         self.labels = []
 
 
@@ -549,14 +562,19 @@ class DataWindow(PlotWidget):
             label_area = LabelArea(time, dur, label, self) # init. also adds items to viewbox
             self.labels.append(label_area)
 
+        # NOTE: Each LabelArea has one transition line, but we need an additional ending
+        # line so that the final LabelArea doesn't end without a transition line. We chose
+        # to do this by adding a zero-width, invisible LabelArea, called the "end area", to 
+        # the end of the labels, so that just the transition line appears.
         time, dur, _ = durations[-1]
         end_start_time = time + dur
 
         label_area = LabelArea(end_start_time, 0, 'empty', self)
-        self.labels.append(label_area)
+        print(type(label_area))
         label_area.label_text.setVisible(False)
         label_area.duration_text.setVisible(False)
-
+        self.labels.append(label_area)
+        
         self.update_plot()
 
     def change_label_color(self, label: str, color: QColor) -> None:
@@ -590,123 +608,228 @@ class DataWindow(PlotWidget):
         self.scatter.setPen(mkPen(color))  
 
 
-    def delete_label_area(self, label_area: LabelArea) -> None:
-        """
-        Deletes the selected label area.
-        Inputs:
-            label: the LabelArea to delete
-        Returns:
-            Nothing
-        """ 
-        current_idx = self.labels.index(label_area)
+    # def delete_label_area(self, label_area: LabelArea) -> None:
+    #     """
+    #     Deletes the selected label area.
+    #     Inputs:
+    #         label: the LabelArea to delete
+    #     Returns:
+    #         Nothing
+    #     """ 
+    #     current_idx = self.labels.index(label_area)
 
-        if len(self.labels) > 1:
-            if label_area == self.labels[0]:
-                # expand left
-                expanded_label_area = self.labels[current_idx + 1]
-                new_start_time = label_area.start_time
-                new_range = [new_start_time, expanded_label_area.start_time +  expanded_label_area.duration]
+    #     if len(self.labels) > 1:
+    #         if label_area == self.labels[0]:
+    #             # expand left
+    #             expanded_label_area = self.labels[current_idx + 1]
+    #             new_start_time = label_area.start_time
+    #             new_range = [new_start_time, expanded_label_area.start_time +  expanded_label_area.duration]
 
-                expanded_label_area.start_time = new_start_time
-                expanded_label_area.set_transition_line(new_start_time)
+    #             expanded_label_area.start_time = new_start_time
+    #             expanded_label_area.set_transition_line(new_start_time)
 
-            else: 
-                # expand right
-                expanded_label_area = self.labels[current_idx - 1]
-                new_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration]
+    #         else: 
+    #             # expand right
+    #             expanded_label_area = self.labels[current_idx - 1]
+    #             new_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration]
 
-            # expanded_label_area.area_lower_line.setData(x=new_x_range, y=lower_ys)
-            # expanded_label_area.area_upper_line.setData(x=new_x_range, y=upper_ys)
-            expanded_label_area.area.setRegion(new_range)
-            new_dur = expanded_label_area.duration + label_area.duration 
-            expanded_label_area.duration = new_dur
-            expanded_label_area.duration_text.setText(str(round(new_dur, 2)))
-            expanded_label_area.update_label_area()
+    #         expanded_label_area.area.setRegion(new_range)
+    #         new_dur = expanded_label_area.duration + label_area.duration 
+    #         expanded_label_area.duration = new_dur
+    #         expanded_label_area.duration_text.setText(str(round(new_dur, 2)))
+    #         expanded_label_area.update_label_area()
 
 
-        for item in label_area.getItems():
-            self.viewbox.removeItem(item)   
+    #     for item in label_area.getItems():
+    #         self.viewbox.removeItem(item)   
 
-        del self.labels[current_idx]
-        #del self.transitions[current_idx]
+    #     if current_idx != len(self.labels):
+    #         self.labels[current_idx + 1].transition_line.setPen(mkPen(color='black', width=2))
+
+    #     del self.labels[current_idx]
         
 
-    def highlight_item(self, event: QMouseEvent) -> None:
-        """
-        transition line > baseline > area
-        """
-        TRANSITION_THRESHOLD = 3
-        BASELINE_THRESHOLD = 3
+    # def highlight_item(self, event: QMouseEvent) -> None:
+    #     """
+    #     Handles hightlighting/unhighlighting items. The order in which 
+    #     highlighting is priortized is "transition_line > baseline > label_area".
+    #     """
+    #     TRANSITION_THRESHOLD = 3
+    #     BASELINE_THRESHOLD = 3
 
-        if len(self.labels) == 0:  # nothing to highlight
-            return 
+    #     if len(self.labels) == 0:  # nothing to highlight TODO fix if comments are highlightable
+    #         return 
+
+    #     point = self.window_to_viewbox(event.position())
+    #     x, y = point.x(), point.y()
+
+    #     (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
+    #     pixelRatio = self.devicePixelRatioF()
 
 
-        point = self.window_to_viewbox(event.position())
-        x, y = point.x(), point.y()
-
-        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
-        pixelRatio = self.devicePixelRatioF()
-
-
-        if not (x_min <= x <= x_max and y_min <= y <= y_max):  # cursor outside viewbox
-            self.unhover(self.hovered_item)
-            return
+    #     if not (x_min <= x <= x_max and y_min <= y <= y_max):  # cursor outside viewbox
+    #         self.unhover(self.hovered_item)
+    #         return
         
-        transition_line, transition_distance = self.get_closest_transition(x)
-        baseline_distance = self.get_baseline_distance(y)
-        label_area = self.get_closest_label_area(x)
+    #     transition_line, transition_distance = self.get_closest_transition(x)
+    #     baseline, baseline_distance = self.get_baseline_distance(y)
+    #     label_area = self.get_closest_label_area(x)
+
+    #     hightlighted_pen = mkPen(width=4, color='#0D6EFDC0')
        
-        if transition_distance <= TRANSITION_THRESHOLD * pixelRatio:
-            if self.hovered_item is None or self.hovered_item != transition_line:
-                if self.hovered_item is not None:
-                    self.unhover(self.hovered_item)
-                self.setCursor(Qt.CursorShape.OpenHandCursor)
-                transition_line.setPen(mkPen(width=6, color='#0D6EFD'))
-                self.hovered_item = transition_line
-        elif baseline_distance <= BASELINE_THRESHOLD * pixelRatio:
-            if self.hovered_item is None or self.hovered_item != self.baseline:
-                if self.hovered_item is not None:
-                    self.unhover(self.hovered_item)
-                self.setCursor(Qt.CursorShape.OpenHandCursor)
-                self.baseline.setPen(mkPen(width=6, color='#0D6EFD'))
-                self.hovered_item = self.baseline
-        else:
-            if label_area is None:
-                self.unhover(self.hovered_item)
-                return
-            if self.hovered_item is None or self.hovered_item != label_area:  
-                if self.hovered_item is not None:
-                    self.unhover(self.hovered_item)
-                label_color = self.composite_on_white(Settings.label_to_color[label_area.label])
-                h, s, l, a = label_color.getHslF()
-                selected_color = QColor.fromHslF(h, min(s * 8, 1), l * 0.9, a)  
-                selected_color.setAlpha(200)
-                label_area.area.setBrush(mkBrush(color=selected_color))
-                self.hovered_item = label_area
+    #     if transition_distance <= TRANSITION_THRESHOLD * pixelRatio:
+    #         if self.hovered_item is None or self.hovered_item != transition_line:
+    #             if self.hovered_item is not None:
+    #                 self.unhover(self.hovered_item)
+    #             self.setCursor(Qt.CursorShape.OpenHandCursor)
+    #             transition_line.setPen(hightlighted_pen)
+    #             self.hovered_item = transition_line
+    #     elif baseline_distance <= BASELINE_THRESHOLD * pixelRatio:
+    #         if self.hovered_item is None or self.hovered_item != self.baseline:
+    #             if self.hovered_item is not None:
+    #                 self.unhover(self.hovered_item)
+    #             self.setCursor(Qt.CursorShape.OpenHandCursor)
+    #             self.baseline.setPen(hightlighted_pen)
+    #             self.hovered_item = self.baseline
+    #     else:
+    #         if label_area is None:
+    #             self.unhover(self.hovered_item)
+    #             return
+    #         if self.hovered_item is None or self.hovered_item != label_area:  
+    #             if self.hovered_item is not None:
+    #                 self.unhover(self.hovered_item)
+    #             label_color = self.composite_on_white(Settings.label_to_color[label_area.label])
+    #             h, s, l, a = label_color.getHslF()
+    #             selected_color = QColor.fromHslF(h, min(s * 8, 1), l * 0.9, a)  
+    #             selected_color.setAlpha(200)
+    #             label_area.area.setBrush(mkBrush(color=selected_color))
+    #             self.hovered_item = label_area
 
-    def unhover(self, item):
-        if isinstance(item, InfiniteLine):
-            self.setCursor(Qt.CursorShape.ArrowCursor)
-            if item == self.baseline:
-                item.setPen(mkPen("gray", width=2))
-            else:
-                item.setPen(mkPen(color='black', width=2))
-        if isinstance(item, LabelArea):
-            item.area.setBrush(mkBrush(color=Settings.label_to_color[item.label]))
+    # def unhover(self, item):
+    #     print(item, self.selection.is_selected(item))
+    #     if self.selection.is_selected(item):
+    #         return
+    #     if isinstance(item, InfiniteLine):
+    #         self.setCursor(Qt.CursorShape.ArrowCursor)
+    #         if item == self.baseline:
+    #             item.setPen(mkPen("gray", width=2))
+    #         else:
+    #             item.setPen(mkPen(color='black', width=2))
+    #     if isinstance(item, LabelArea):
+    #         item.area.setBrush(mkBrush(color=Settings.label_to_color[item.label]))
 
-        self.hovered_item = None
+    #     self.hovered_item = None
+    
+    # def deselect(self, item):
+    #     print(f"Deselecting: {item}")
+    #     if isinstance(item, InfiniteLine):
+    #         pass
+    #     if isinstance(item, LabelArea):
+    #         self.reset_label_area(item)
+    #         if item != self.labels[-1]:
+    #             idx = self.labels.index(item)
+    #             self.labels[idx + 1].transition_line.setPen(mkPen(color='black', width=2))
+    #     if isinstance(item, list):  # list of label areas
+    #         for label_area in self.selection:
+    #             self.reset_label_area(label_area)
+    #         if self.selection[-1] != self.labels[-1]:
+    #             idx = self.labels.index(item)
+    #             self.labels[idx + 1].transition_line.setPen(mkPen(color='black', width=2))
+
+    #     self.selection = None
+
+
+    # def select_label_area(self, label_area: LabelArea) -> None:
+    #     idx = self.labels.index(label_area)
+    #     left_line = self.labels[idx].transition_line
+    #     if self.labels[idx] == self.labels[-1]:
+    #         right_line = left_line  # TODO: fix this to work with whatever we decide for last line
+    #     else:
+    #         right_line = self.labels[idx+1].transition_line
+    #     left_line.setPen(mkPen(width=6, color='#0D6EFD'))
+    #     right_line.setPen(mkPen(width=6, color='#0D6EFD'))
+    #     label_area.area.setBrush(mkBrush(color='#0D6EFD80'))
+    #     label_area.label_background.setBrush(mkBrush(color='#0D6EFD90'))
+    #     label_area.duration_background.setBrush(mkBrush(color='#0D6EFD90'))
+        
+    # def reset_label_area(self, label_area: LabelArea) -> None:
+    #     """
+    #     Resets then colors of all colored elements of a label area.
+    #     """
+    #     label_area.area.setBrush(mkBrush(color=Settings.label_to_color[label_area.label]))
+    #     label_area.transition_line.setPen(mkPen(color='black', width=2))
+    #     label_area.label_background.setBrush(mkBrush(label_area.get_background_color()))
+    #     label_area.duration_background.setBrush(mkBrush(label_area.get_background_color()))
+
+    # def transition_line_selected(self, transition_line: InfiniteLine) -> bool:
+    #     """
+    #     Returns whether a transition line is part of the current selection.
+    #     TODO: expand into a general isSelected function?
+    #     """
+    #     selected_transition_lines = []
+    #     if isinstance(self.selection, LabelArea):
+    #         selected_transition_lines.append(self.selection.transition_line)
+    #         if self.selection != self.labels[-1]:
+    #             idx = self.labels.index(self.selection)
+    #             selected_transition_lines.append(self.labels[idx + 1].transition_line) 
+    #     if isinstance(self.selection, list):  # list of label areas
+    #         for label_area in self.selection:
+    #             selected_transition_lines.append(label_area.transition_line)
+    #         if self.selection[-1] != self.labels[-1]:
+    #             idx = self.labels.index(self.selection[-1])
+    #             selected_transition_lines.append(self.labels[idx + 1].transition_line) 
+    #     print(f"Transition Line Selection: {transition_line in selected_transition_lines}")
+    #     return transition_line in selected_transition_lines
+
+    # def is_selected(self, item) -> bool:
+    #     """
+    #     Returns whether the item is part of the current selection.
+    #     Works for LabelArea and InfiniteLine.
+    #     """
+    #     if self.selection is None:
+    #         return False
+
+    #     # Case 1: single LabelArea
+    #     if isinstance(self.selection, LabelArea):
+    #         if item == self.selection:
+    #             return True
+    #         if isinstance(item, InfiniteLine):
+    #             idx = self.labels.index(self.selection)
+    #             transitions = [self.selection.transition_line]
+    #             if idx < len(self.labels) - 1:
+    #                 transitions.append(self.labels[idx + 1].transition_line)
+    #             return item in transitions
+
+    #     # Case 2: list of LabelAreas
+    #     if isinstance(self.selection, list) and all(isinstance(l, LabelArea) for l in self.selection):
+    #         if item in self.selection:
+    #             return True
+    #         if isinstance(item, InfiniteLine):
+    #             transitions = []
+    #             for label in self.selection:
+    #                 transitions.append(label.transition_line)
+    #             if self.selection[-1] != self.labels[-1]:
+    #                 idx = self.labels.index(self.selection[-1])
+    #                 transitions.append(self.labels[idx + 1].transition_line)
+    #             return item in transitions
+
+    #     # Case 3: selected InfiniteLine directly
+    #     if isinstance(self.selection, InfiniteLine) and item == self.selection:
+    #         return True
+
+    #     return False
+
 
     def composite_on_white(self, color: QColor) -> QColor:
         """
         Helps function to get the RGB value (no alpha) of 
         an RGBA color displayed on a white background.
         """
-        alpha = color.alpha() / 255.0
-        r = round(color.red() * alpha + 255 * (1 - alpha))
-        g = round(color.green() * alpha + 255 * (1 - alpha))
-        b = round(color.blue() * alpha + 255 * (1 - alpha))
-        return QColor(r, g, b)
+        r, g, b, a = color.getRgbF()
+        new_r = round(r * a + 255 * (1 - a))
+        new_g = round(g * a + 255 * (1 - a))
+        new_b = round(b * a + 255 * (1 - a))
+        return QColor(new_r, new_g, new_b)
     
     def darker_hsl(self, color: QColor, amount: float) -> QColor:
         """
@@ -748,20 +871,14 @@ class DataWindow(PlotWidget):
             
     def get_baseline_distance(self, y: float) -> float:
         """
-        Returns the pixel distance from a given y coordinate 
+        Returns the baseline and pixel distance from a given y coordinate 
         to the baseline.
-
-        Inputs: 
-            y: the queried viewbox x-coordinate
-
-        Outputs:
-            y_distance: the distance in pixels to the baseline
         """
         if self.baseline is None:
             return float('inf')
         zero_point = self.viewbox_to_window(QPointF(0,0)).y()
         viewbox_distance = abs(y - self.baseline.value())
-        return zero_point - self.viewbox_to_window(QPointF(0, viewbox_distance)).y()
+        return self.baseline, zero_point - self.viewbox_to_window(QPointF(0, viewbox_distance)).y()
     
     def get_closest_label_area(self, x: float) -> LabelArea:
         if x < self.labels[0].start_time or x > (self.labels[-1].start_time + self.labels[-1].duration):
@@ -805,13 +922,10 @@ class DataWindow(PlotWidget):
         if self.baseline.getPos() == [0, 0]:
             self.baseline.setPos(y)
             self.baseline.setVisible(True)
-        # else:
-        #     # if baseline already placed, update position based on click
-        #     # and be able to move it to a new position depending on edit mode
-        #     self.baseline.setPos(y)
-        #     #self.baseline.setMovable(self.edit_mode_enabled)
-    
-        return
+
+        self.baseline_preview_enabled = False
+        self.baseline_preview.setVisible(False)
+
 
     def add_drop_transitions(self):
         return
@@ -824,17 +938,16 @@ class DataWindow(PlotWidget):
             self.baseline_preview.setVisible(True)
             pos = self.viewbox.mapSceneToView(self.mapToScene(self.mapFromGlobal(QCursor.pos()))).y()
             self.baseline_preview.setPos(pos)
-        if event.key() == Qt.Key.Key_Delete:
-            if isinstance(self.selected_item, LabelArea):
-                self.delete_label_area(self.selected_item)
-                self.selected_item = None
-            elif (
-                isinstance(self.selected_item, list) 
-                and all(isinstance(item, LabelArea) for item in self.selected_item)
-            ):
-                for label_area in self.selected_item:
-                    self.delete_label_area(label_area)
-                self.selected_item = None
+
+            self.selection.deselect_all()
+            self.selection.unhighlight_item(self.selection.hovered_item)
+
+        self.selection.key_press_event(event)
+        # if event.key() == Qt.Key.Key_Delete:
+        #     if all(isinstance(item, LabelArea) for item in self.selection.selected_items):
+        #         for label_area in self.selection.selected_items:
+        #             self.selection.delete_label_area(label_area)
+        #         self.selection.selected_items = None
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         return
@@ -844,42 +957,66 @@ class DataWindow(PlotWidget):
             self.zoom_mode = False
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
+        super().mousePressEvent(event)
+
         # TODO: edit for when have edit mode functionality
         # For testing baseline preview
+
+        point = self.window_to_viewbox(event.position())
+        x, y = point.x(), point.y()
+
         if event.button() == Qt.MouseButton.LeftButton:
             if self.baseline_preview_enabled:
                 self.set_baseline(event)
-                self.baseline_preview_enabled = False
-                self.baseline_preview.setVisible(False)
+            else:
+                self.selection.mouse_press_event(event)
 
-            elif isinstance(self.hovered_item, InfiniteLine):
-                self.moving_mode = True
-                self.selected_item = self.hovered_item
-                self.setCursor(Qt.CursorShape.ClosedHandCursor)
-
-                # if self.hovered_item == self.baseline:
-                #     self.moving_mode = True
-                #     return
-                # else:
-                #     pass
- 
-            elif isinstance(self.hovered_item, LabelArea):
-                self.selected_item = self.hovered_item
-                idx = self.labels.index(self.selected_item)
-                left_line = self.labels[idx].transition_line
-                if self.labels[idx] == self.labels[-1]:
-                    right_line = left_line  # TODO: fix this to work with whatever we decide for last line
-                else:
-                    right_line = self.labels[idx+1].transition_line
-
-                left_line.setPen(mkPen(width=6, color='#0D6EFD'))
-                right_line.setPen(mkPen(width=6, color='#0D6EFD'))
-                self.selected_item.area.setBrush(mkBrush(color='#0D6EFD80'))
-                self.selected_item.label_background.setBrush(mkBrush(color='#0D6EFD90'))
-                self.selected_item.duration_background.setBrush(mkBrush(color='#0D6EFD90'))
+        # (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
+        # if not (x_min <= x <= x_max and y_min <= y <= y_max):
+        #     print('click outside of box')
+        #     for item in self.selection.selected_items:
+        #         self.selection.deselect(item)
+        #     self.scene().update()
+        #     return
         
+        # if event.button() == Qt.MouseButton.LeftButton:
+        #     # if self.baseline_preview_enabled:
+        #     #     self.set_baseline(event)
+        #     #     self.baseline_preview_enabled = False
+        #     #     self.baseline_preview.setVisible(False)
 
-        super().mousePressEvent(event)
+        #     # elif isinstance(self.hovered_item, InfiniteLine):
+        #     #     # if already part of selection, do not reset selection
+        #     #     if self.selection.is_selected(self.hovered_item):  
+        #     #         self.moving_mode = True
+        #     #         self.setCursor(Qt.CursorShape.ClosedHandCursor)
+        #     #     else:
+        #     #         self.moving_mode = True
+        #     #         self.selection.deselect(self.selection)
+        #     #         self.selection = self.hovered_item
+        #     #         self.setCursor(Qt.CursorShape.ClosedHandCursor)
+
+        #     if isinstance(self.hovered_item, LabelArea):
+
+        #         # no shift: select new label area
+        #         if event.modifiers() == Qt.KeyboardModifier.NoModifier:
+        #             self.deselect(self.selection)
+        #             self.selection = self.hovered_item
+        #         # shift held: create/update list 
+        #         elif event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+        #             if self.selection == None:
+        #                 self.selection = self.hovered_item
+        #             elif not isinstance(self.selection, list):
+        #                 if self.hovered_item != self.selection:
+        #                     self.selection = [self.selection]
+        #                     self.selection.append(self.hovered_item)
+        #             else:
+        #                 if self.hovered_item not in self.selection:
+        #                     self.selection.append(self.hovered_item)
+                    
+        #         self.select_label_area(self.hovered_item)
+        #         print(self.selection)
+        
     
         # return
         # if event.button() == Qt.MouseButton.LeftButton:
@@ -891,10 +1028,7 @@ class DataWindow(PlotWidget):
         #     self.add_drop_transitions(event)
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         super().mouseReleaseEvent(event)
-        if self.moving_mode:
-            self.moving_mode = False
-            self.selected_item = None
-            self.setCursor(Qt.CursorShape.OpenHandCursor)
+        self.selection.mouse_release_event(event)
         
         return
         if event.button() == Qt.MouseButton.LeftButton:
@@ -910,77 +1044,77 @@ class DataWindow(PlotWidget):
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         super().mouseMoveEvent(event)
+        # return
 
-        if self.edit_mode_enabled and not self.moving_mode:
-            self.highlight_item(event) 
-            self.scene().update()            
+        #print(self.selection.selected_items)
+
+        point = self.window_to_viewbox(event.position())
+        _, y = point.x(), point.y()
+
+        # if self.edit_mode_enabled and not self.moving_mode:
+        #     self.highlight_item(event) 
+        #     self.scene().update()            
 
         if self.baseline_preview_enabled:
-            point = self.window_to_viewbox(event.position())
-            y = point.y()
             _, (y_min, y_max) = self.viewbox.viewRange()
             if y_min <= y <= y_max:
                 self.baseline_preview.setPos(y)
                 self.baseline_preview.setVisible(True)
             else:
                 self.baseline_preview.setVisible(False)
+        else:
+            self.selection.mouse_move_event(event)
 
-        if self.moving_mode and isinstance(self.selected_item, InfiniteLine):
-            point = event.position()
-            x = point.x()
-            y = point.y()
-            if self.hovered_item == self.baseline:
-                self.baseline.setPos(y)
-                return
-            else: # must be transition line
-                PIXEL_THRESHOLD = 2
-                pixelRatio =  self.devicePixelRatioF()
+        # if self.moving_mode and isinstance(self.selection, InfiniteLine):
+        #     scene_point = event.position()
+        #     scene_x = scene_point.x()
+        #     scene_y = scene_point.y()
+        #     if self.hovered_item == self.baseline:
+        #         self.baseline.setPos(y)
+        #         return
+        #     else: # must be transition line
+        #         PIXEL_THRESHOLD = 2
+        #         pixelRatio =  self.devicePixelRatioF()
                 
-                for idx, label in enumerate(self.labels):
-                    if self.selected_item == label.transition_line:
-                        min_x = float("-inf")
-                        max_x = float("inf")
+        #         for idx, label in enumerate(self.labels):
+        #             if self.selection == label.transition_line:
+        #                 min_x = float("-inf")
+        #                 max_x = float("inf")
 
-                        if idx > 0:
-                            prev_label = self.labels[idx-1]
-                            prev_x = self.viewbox_to_window(QPointF(prev_label.start_time, 0))
-                            min_x = prev_x.x() + PIXEL_THRESHOLD * pixelRatio
-                        if idx < len(self.labels) - 1:
-                            next_label = self.labels[idx+1]
-                            next_x = self.viewbox_to_window(QPointF(next_label.start_time, 0))
-                            max_x = next_x.x() - PIXEL_THRESHOLD * pixelRatio
+        #                 if idx > 0:
+        #                     prev_label = self.labels[idx-1]
+        #                     prev_x = self.viewbox_to_window(QPointF(prev_label.start_time, 0))
+        #                     min_x = prev_x.x() + PIXEL_THRESHOLD * pixelRatio
+        #                 if idx < len(self.labels) - 1:
+        #                     next_label = self.labels[idx+1]
+        #                     next_x = self.viewbox_to_window(QPointF(next_label.start_time, 0))
+        #                     max_x = next_x.x() - PIXEL_THRESHOLD * pixelRatio
 
-                        bounding_window_x = max(min_x, min(x, max_x))
-                        bounding_viewbox_x = self.window_to_viewbox(QPointF(bounding_window_x, y)).x()
+        #                 bounding_window_x = max(min_x, min(scene_x, max_x))
+        #                 bounding_viewbox_x = self.window_to_viewbox(QPointF(bounding_window_x, scene_y)).x()
 
-                        delta_x = label.start_time - bounding_viewbox_x
+        #                 delta_x = label.start_time - bounding_viewbox_x
 
-                        label.start_time = bounding_viewbox_x
-                        label.set_transition_line(bounding_viewbox_x)
+        #                 label.start_time = bounding_viewbox_x
+        #                 label.set_transition_line(bounding_viewbox_x)
 
-                        label.duration += delta_x
-                        label.area.setRegion((label.start_time, label.start_time + label.duration))
-                        label.duration_text.setText(str(round(label.duration, 2)))
-                        label.update_label_area()
+        #                 label.duration += delta_x
+        #                 label.area.setRegion((label.start_time, label.start_time + label.duration))
+        #                 label.duration_text.setText(str(round(label.duration, 2)))
+        #                 label.update_label_area()
 
-                        if idx > 0:
-                            prev_label.duration -= delta_x
-                            prev_label.area.setRegion((prev_label.start_time,
-                                                           prev_label.start_time + prev_label.duration))
-                            prev_label.duration_text.setText(str(round(prev_label.duration, 2)))
-                            prev_label.update_label_area()
+        #                 if idx > 0:
+        #                     prev_label.duration -= delta_x
+        #                     prev_label.area.setRegion((prev_label.start_time,
+        #                                                    prev_label.start_time + prev_label.duration))
+        #                     prev_label.duration_text.setText(str(round(prev_label.duration, 2)))
+        #                     prev_label.update_label_area()
 
-                        return
+        #                 return
 
         return
 
         self.handle_transitions(event, "move")
-
-        self.baseline_preview: InfiniteLine = InfiniteLine(
-            angle = 0, movable = False, pen=mkPen("blue",
-                style = Qt.DashLine)
-        )
-        self.baseline_preview.hide()
 
     
 
@@ -997,6 +1131,7 @@ class DataWindow(PlotWidget):
 # TODO: remove after feature-complete and integrated with main
 def main():
     Settings()
+    
     app = QApplication([])
 
     epgdata = EPGData()
@@ -1007,6 +1142,7 @@ def main():
     window = DataWindow(epgdata)
     window.plot_recording(window.epgdata.current_file, 'pre')
     window.plot_transitions(window.epgdata.current_file)
+
 
     window.showMaximized()
     sys.exit(app.exec())

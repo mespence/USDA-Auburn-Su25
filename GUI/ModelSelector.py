@@ -1,7 +1,7 @@
 import sys
 from PyQt6.QtWidgets import *
 
-class ModelSelector():
+class ModelSelector:
     def load_new_model(labeler):
         file_dialog = QFileDialog()
         file_path, _ = file_dialog.getOpenFileUrl()

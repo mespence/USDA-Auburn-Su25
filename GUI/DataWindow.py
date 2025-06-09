@@ -337,8 +337,8 @@ class DataWindow(QChartView):
                 self.durations[last_transition_index].replace(duration_point)
 
                 # Add in a shaded area and text label for this transition
-                times, volts= self.epgdata.get_recording(self.file, self.prepost)
-                volts = df[self.prepost + self.epgdata.prepost_suffix].values
+                times, volts = self.epgdata.get_recording(self.file, self.prepost)
+                #volts = df[self.prepost + self.epgdata.prepost_suffix].values
                 max_volts = max(volts)
                 min_volts = min(volts)
                 next_transition_time = None

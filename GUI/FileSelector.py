@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import *
 from DataWindow import DataWindow
 from EPGData import EPGData
 
-class FileSelector():
+class FileSelector:
     def load_new_data(epgdata, datawindow):
         datawindow.transition_mode = 'labels'
         file_dialog = QFileDialog()

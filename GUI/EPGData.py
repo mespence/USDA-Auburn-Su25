@@ -5,7 +5,7 @@ import re
 import windaq
 import os
 
-class EPGData():
+class EPGData:
         """
         A class for interacting with and saving our waveform recordings
         """
@@ -53,7 +53,7 @@ class EPGData():
                 elif re.search(r'\.csv$', file, re.IGNORECASE):
                         full_path = os.path.join(self.dir_path,file)
                         try:
-                                self.dfs[file] = read_csv(full_path)       
+                                self.dfs[file] = read_csv(full_path, engine='pyarrow')       
                         except FileNotFoundError:
                                 print(f"Could not find {full_path}")
                                 return False
