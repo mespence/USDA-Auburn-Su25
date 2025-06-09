@@ -81,7 +81,7 @@ class Selection:
             item.duration_background.setBrush(self.selected_style['text background'])
         self.selected_items.append(item)
         self.selected_items.sort(key=self._sort_key)
-
+        self.datawindow.viewbox.update()
 
     def deselect_item(self, item):
         if isinstance(item ,InfiniteLine):
@@ -219,12 +219,8 @@ class Selection:
             self.moving_mode = False
             self.dragged_line = None
             self.datawindow.setCursor(Qt.CursorShape.OpenHandCursor)
-        return     
-           
-
-
-
-        
+        return
+    
     def apply_drag(self, x: float, y: float) -> None:
         """
         Applies drag movement to the currently selected line (transition or baseline).
@@ -302,10 +298,12 @@ class Selection:
         self.deselect_item(label_area)
         labels = self.datawindow.labels
         current_idx = labels.index(label_area)
+        before_idx = current_idx - 1
+        after_idx = current_idx + 1
 
         if len(labels) > 1:
             if label_area == labels[0]:  # expand left
-                expanded_label_area = labels[current_idx + 1]
+                expanded_label_area = labels[after_idx]
                 new_start_time = label_area.start_time
                 new_range = [new_start_time, expanded_label_area.start_time +  expanded_label_area.duration]
 
@@ -313,7 +311,10 @@ class Selection:
                 expanded_label_area.set_transition_line(new_start_time)
 
             else:  # expand right
-                expanded_label_area = labels[current_idx - 1]
+                expanded_label_area = labels[before_idx]
+                if labels[before_idx].label == labels[after_idx].label:
+                    # if labels next to each other are the same, merge
+                    new_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration + labels[after_idx].duration]
                 new_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration]
 
             expanded_label_area.area.setRegion(new_range)
