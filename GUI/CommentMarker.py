@@ -17,9 +17,9 @@ class CommentMarker():
         self.viewbox = plot_widget.getPlotItem().getViewBox()
 
         self.marker = InfiniteLine(
-            post = self.time,
+            pos = self.time,
             angle = 90,
-            pen = mkPen(self.color, style = Qt.PenStyle.DashLine),
+            pen = mkPen('black', style = Qt.PenStyle.DashLine, width=3),
             movable = False,
         )
 
