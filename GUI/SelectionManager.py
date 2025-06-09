@@ -17,9 +17,9 @@ class Selection:
     def __init__(self, plot_widget: PlotWidget):
         
 
-        self.selected_items: list = []  # InfiniteLine | LabelArea
-        self.highlighted_item = None
-        self.hovered_item = None
+        self.selected_items: list = []  # InfiniteLine | LabelArea, sorted chronologically
+        self.highlighted_item = None  # the item visually highlighted
+        self.hovered_item = None  # the item the mouse is currently over
         self.dragged_line: InfiniteLine = None  # Which InfiniteLine (if any) is being dragged
         
         self.datawindow: PlotWidget = plot_widget  # the parent PlotWidget (i.e. the DataWindow)
@@ -44,10 +44,6 @@ class Selection:
         }
 
         self.moving_mode: bool = False
-
-    def clear(self):
-        self.selected_items.clear()
-        self.dragged_line = None
 
     def _sort_key(self, item):
         """
@@ -79,8 +75,16 @@ class Selection:
             item.duration_text.setColor(self.selected_style['text color'])
             item.label_background.setBrush(self.selected_style['text background'])
             item.duration_background.setBrush(self.selected_style['text background'])
+
+            if left_line not in self.selected_items:
+                self.selected_items.append(left_line)
+            if right_line not in self.selected_items:
+                self.selected_items.append(right_line)
+
         self.selected_items.append(item)
         self.selected_items.sort(key=self._sort_key)
+
+        self.datawindow.viewbox.update()
 
 
     def deselect_item(self, item):
@@ -150,7 +154,7 @@ class Selection:
     
 
     def key_press_event(self, event: QKeyEvent) -> None:
-        if event.key() == Qt.Key.Key_Delete:
+        if event.key() == Qt.Key.Key_Delete or event.key() == Qt.Key.Key_Backspace:
             for item in self.selected_items[:]: # shallow copy
                 if isinstance(item, LabelArea):
                     self.delete_label_area(item)
@@ -368,6 +372,11 @@ class Selection:
 
 
     def update_highlight(self, item, cursor = None):
+        if cursor:
+            self.datawindow.setCursor(cursor)
+        else:
+            self.datawindow.setCursor(Qt.CursorShape.ArrowCursor)  # default
+
         if self.is_selected(item):
             return  # don't highlight already selected items
         
@@ -388,11 +397,6 @@ class Selection:
                 selected_color = QColor.fromHslF(h, min(s * 8, 1), l * 0.9, a)  
                 selected_color.setAlpha(200)
                 item.area.setBrush(mkBrush(color=selected_color))
-            
-            if cursor:
-                self.datawindow.setCursor(cursor)
-            else:
-                self.datawindow.setCursor(Qt.CursorShape.ArrowCursor)  # default
 
             self.highlighted_item = item
 

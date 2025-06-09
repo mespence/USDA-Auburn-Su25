@@ -28,8 +28,6 @@ from PyQt6.QtWidgets import QApplication
 import sys, time
 
 
-
-
 if os.name == "nt":
     print("Windows detected, running with OpenGL")
     setConfigOptions(useOpenGL = True)
@@ -621,7 +619,6 @@ class DataWindow(PlotWidget):
         end_start_time = time + dur
 
         label_area = LabelArea(end_start_time, 0, 'empty', self)
-        print(type(label_area))
         label_area.label_text.setVisible(False)
         label_area.duration_text.setVisible(False)
         self.labels.append(label_area)
