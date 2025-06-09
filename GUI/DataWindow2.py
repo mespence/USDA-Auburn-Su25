@@ -581,7 +581,6 @@ class DataWindow(PlotWidget):
             label_area.transition_line.clear()
         self.labels = []
 
-
         # load data
         times, _ = self.epgdata.get_recording(self.file, self.prepost)
         transitions = self.epgdata.get_transitions(self.file, self.transition_mode)
@@ -950,13 +949,14 @@ class DataWindow(PlotWidget):
             self.moving_mode = False
             self.selected_item = None
             self.setCursor(Qt.CursorShape.OpenHandCursor)
-        
+
+            # if transition line was released, update data transition line
+            if isinstance(self.selected_item, InfiniteLine) and self.selected_item is not self.baseline:
+                transitions = [(label_area.start_time, label_area.label) for label_area in self.labels]
+                self.epgdata.set_transitions(self.file, transitions, self.transition_mode)
         return
         if event.button() == Qt.MouseButton.LeftButton:
             self.handle_transitions(event, "release")
-
-        
-        
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         return
