@@ -10,11 +10,11 @@ from pyqtgraph import (
 
 from PyQt6.QtGui import (
     QKeyEvent, QWheelEvent, QMouseEvent, QColor, 
-    QGuiApplication, QCursor, 
+    QGuiApplication, QCursor, QAction
 )
-from PyQt6.QtCore import Qt, QPointF, QTimer
+from PyQt6.QtCore import Qt, QPointF, QTimer, QObject, QEvent
 
-from PyQt6.QtWidgets import QGraphicsRectItem, QInputDialog, QMessageBox
+from PyQt6.QtWidgets import QInputDialog, QMessageBox, QMenu
 
 from EPGData import EPGData
 from Settings import Settings
@@ -38,12 +38,19 @@ class PanZoomViewBox(ViewBox):
     of scroll -> zoom and drag -> pan.
     """
 
+    def __init__(self):
+        super().__init__()
+        self.datawindow: DataWindow = None
+
     def wheelEvent(self, event: QWheelEvent, axis=None) -> None:
         """
         Handles all wheel + modifier inputs and maps 
         them to the correct pan/zoom action.
         """
-        datawindow: DataWindow = self.parentItem().getViewWidget()
+
+        if self.datawindow is None:
+            self.datawindow = self.parentItem().getViewWidget()
+        
         delta = event.angleDelta().y()
         modifiers = event.modifiers()
 
@@ -78,34 +85,83 @@ class PanZoomViewBox(ViewBox):
                     self.translateBy(x=dx)
 
         event.accept()
-        datawindow.update_plot()
+        self.datawindow.update_plot()
 
     def mouseDragEvent(self, event, axis=None) -> None:
         # Disable all mouse drag panning/zooming
         event.ignore()
 
+    def contextMenuEvent(self, event):
+        if self.datawindow is None:
+            self.datawindow = self.parentItem().getViewWidget()
+
+        item = self.datawindow.selection.hovered_item
+        if isinstance(item, InfiniteLine):
+            print('Right-clicked InfiniteLine')
+            return  # TODO: infinite line context menu not yet implemented
+
+        print(item.label)
+        menu = QMenu()
+        label_type_dropdown = QMenu("Change Label Type", menu)
+
+        label_names = list(Settings.label_to_color.keys())
+        label_names.remove("END AREA")
+        for label in label_names:            
+            action = QAction(label, menu)
+            action.setCheckable(True)
+
+            if item.label == label:
+                action.setChecked(True)
+                
+            action.triggered.connect(
+                lambda checked, label_area=item, label=label:
+                self.datawindow.selection.change_label_type(label_area, label)
+            )
+            
+
+            label_type_dropdown.addAction(action)
+
+
+        action2 = QAction("Custom Option 2")
+        menu.addMenu(label_type_dropdown)
+        menu.addAction(action2)
+
+        action = menu.exec(event.screenPos())
+        if action == label_type_dropdown:
+            print("Option 1 selected")
+        elif action == action2:
+            print("Option 2 selected")
+
+class GlobalMouseTracker(QObject):
+    def __init__(self, datawindow):
+        super().__init__()
+        self.datawindow: DataWindow = datawindow
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.MouseMove:
+            point = self.datawindow.window_to_viewbox(event.globalPosition())
+            x, y = point.x(), point.y()
+
+            selection = self.datawindow.selection
+            selection.last_cursor_pos = (x, y)
+            selection.hovered_item = selection.get_hovered_item(x, y)
+        return super().eventFilter(obj, event)
+
+
 class DataWindow(PlotWidget):
     def __init__(self, epgdata: EPGData) -> None:
-        super().__init__(plotItem=PlotItem(viewBox=PanZoomViewBox()))
+        super().__init__(viewBox=PanZoomViewBox())
         self.epgdata: EPGData = epgdata
         self.file: str = None
         self.prepost: str = "post"
-        self.plot_item: PlotItem = (
-            self.getPlotItem()
-        )  # the plotting canvas (axes, grid, data, etc.)
-        self.xy_data: list[NDArray] = []  # x and y data actually rendered
+        self.plot_item: PlotItem = self.getPlotItem() # the plotting canvas (axes, grid, data, etc.)
+        self.xy_data: list[NDArray] = []  # x and y data actually rendered to the screen
         self.curve: PlotDataItem = PlotDataItem(antialias=False) 
         self.scatter: ScatterPlotItem = ScatterPlotItem(
             symbol="o", size=4, brush="blue"
         )  # the discrete points shown at high zooms
-        self.viewbox: ViewBox = (
-            self.plot_item.getViewBox()
-        )  # the plotting area (no axes, etc.)
-        #self.vertical_mode: bool = False  # whether scroll/zoom actions are vertical
-        #self.zoom_mode: bool = False  # whether mouse wheel controls zoom
-        self.cursor_mode: str = (
-            "normal"  # cursor state, e.g. normal, baseline selection
-        )
+        self.viewbox: ViewBox = self.plot_item.getViewBox()  # the plotting area (no axes, etc.)
+        self.cursor_mode: str = "normal"  # cursor state, e.g. normal, baseline selection
         self.compression: float = 0
         self.compression_text: TextItem = TextItem()
         self.zoom_level: float = 1
@@ -118,7 +174,8 @@ class DataWindow(PlotWidget):
 
         self.selection: Selection = Selection(self)
 
-        # TODO: may need to clean this up based on how want preview to show up and how edit mode works
+        self.viewbox.menu = None  # Disable default menu
+
         self.baseline: InfiniteLine = InfiniteLine(
             angle = 0, movable=False, pen=mkPen("gray", width = 2)
         )
@@ -138,7 +195,7 @@ class DataWindow(PlotWidget):
         self.moving_mode: bool = False  # whether an interactice item is being moved
 
         self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
-
+        
         self.viewbox.sigRangeChanged.connect(self.update_plot)
 
         self.initUI()
@@ -225,7 +282,6 @@ class DataWindow(PlotWidget):
         """
         scene_pos = self.mapToScene(point.toPoint())
         data_pos = self.viewbox.mapSceneToView(scene_pos)
-        #data_pos1 = self.viewbox.mapSceneToView(point)
         return data_pos
 
     def viewbox_to_window(self, point: QPointF) -> QPointF:
@@ -240,10 +296,10 @@ class DataWindow(PlotWidget):
             to the viewbox coordinates.
         """
         return self.viewbox.mapViewToScene(point)
-        scene_pos = self.viewbox.mapViewToScene(QPointF(x, y))
-        return scene_pos.x(), scene_pos.y()
-        #widget_pos = self.mapFromScene(scene_pos)
-        #return widget_pos.x(), widget_pos.y()
+        # scene_pos = self.viewbox.mapViewToScene(QPointF(x, y))
+        # return scene_pos.x(), scene_pos.y()
+        # widget_pos = self.mapFromScene(scene_pos)
+        # return widget_pos.x(), widget_pos.y()
 
     def reset_view(self) -> None:
         """
@@ -793,11 +849,6 @@ class DataWindow(PlotWidget):
             self.selection.unhighlight_item(self.selection.hovered_item)
 
         self.selection.key_press_event(event)
-        # if event.key() == Qt.Key.Key_Delete:
-        #     if all(isinstance(item, LabelArea) for item in self.selection.selected_items):
-        #         for label_area in self.selection.selected_items:
-        #             self.selection.delete_label_area(label_area)
-        #         self.selection.selected_items = None
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         return
@@ -821,53 +872,6 @@ class DataWindow(PlotWidget):
             else:
                 self.selection.mouse_press_event(event)
 
-        # (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
-        # if not (x_min <= x <= x_max and y_min <= y <= y_max):
-        #     print('click outside of box')
-        #     for item in self.selection.selected_items:
-        #         self.selection.deselect(item)
-        #     self.scene().update()
-        #     return
-        
-        # if event.button() == Qt.MouseButton.LeftButton:
-        #     # if self.baseline_preview_enabled:
-        #     #     self.set_baseline(event)
-        #     #     self.baseline_preview_enabled = False
-        #     #     self.baseline_preview.setVisible(False)
-
-        #     # elif isinstance(self.hovered_item, InfiniteLine):
-        #     #     # if already part of selection, do not reset selection
-        #     #     if self.selection.is_selected(self.hovered_item):  
-        #     #         self.moving_mode = True
-        #     #         self.setCursor(Qt.CursorShape.ClosedHandCursor)
-        #     #     else:
-        #     #         self.moving_mode = True
-        #     #         self.selection.deselect(self.selection)
-        #     #         self.selection = self.hovered_item
-        #     #         self.setCursor(Qt.CursorShape.ClosedHandCursor)
-
-        #     if isinstance(self.hovered_item, LabelArea):
-
-        #         # no shift: select new label area
-        #         if event.modifiers() == Qt.KeyboardModifier.NoModifier:
-        #             self.deselect(self.selection)
-        #             self.selection = self.hovered_item
-        #         # shift held: create/update list 
-        #         elif event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-        #             if self.selection == None:
-        #                 self.selection = self.hovered_item
-        #             elif not isinstance(self.selection, list):
-        #                 if self.hovered_item != self.selection:
-        #                     self.selection = [self.selection]
-        #                     self.selection.append(self.hovered_item)
-        #             else:
-        #                 if self.hovered_item not in self.selection:
-        #                     self.selection.append(self.hovered_item)
-                    
-        #         self.select_label_area(self.hovered_item)
-        #         print(self.selection)
-        
-    
         # return
         # if event.button() == Qt.MouseButton.LeftButton:
         #     if self.cursor_state == "normal":
@@ -881,10 +885,6 @@ class DataWindow(PlotWidget):
         self.selection.mouse_release_event(event)
         
         if self.moving_mode:
-            self.moving_mode = False
-            self.selected_item = None
-            self.setCursor(Qt.CursorShape.OpenHandCursor)
-
             # if transition line was released, update data transition line
             if isinstance(self.selected_item, InfiniteLine) and self.selected_item is not self.baseline:
                 transitions = [(label_area.start_time, label_area.label) for label_area in self.labels]
@@ -902,7 +902,9 @@ class DataWindow(PlotWidget):
         super().mouseMoveEvent(event)
 
         point = self.window_to_viewbox(event.position())
-        _, y = point.x(), point.y()            
+        x, y = point.x(), point.y()
+
+        #self.selection.last_cursor_pos = (x, y)           
 
         if self.baseline_preview_enabled:
             _, (y_min, y_max) = self.viewbox.viewRange()
@@ -913,53 +915,6 @@ class DataWindow(PlotWidget):
                 self.baseline_preview.setVisible(False)
         else:
             self.selection.mouse_move_event(event)
-
-        # if self.moving_mode and isinstance(self.selection, InfiniteLine):
-        #     scene_point = event.position()
-        #     scene_x = scene_point.x()
-        #     scene_y = scene_point.y()
-        #     if self.hovered_item == self.baseline:
-        #         self.baseline.setPos(y)
-        #         return
-        #     else: # must be transition line
-        #         PIXEL_THRESHOLD = 2
-        #         pixelRatio =  self.devicePixelRatioF()
-                
-        #         for idx, label in enumerate(self.labels):
-        #             if self.selection == label.transition_line:
-        #                 min_x = float("-inf")
-        #                 max_x = float("inf")
-
-        #                 if idx > 0:
-        #                     prev_label = self.labels[idx-1]
-        #                     prev_x = self.viewbox_to_window(QPointF(prev_label.start_time, 0))
-        #                     min_x = prev_x.x() + PIXEL_THRESHOLD * pixelRatio
-        #                 if idx < len(self.labels) - 1:
-        #                     next_label = self.labels[idx+1]
-        #                     next_x = self.viewbox_to_window(QPointF(next_label.start_time, 0))
-        #                     max_x = next_x.x() - PIXEL_THRESHOLD * pixelRatio
-
-        #                 bounding_window_x = max(min_x, min(scene_x, max_x))
-        #                 bounding_viewbox_x = self.window_to_viewbox(QPointF(bounding_window_x, scene_y)).x()
-
-        #                 delta_x = label.start_time - bounding_viewbox_x
-
-        #                 label.start_time = bounding_viewbox_x
-        #                 label.set_transition_line(bounding_viewbox_x)
-
-        #                 label.duration += delta_x
-        #                 label.area.setRegion((label.start_time, label.start_time + label.duration))
-        #                 label.duration_text.setText(str(round(label.duration, 2)))
-        #                 label.update_label_area()
-
-        #                 if idx > 0:
-        #                     prev_label.duration -= delta_x
-        #                     prev_label.area.setRegion((prev_label.start_time,
-        #                                                    prev_label.start_time + prev_label.duration))
-        #                     prev_label.duration_text.setText(str(round(prev_label.duration, 2)))
-        #                     prev_label.update_label_area()
-
-        #                 return
 
         return
 
@@ -992,8 +947,11 @@ def main():
     window.plot_recording(window.epgdata.current_file, 'pre')
     window.plot_transitions(window.epgdata.current_file)
 
-
     window.showMaximized()
+
+    tracker = GlobalMouseTracker(window)
+    app.installEventFilter(tracker)
+
     sys.exit(app.exec())
 
 

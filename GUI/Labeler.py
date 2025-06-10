@@ -1,12 +1,12 @@
 import numpy as np
 import pandas as pd
-import importlib.util
+import importlib
 """
 import sys
 sys.path.insert(1, '../ML/')
 """
 #from postprocessing import PostProcessor
-from itertools import groupby
+#from itertools import groupby
 from ProbeSplitter import ProbeSplitter
 from PyQt6.QtCore import pyqtSignal, QObject
 
@@ -29,6 +29,13 @@ class Labeler(QObject):
             'SegTransformer' : transformer.Model,
             'TCN' : tcn.Model
         }
+        name_to_module = {
+            'Random Forests (CSVs only)': 'models.rf',
+            'UNet (Block)': 'models.unet',
+            'UNet (Attention)': 'models.unet',
+            'SegTransformer': 'models.transformer',
+            'TCN': 'models.tcn'
+        }
         name_to_path = {
             'Random Forests (CSVs only)' : "models/rf_pickle", 
             'UNet (Block)' : "models/unet_weights_block",
@@ -50,7 +57,10 @@ class Labeler(QObject):
                 kwargs['bottleneck_type'] = 'block'
                 kwargs = kwargs | {'epochs': 64, 'lr': 0.0005, 'dropout_rate': 0.1, 'weight_decay': 1e-06, 'num_layers': 8, 'features': 32}
 
-        self.model = name_to_class[model_name](**kwargs)
+
+        module = importlib.import_module(name_to_module[model_name])
+        ModelClass = getattr(module, "Model")
+        self.model = ModelClass(**kwargs)
         self.model.load(path = name_to_path[model_name])
 
     def leak_probe_finder(self, labels):
