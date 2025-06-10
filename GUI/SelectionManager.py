@@ -57,6 +57,15 @@ class Selection:
 
 
     def select(self, item):
+        try:
+            print(item)
+            print(item.label)
+        except:
+            pass
+        print(self.datawindow.labels)
+        print([item.label for item in self.datawindow.labels])
+
+
         self.highlighted_item = None
         if isinstance(item, InfiniteLine):
             item.setPen(self.selected_style['transition line']) # same as highlighting currently
@@ -230,8 +239,8 @@ class Selection:
                 labels = self.datawindow.labels
 
                 # get the index of the label area the dragged line belongs to
-                idx = next(
-                    (i for i, label_area in enumerate(labels)
+                idx, label_area = next(
+                    ((i, label_area) for i, label_area in enumerate(labels)
                     if self.dragged_line == label_area.transition_line
                     or (i > 0 and self.dragged_line == labels[i + 1].transition_line)),
                     None # default index
@@ -240,12 +249,13 @@ class Selection:
                 if idx is not None:
                     left_selected = self.is_selected(labels[idx]) if idx > 0 else False
                     right_selected = self.is_selected(labels[idx + 1]) if idx < len(labels) else False
+
                     if left_selected or right_selected:
                         pass  # already selected: don't update pen
-                elif self.dragged_line == self.hovered_item: # standalone selection
-                    self.dragged_line.setPen(self.highlighted_style['transition line'])
-                    self.highlighted_item = self.dragged_line
-                    self.deselect_item(self.dragged_line)
+                    elif self.dragged_line == self.hovered_item: # standalone selection
+                        self.dragged_line.setPen(self.highlighted_style['transition line'])
+                        self.highlighted_item = self.dragged_line
+                        self.deselect_item(self.dragged_line)
                 
             self.moving_mode = False
             self.dragged_line = None

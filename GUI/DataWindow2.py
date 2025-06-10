@@ -976,9 +976,9 @@ class DataWindow(PlotWidget):
         if not (x_min <= x <= x_max and y_min <= y <= y_max):
             return
 
-        if self.baseline.getPos() == [0, 0]:
-            self.baseline.setPos(y)
-            self.baseline.setVisible(True)
+        
+        self.baseline.setPos(y)
+        self.baseline.setVisible(True)
 
         self.baseline_preview_enabled = False
         self.baseline_preview.setVisible(False)
@@ -991,10 +991,16 @@ class DataWindow(PlotWidget):
         if event.key() == Qt.Key.Key_R:
             self.reset_view()  
         if event.key() == Qt.Key.Key_B:
-            self.baseline_preview_enabled = True
-            self.baseline_preview.setVisible(True)
-            pos = self.viewbox.mapSceneToView(self.mapToScene(self.mapFromGlobal(QCursor.pos()))).y()
-            self.baseline_preview.setPos(pos)
+            if self.baseline_preview_enabled:
+                # Turn it off
+                self.baseline_preview_enabled = False
+                self.baseline_preview.setVisible(False)
+            else:
+                self.baseline.setVisible(False)
+                self.baseline_preview_enabled = True
+                self.baseline_preview.setVisible(True)
+                y_pos = self.viewbox.mapSceneToView(self.mapToScene(self.mapFromGlobal(QCursor.pos()))).y()
+                self.baseline_preview.setPos(y_pos)
 
             self.selection.deselect_all()
             self.selection.unhighlight_item(self.selection.hovered_item)
