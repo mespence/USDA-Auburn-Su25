@@ -15,29 +15,34 @@ class MainWindow(QWidget):
         layout = QVBoxLayout()
         self.setLayout(layout)
 
-        slider = QSlider(Qt.Orientation.Horizontal, self)
-        slider.setRange(0, 100)
-        slider.setValue(startVal)
+        self.slider = QSlider(Qt.Orientation.Horizontal, self)
+        self.slider.setRange(0, 100)
+        self.slider.setValue(startVal)
         #slider.setSingleStep(1) #not doing anything
         #slider.setPageStep(1) #also not doing anything
         #slider.setTickPosition(QSlider.TickPosition.TicksAbove)
 
-        slider.valueChanged.connect(self.update)
+        self.slider.valueChanged.connect(self.update)
 
         self.result_label = QLabel('', self)
         self.result_label.setText(f'Current Value: {startVal}')
-
-        layout.addWidget(slider)
+        
+        self.numBox = QDoubleSpinBox(self)
+        self.numBox.setValue(startVal)
+        self.numBox.valueChanged.connect(self.update)
+        
+        layout.addWidget(self.slider)
         layout.addWidget(self.result_label)
-
-        numBox = QDoubleSpinBox(self)
-        layout.addWidget(numBox)
+        layout.addWidget(self.numBox)
 
         # show the window
         self.show()
 
     def update(self, value):
         self.result_label.setText(f'Current Value: {value}')
+        self.numBox.setValue(value)
+        sliderVal = int(value)
+        self.slider.setValue(sliderVal)
 
 
 if __name__ == '__main__':
