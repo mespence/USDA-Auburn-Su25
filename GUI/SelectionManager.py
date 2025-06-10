@@ -1,4 +1,3 @@
-
 from pyqtgraph import PlotWidget, InfiniteLine, mkPen, mkBrush
 
 from PyQt6.QtGui import QColor, QMouseEvent, QKeyEvent
@@ -8,7 +7,8 @@ from LabelArea import LabelArea
 from Settings import Settings
 
 # ctrl vs shift click
-# werid multi select bugs still
+# werid multi select bugs still, multi delete
+# "parent" of multi selection
 
 class Selection:
     """
@@ -45,6 +45,8 @@ class Selection:
 
         self.moving_mode: bool = False
 
+        self.last_cursor_pos: tuple[float, float] = None  # the last (x,y) of the cursor in viewbox coords
+
     def _sort_key(self, item):
         """
         A sort key used to keep `selected_items` in chronological order.
@@ -54,7 +56,7 @@ class Selection:
         if isinstance(item, InfiniteLine):
             return item.value()
         return float('inf')  # fallback
-
+    
 
     def select(self, item):
         try:
@@ -219,11 +221,13 @@ class Selection:
         point = self.datawindow.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
 
+        self.last_cursor_pos = (x, y)
+
         if self.datawindow.edit_mode_enabled and not self.moving_mode:
-            self.hover(x,y) 
+            self.hover(x, y) 
             self.datawindow.scene().update()
         elif self.moving_mode and self.dragged_line is not None:
-            self.apply_drag(x,y)
+            self.apply_drag(x, y)
         return
                 
     def mouse_release_event(self, event: QMouseEvent) -> None:
@@ -369,6 +373,10 @@ class Selection:
             self.datawindow.viewbox.removeItem(item)   
 
         del self.datawindow.labels[current_idx]
+
+        if self.last_cursor_pos:
+            x, y = self.last_cursor_pos
+            self.hover(x, y)
 
     def hover(self, x: float, y: float):
         """

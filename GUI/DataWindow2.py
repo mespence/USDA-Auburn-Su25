@@ -1113,16 +1113,9 @@ class DataWindow(PlotWidget):
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         super().mouseMoveEvent(event)
-        # return
-
-        #print(self.selection.selected_items)
 
         point = self.window_to_viewbox(event.position())
-        _, y = point.x(), point.y()
-
-        # if self.edit_mode_enabled and not self.moving_mode:
-        #     self.highlight_item(event) 
-        #     self.scene().update()            
+        _, y = point.x(), point.y()            
 
         if self.baseline_preview_enabled:
             _, (y_min, y_max) = self.viewbox.viewRange()
