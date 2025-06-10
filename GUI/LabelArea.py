@@ -100,7 +100,7 @@ class LabelArea:
 
         self.viewbox.sigTransformChanged.connect(self.update_label_area)  # bug here after deleting all areas
     
-        self.is_end_area = (dur == 0 and label == 'empty')
+        self.is_end_area = (label == 'END AREA')
 
         if self.enable_debug:
             self.toggle_debug_boxes()   

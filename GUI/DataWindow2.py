@@ -618,7 +618,7 @@ class DataWindow(PlotWidget):
         time, dur, _ = durations[-1]
         end_start_time = time + dur
 
-        label_area = LabelArea(end_start_time, 0, 'empty', self)
+        label_area = LabelArea(end_start_time, 0, 'END AREA', self)
         label_area.label_text.setVisible(False)
         label_area.label_background.setVisible(False)
         label_area.duration_text.setVisible(False)
@@ -657,219 +657,6 @@ class DataWindow(PlotWidget):
         self.curve.setPen(mkPen(color))
         self.scatter.setPen(mkPen(color))  
 
-
-    # def delete_label_area(self, label_area: LabelArea) -> None:
-    #     """
-    #     Deletes the selected label area.
-    #     Inputs:
-    #         label: the LabelArea to delete
-    #     Returns:
-    #         Nothing
-    #     """ 
-    #     current_idx = self.labels.index(label_area)
-
-    #     if len(self.labels) > 1:
-    #         if label_area == self.labels[0]:
-    #             # expand left
-    #             expanded_label_area = self.labels[current_idx + 1]
-    #             new_start_time = label_area.start_time
-    #             new_range = [new_start_time, expanded_label_area.start_time +  expanded_label_area.duration]
-
-    #             expanded_label_area.start_time = new_start_time
-    #             expanded_label_area.set_transition_line(new_start_time)
-
-    #         else: 
-    #             # expand right
-    #             expanded_label_area = self.labels[current_idx - 1]
-    #             new_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration]
-
-    #         expanded_label_area.area.setRegion(new_range)
-    #         new_dur = expanded_label_area.duration + label_area.duration 
-    #         expanded_label_area.duration = new_dur
-    #         expanded_label_area.duration_text.setText(str(round(new_dur, 2)))
-    #         expanded_label_area.update_label_area()
-
-
-    #     for item in label_area.getItems():
-    #         self.viewbox.removeItem(item)   
-
-    #     if current_idx != len(self.labels):
-    #         self.labels[current_idx + 1].transition_line.setPen(mkPen(color='black', width=2))
-
-    #     del self.labels[current_idx]
-        
-
-    # def highlight_item(self, event: QMouseEvent) -> None:
-    #     """
-    #     Handles hightlighting/unhighlighting items. The order in which 
-    #     highlighting is priortized is "transition_line > baseline > label_area".
-    #     """
-    #     TRANSITION_THRESHOLD = 3
-    #     BASELINE_THRESHOLD = 3
-
-    #     if len(self.labels) == 0:  # nothing to highlight TODO fix if comments are highlightable
-    #         return 
-
-    #     point = self.window_to_viewbox(event.position())
-    #     x, y = point.x(), point.y()
-
-    #     (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
-    #     pixelRatio = self.devicePixelRatioF()
-
-
-    #     if not (x_min <= x <= x_max and y_min <= y <= y_max):  # cursor outside viewbox
-    #         self.unhover(self.hovered_item)
-    #         return
-        
-    #     transition_line, transition_distance = self.get_closest_transition(x)
-    #     baseline, baseline_distance = self.get_baseline_distance(y)
-    #     label_area = self.get_closest_label_area(x)
-
-    #     hightlighted_pen = mkPen(width=4, color='#0D6EFDC0')
-       
-    #     if transition_distance <= TRANSITION_THRESHOLD * pixelRatio:
-    #         if self.hovered_item is None or self.hovered_item != transition_line:
-    #             if self.hovered_item is not None:
-    #                 self.unhover(self.hovered_item)
-    #             self.setCursor(Qt.CursorShape.OpenHandCursor)
-    #             transition_line.setPen(hightlighted_pen)
-    #             self.hovered_item = transition_line
-    #     elif baseline_distance <= BASELINE_THRESHOLD * pixelRatio:
-    #         if self.hovered_item is None or self.hovered_item != self.baseline:
-    #             if self.hovered_item is not None:
-    #                 self.unhover(self.hovered_item)
-    #             self.setCursor(Qt.CursorShape.OpenHandCursor)
-    #             self.baseline.setPen(hightlighted_pen)
-    #             self.hovered_item = self.baseline
-    #     else:
-    #         if label_area is None:
-    #             self.unhover(self.hovered_item)
-    #             return
-    #         if self.hovered_item is None or self.hovered_item != label_area:  
-    #             if self.hovered_item is not None:
-    #                 self.unhover(self.hovered_item)
-    #             label_color = self.composite_on_white(Settings.label_to_color[label_area.label])
-    #             h, s, l, a = label_color.getHslF()
-    #             selected_color = QColor.fromHslF(h, min(s * 8, 1), l * 0.9, a)  
-    #             selected_color.setAlpha(200)
-    #             label_area.area.setBrush(mkBrush(color=selected_color))
-    #             self.hovered_item = label_area
-
-    # def unhover(self, item):
-    #     print(item, self.selection.is_selected(item))
-    #     if self.selection.is_selected(item):
-    #         return
-    #     if isinstance(item, InfiniteLine):
-    #         self.setCursor(Qt.CursorShape.ArrowCursor)
-    #         if item == self.baseline:
-    #             item.setPen(mkPen("gray", width=2))
-    #         else:
-    #             item.setPen(mkPen(color='black', width=2))
-    #     if isinstance(item, LabelArea):
-    #         item.area.setBrush(mkBrush(color=Settings.label_to_color[item.label]))
-
-    #     self.hovered_item = None
-    
-    # def deselect(self, item):
-    #     print(f"Deselecting: {item}")
-    #     if isinstance(item, InfiniteLine):
-    #         pass
-    #     if isinstance(item, LabelArea):
-    #         self.reset_label_area(item)
-    #         if item != self.labels[-1]:
-    #             idx = self.labels.index(item)
-    #             self.labels[idx + 1].transition_line.setPen(mkPen(color='black', width=2))
-    #     if isinstance(item, list):  # list of label areas
-    #         for label_area in self.selection:
-    #             self.reset_label_area(label_area)
-    #         if self.selection[-1] != self.labels[-1]:
-    #             idx = self.labels.index(item)
-    #             self.labels[idx + 1].transition_line.setPen(mkPen(color='black', width=2))
-
-    #     self.selection = None
-
-
-    # def select_label_area(self, label_area: LabelArea) -> None:
-    #     idx = self.labels.index(label_area)
-    #     left_line = self.labels[idx].transition_line
-    #     if self.labels[idx] == self.labels[-1]:
-    #         right_line = left_line  # TODO: fix this to work with whatever we decide for last line
-    #     else:
-    #         right_line = self.labels[idx+1].transition_line
-    #     left_line.setPen(mkPen(width=6, color='#0D6EFD'))
-    #     right_line.setPen(mkPen(width=6, color='#0D6EFD'))
-    #     label_area.area.setBrush(mkBrush(color='#0D6EFD80'))
-    #     label_area.label_background.setBrush(mkBrush(color='#0D6EFD90'))
-    #     label_area.duration_background.setBrush(mkBrush(color='#0D6EFD90'))
-        
-    # def reset_label_area(self, label_area: LabelArea) -> None:
-    #     """
-    #     Resets then colors of all colored elements of a label area.
-    #     """
-    #     label_area.area.setBrush(mkBrush(color=Settings.label_to_color[label_area.label]))
-    #     label_area.transition_line.setPen(mkPen(color='black', width=2))
-    #     label_area.label_background.setBrush(mkBrush(label_area.get_background_color()))
-    #     label_area.duration_background.setBrush(mkBrush(label_area.get_background_color()))
-
-    # def transition_line_selected(self, transition_line: InfiniteLine) -> bool:
-    #     """
-    #     Returns whether a transition line is part of the current selection.
-    #     TODO: expand into a general isSelected function?
-    #     """
-    #     selected_transition_lines = []
-    #     if isinstance(self.selection, LabelArea):
-    #         selected_transition_lines.append(self.selection.transition_line)
-    #         if self.selection != self.labels[-1]:
-    #             idx = self.labels.index(self.selection)
-    #             selected_transition_lines.append(self.labels[idx + 1].transition_line) 
-    #     if isinstance(self.selection, list):  # list of label areas
-    #         for label_area in self.selection:
-    #             selected_transition_lines.append(label_area.transition_line)
-    #         if self.selection[-1] != self.labels[-1]:
-    #             idx = self.labels.index(self.selection[-1])
-    #             selected_transition_lines.append(self.labels[idx + 1].transition_line) 
-    #     print(f"Transition Line Selection: {transition_line in selected_transition_lines}")
-    #     return transition_line in selected_transition_lines
-
-    # def is_selected(self, item) -> bool:
-    #     """
-    #     Returns whether the item is part of the current selection.
-    #     Works for LabelArea and InfiniteLine.
-    #     """
-    #     if self.selection is None:
-    #         return False
-
-    #     # Case 1: single LabelArea
-    #     if isinstance(self.selection, LabelArea):
-    #         if item == self.selection:
-    #             return True
-    #         if isinstance(item, InfiniteLine):
-    #             idx = self.labels.index(self.selection)
-    #             transitions = [self.selection.transition_line]
-    #             if idx < len(self.labels) - 1:
-    #                 transitions.append(self.labels[idx + 1].transition_line)
-    #             return item in transitions
-
-    #     # Case 2: list of LabelAreas
-    #     if isinstance(self.selection, list) and all(isinstance(l, LabelArea) for l in self.selection):
-    #         if item in self.selection:
-    #             return True
-    #         if isinstance(item, InfiniteLine):
-    #             transitions = []
-    #             for label in self.selection:
-    #                 transitions.append(label.transition_line)
-    #             if self.selection[-1] != self.labels[-1]:
-    #                 idx = self.labels.index(self.selection[-1])
-    #                 transitions.append(self.labels[idx + 1].transition_line)
-    #             return item in transitions
-
-    #     # Case 3: selected InfiniteLine directly
-    #     if isinstance(self.selection, InfiniteLine) and item == self.selection:
-    #         return True
-
-    #     return False
-
-
     def composite_on_white(self, color: QColor) -> QColor:
         """
         Helps function to get the RGB value (no alpha) of 
@@ -883,14 +670,14 @@ class DataWindow(PlotWidget):
         new_b = round(b * a + 255 * (1- a))
         return QColor(new_r, new_g, new_b)
     
-    def darker_hsl(self, color: QColor, amount: float) -> QColor:
-        """
-        Returns a darker color by reducing HSL lightness by `amount`.
-        """
-        h, s, l, a = color.getHsl()
-        new_l = max(0, l - int(amount * 255))
-        new_color = QColor.fromHsl(h, s, new_l, a)
-        return new_color
+    # def darker_hsl(self, color: QColor, amount: float) -> QColor:
+    #     """
+    #     Returns a darker color by reducing HSL lightness by `amount`.
+    #     """
+    #     h, s, l, a = color.getHsl()
+    #     new_l = max(0, l - int(amount * 255))
+    #     new_color = QColor.fromHsl(h, s, new_l, a)
+    #     return new_color
         
     def get_closest_transition(self, x: float) -> tuple[int, float]:
         """
@@ -937,9 +724,9 @@ class DataWindow(PlotWidget):
     
     def get_closest_label_area(self, x: float) -> LabelArea:
         if not self.labels:
-            return float('inf')  # no labels present
+            return None
         if x < self.labels[0].start_time or x > (self.labels[-1].start_time + self.labels[-1].duration):
-            return float('inf')  # outside the labels
+            return None  # outside the labels
         label_ends = np.array([label.start_time + label.duration for label in self.labels])
         idx = np.searchsorted(label_ends, x)  # idk why this works
         if idx >= len(label_ends):

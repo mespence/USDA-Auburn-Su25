@@ -13,7 +13,7 @@ class Settings:
 			'N'     : QColor(  0, 255, 255, Settings.alpha),
 			'W'     : QColor(255, 215,   0, Settings.alpha),
 			'Z'     : QColor(255, 215,   0, Settings.alpha),
-            'empty' : QColor(  0,   0,   0, 0)
+            'END AREA' : QColor(  0,   0,   0, 0)
 		}
         Settings.labels_to_show = {
 			'NP' : True,

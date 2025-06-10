@@ -96,6 +96,32 @@ class Selection:
         self.selected_items.sort(key=self._sort_key)
         self.datawindow.viewbox.update()
 
+    
+    def multi_select(self, item: LabelArea) -> None:
+        """
+        Selects all LabelAreas between the selection_parent and the given item.
+        """
+        if self.selection_parent == None:  # fallback
+            self.deselect_all()
+            self.selection_parent = item
+            self.select(item)
+
+        labels = self.datawindow.labels[:]
+        parent = self.selection_parent
+
+        try:
+            idx1 = labels.index(parent)
+            idx2 = labels.index(item)
+        except ValueError:
+            return # one of the items isn't in th label list
+
+        start_idx, end_idx = sorted((idx1, idx2))
+        self.deselect_all()
+        for i in range(start_idx, end_idx + 1):
+            if not labels[i].is_end_area:
+                self.select(labels[i])
+        self.selection_parent = parent
+
     def deselect_item(self, item):
         """
         Resets styling an item to pre-selection state and remove it from the selection.
@@ -195,8 +221,12 @@ class Selection:
         
         # ----------- LEFT CLICK -----------
         if event.button() == Qt.MouseButton.LeftButton:
+            # Left-clicked no item
+            if self.hovered_item == None:
+                self.deselect_all()
+
             # Left-clicked InfiniteLine 
-            if isinstance(self.hovered_item, InfiniteLine):
+            elif isinstance(self.hovered_item, InfiniteLine):
                 if not self.is_selected(self.hovered_item):
                     self.deselect_all()
                     self.select(self.hovered_item)  
@@ -235,33 +265,6 @@ class Selection:
                         self.selection_parent = self.hovered_item
                     else:
                         self.deselect_item(self.hovered_item)
-
-        
-
-    def multi_select(self, item: LabelArea) -> None:
-        """
-        Selects all LabelAreas between the selection_parent and the given item.
-        """
-        if self.selection_parent == None:  # fallback
-            self.deselect_all()
-            self.selection_parent = item
-            self.select(item)
-
-        labels = self.datawindow.labels[:]
-        parent = self.selection_parent
-
-        try:
-            idx1 = labels.index(parent)
-            idx2 = labels.index(item)
-        except ValueError:
-            return # one of the items isn't in th label list
-
-        start_idx, end_idx = sorted((idx1, idx2))
-        self.deselect_all()
-        for i in range(start_idx, end_idx + 1):
-            if not labels[i].is_end_area:
-                self.select(labels[i])
-        self.selection_parent = parent
                 
     def mouse_move_event(self, event: QMouseEvent) -> None:
         point = self.datawindow.window_to_viewbox(event.position())
@@ -291,16 +294,14 @@ class Selection:
                 labels = self.datawindow.labels
 
                 # get the index of the label area the dragged line belongs to
-                idx, label_area = next(
-                    ((i, label_area) for i, label_area in enumerate(labels)
-                    if self.dragged_line == label_area.transition_line
-                    or (i > 0 and self.dragged_line == labels[i + 1].transition_line)),
-                    None # default index
+                idx = next(
+                    i for i, label_area in enumerate(labels) 
+                    if label_area.transition_line == self.dragged_line
                 )
 
                 if idx is not None:
-                    left_selected = self.is_selected(labels[idx]) if idx > 0 else False
-                    right_selected = self.is_selected(labels[idx + 1]) if idx < len(labels) else False
+                    left_selected = self.is_selected(labels[idx-1]) if idx > 0 else False
+                    right_selected = self.is_selected(labels[idx]) if idx < len(labels) else False
 
                     if left_selected or right_selected:
                         pass  # already selected: don't update pen
@@ -437,6 +438,7 @@ class Selection:
         if not (x_min <= x <= x_max and y_min <= y <= y_max):  # cursor outside viewbox
             if self.highlighted_item is not None:
                 self.unhighlight_item(self.highlighted_item)
+            self.datawindow.setCursor(Qt.CursorShape.ArrowCursor)
             return
 
         pixel_ratio = self.datawindow.devicePixelRatioF()
