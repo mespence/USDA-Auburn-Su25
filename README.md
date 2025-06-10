@@ -2,7 +2,7 @@
 
 The summer continuation of the 24-25 USDA/Auburn CS Clinic project.
 
-This repository contains our machine learning, GUI, data cleaning, and experimentation code used during this project. The code is generally organized in the same way, with a folder for each part of the project. For setup, you are likely going to want to clone this repository and install the python packages in ```GUI/requirements.py```.
+This repository contains our machine learning, GUI, data cleaning, and experimentation code used during this project. The code is generally organized in the same way, with a folder for each part of the project.
 
 ## GUI
 
