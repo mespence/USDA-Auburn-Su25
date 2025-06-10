@@ -438,12 +438,11 @@ class Selection:
 
         item_to_highlight = self.get_hovered_item(x ,y)
 
+        cursor = None
         if isinstance(item_to_highlight, InfiniteLine):
             if item_to_highlight == self.datawindow.labels[0].transition_line:
                 return
             cursor = Qt.CursorShape.OpenHandCursor
-        if isinstance(item_to_highlight, LabelArea):
-            cursor = None
 
         self.update_highlight(item_to_highlight, cursor=cursor)
 
@@ -535,5 +534,19 @@ class Selection:
 
 
     def change_label_type(self, label_area: LabelArea, new_label: str) -> None:
-        label_area.label = new_label
-        label_area.update_label_area()
+        if self.is_selected(label_area):
+            selected_label_areas = [label for label in self.selected_items if isinstance(label, LabelArea)]
+            for label_area in selected_label_areas:
+                label_area.label = new_label
+                label_area.update_label_area()
+                label_area.area.setBrush(self.selected_style['area'])
+                label_area.label_background.setBrush(self.selected_style['text background'])
+                label_area.duration_background.setBrush(self.selected_style['text background'])
+        else:
+            label_area.label = new_label
+            label_area.update_label_area()
+
+
+        dw = self.datawindow
+        transitions = [(label_area.start_time, label_area.label) for label_area in dw.labels]
+        dw.epgdata.set_transitions(dw.file, transitions, dw.transition_mode)

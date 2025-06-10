@@ -99,8 +99,7 @@ class PanZoomViewBox(ViewBox):
         if isinstance(item, InfiniteLine):
             print('Right-clicked InfiniteLine')
             return  # TODO: infinite line context menu not yet implemented
-
-        print(item.label)
+        
         menu = QMenu()
         label_type_dropdown = QMenu("Change Label Type", menu)
 
@@ -151,16 +150,20 @@ class GlobalMouseTracker(QObject):
 class DataWindow(PlotWidget):
     def __init__(self, epgdata: EPGData) -> None:
         super().__init__(viewBox=PanZoomViewBox())
+        self.plot_item: PlotItem = self.getPlotItem() # the plotting canvas (axes, grid, data, etc.)
+        self.viewbox: PanZoomViewBox = self.plot_item.getViewBox() # the plotting area (no axes, etc.)
+        self.viewbox.datawindow = self
+
         self.epgdata: EPGData = epgdata
         self.file: str = None
         self.prepost: str = "post"
-        self.plot_item: PlotItem = self.getPlotItem() # the plotting canvas (axes, grid, data, etc.)
+        
         self.xy_data: list[NDArray] = []  # x and y data actually rendered to the screen
         self.curve: PlotDataItem = PlotDataItem(antialias=False) 
         self.scatter: ScatterPlotItem = ScatterPlotItem(
             symbol="o", size=4, brush="blue"
         )  # the discrete points shown at high zooms
-        self.viewbox: ViewBox = self.plot_item.getViewBox()  # the plotting area (no axes, etc.)
+        
         self.cursor_mode: str = "normal"  # cursor state, e.g. normal, baseline selection
         self.compression: float = 0
         self.compression_text: TextItem = TextItem()
@@ -267,7 +270,7 @@ class DataWindow(PlotWidget):
         Handles window resizing.
         """
         super().resizeEvent(event)
-        #self.update_compression()
+        self.update_compression()
 
     def window_to_viewbox(self, point: QPointF) -> QPointF:
         """
@@ -378,6 +381,9 @@ class DataWindow(PlotWidget):
         Outputs:
             None
         """
+
+        if not self.isVisible():
+            return  # don't run prior to initialization
 
         # Get the pixel distance of one second
         plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
