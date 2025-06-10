@@ -411,9 +411,9 @@ class DataWindow(PlotWidget):
             df['comments'] = None
 
         # testing comment appearance
-        # tar_time = 420
-        # nearest_idx = (df['time'] - tar_time).abs().idxmin()
-        # df.at[nearest_idx, 'comments'] = "Test comment"
+        tar_time = 420
+        nearest_idx = (df['time'] - tar_time).abs().idxmin()
+        df.at[nearest_idx, 'comments'] = "Test comment"
 
         self.viewbox.setRange(
             xRange=(np.min(self.xy_data[0]), np.max(self.xy_data[0])), 
@@ -436,7 +436,7 @@ class DataWindow(PlotWidget):
         
         comments_df = df[~df["comments"].isnull()]
         for time, text in zip(comments_df["time"], comments_df["comments"]):
-            marker = CommentMarker(time, text, self)
+            marker = CommentMarker(time, text, self, icon_path="message.svg")
             self.comments[time] = marker
         
         return
@@ -938,14 +938,17 @@ class DataWindow(PlotWidget):
     def get_closest_label_area(self, x: float) -> LabelArea:
         if not self.labels:
             return float('inf')  # no labels present
-        if x < self.labels[0].start_time or x > (self.labels[-1].start_time + self.labels[-1].duration):
-            return float('inf')  # outside the labels
-        label_ends = np.array([label.start_time + label.duration for label in self.labels])
-        idx = np.searchsorted(label_ends, x)  # idk why this works
-        if idx >= len(label_ends):
-            return self.labels[-1]
-        return self.labels[idx]      
+        
+        # don't include the last label
+        visible_labels = [label for label in self.labels if not label == self.labels[-1]]
 
+        if x < visible_labels[0].start_time or x > (visible_labels[-1].start_time + visible_labels[-1].duration):
+            return float('inf')  # outside the labels
+        label_ends = np.array([label.start_time + label.duration for label in visible_labels])
+        idx = np.searchsorted(label_ends, x)  # idk why this works
+        if idx >= len(visible_labels):
+            return visible_labels[-1]
+        return visible_labels[idx]
 
     def delete_all_label_instances(self, label: str) -> None:
         """
@@ -1033,6 +1036,8 @@ class DataWindow(PlotWidget):
                 self.set_baseline(event)
             else:
                 self.selection.mouse_press_event(event)
+        elif event.button() == Qt.MouseButton.RightButton:
+            self.add_comment(event)
 
         # (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
         # if not (x_min <= x <= x_max and y_min <= y <= y_max):
