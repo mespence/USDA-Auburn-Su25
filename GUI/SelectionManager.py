@@ -6,18 +6,21 @@ from PyQt6.QtCore import Qt, QPointF
 from LabelArea import LabelArea
 from Settings import Settings
 
-# ctrl vs shift click
+
 # werid multi select bugs still, multi delete
-# "parent" of multi selection
 
 class Selection:
     """
     Manages `DataWindow` selections and the actions performed on them.
+
+    More than one LabelArea can be selected at a time, but only a single 
+    InfiniteLine can be directly selected.
     """
     def __init__(self, plot_widget: PlotWidget):
         
 
         self.selected_items: list = []  # InfiniteLine | LabelArea, sorted chronologically
+        self.selection_parent: LabelArea = None  # which item is the "parent" of a multi-selection
         self.highlighted_item = None  # the item visually highlighted
         self.hovered_item = None  # the item the mouse is currently over
         self.dragged_line: InfiniteLine = None  # Which InfiniteLine (if any) is being dragged
@@ -37,7 +40,7 @@ class Selection:
 
         self.selected_style = {
             'transition line': mkPen(color='#0D6EFD', width=6),
-            'baseline': mkPen(color='#0D6EFD', width=6),
+            'baseline': mkPen(color="#031A3B", width=6),
             'area': mkBrush(color='#0D6EFD80'),  # label area LinearRegionItems
             'text background': mkBrush(color='#0D6EFD90'),  # label area text backgrounds
             'text color': "#FFFFFF"
@@ -58,16 +61,13 @@ class Selection:
         return float('inf')  # fallback
     
 
-    def select(self, item):
-        try:
-            print(item)
-            print(item.label)
-        except:
-            pass
-        print(self.datawindow.labels)
-        print([item.label for item in self.datawindow.labels])
+    def select(self, item) -> None:
+        """
+        Handles styling a selected item and adds it to the selection.
 
-
+        Input:
+            `item`: an object to be selected (e.g. InfiniteLine or LabelArea)
+        """
         self.highlighted_item = None
         if isinstance(item, InfiniteLine):
             item.setPen(self.selected_style['transition line']) # same as highlighting currently
@@ -97,6 +97,12 @@ class Selection:
         self.datawindow.viewbox.update()
 
     def deselect_item(self, item):
+        """
+        Resets styling an item to pre-selection state and remove it from the selection.
+
+        Input:
+            `item`: an object to be deselected (e.g. InfiniteLine or LabelArea)
+        """
         if isinstance(item ,InfiniteLine) and item != self.highlighted_item:
             if item == self.datawindow.baseline:
                 item.setPen(self.default_style['baseline'])
@@ -123,8 +129,12 @@ class Selection:
         self.selected_items.remove(item)
 
     def deselect_all(self):
+        """
+        Deselects all items in the selection.
+        """
         for item in self.selected_items[:]:
             self.deselect_item(item)
+        self.selection_parent = None
         
     
     def is_selected(self, item) -> bool:
@@ -164,15 +174,14 @@ class Selection:
 
     def key_press_event(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Delete or event.key() == Qt.Key.Key_Backspace:
-            for item in self.selected_items[:]: # shallow copy
-                if isinstance(item, LabelArea):
-                    print(f"Deleting: {item.label}")
-                    self.delete_label_area(item)
-
-            # if all(isinstance(item, LabelArea) for item in self.selected_items):
-            #     for label_area in self.selected_items:
-            #         self.delete_label_area(label_area)
-            #     self.selected_items = None
+            label_areas_to_delete = [item for item in self.selected_items if isinstance(item, LabelArea)][::-1]
+            self.deselect_all()
+            for label_area in label_areas_to_delete:
+                print(f"Deleting: {label_area.label}")
+                if label_area == label_areas_to_delete[0] or label_area == label_areas_to_delete[-1]:                    
+                    self.delete_label_area(label_area, merge_adjacent=True) # merge on first and last only
+                else:
+                    self.delete_label_area(label_area, merge_adjacent=False)
 
     def mouse_press_event(self, event: QMouseEvent) -> None:
         point = self.datawindow.window_to_viewbox(event.position())
@@ -184,13 +193,10 @@ class Selection:
             self.datawindow.scene().update()
             return
         
-        
         # ----------- LEFT CLICK -----------
         if event.button() == Qt.MouseButton.LeftButton:
             # Left-clicked InfiniteLine 
             if isinstance(self.hovered_item, InfiniteLine):
-                print('Clicked InfiniteLine')
-
                 if not self.is_selected(self.hovered_item):
                     self.deselect_all()
                     self.select(self.hovered_item)  
@@ -203,25 +209,65 @@ class Selection:
             elif isinstance(self.hovered_item, LabelArea):
                 if self.hovered_item.is_end_area:
                     return  # can't select end area
-                
-                print('Clicked LabelArea')
 
-                # normal click
+                # ---- Normal click -------
                 if event.modifiers() == Qt.KeyboardModifier.NoModifier:
                     self.deselect_all()
                     self.select(self.hovered_item)
+                    self.selection_parent = self.hovered_item
 
-                # shift-click
+                # ---- Shift-click --------
                 elif event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-                    if not any(isinstance(item, LabelArea) for item in self.selected_items):
+                    if all(isinstance(item, InfiniteLine) for item in self.selected_items):
                         self.deselect_all()  # only label areas can have multi selection
-                    self.select(self.hovered_item)
+                    if not self.selected_items:
+                        self.select(self.hovered_item)
+                        self.selection_parent = self.hovered_item
+                    else:
+                        self.multi_select(self.hovered_item)                        
+
+                # ---- Ctrl-click ---------
+                elif event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                    if all(isinstance(item, InfiniteLine) for item in self.selected_items):
+                        self.deselect_all()  # only label areas can have multi selection
+                    if not self.is_selected(self.hovered_item):
+                        self.select(self.hovered_item)
+                        self.selection_parent = self.hovered_item
+                    else:
+                        self.deselect_item(self.hovered_item)
+
+        
+
+    def multi_select(self, item: LabelArea) -> None:
+        """
+        Selects all LabelAreas between the selection_parent and the given item.
+        """
+        if self.selection_parent == None:  # fallback
+            self.deselect_all()
+            self.selection_parent = item
+            self.select(item)
+
+        labels = self.datawindow.labels[:]
+        parent = self.selection_parent
+
+        try:
+            idx1 = labels.index(parent)
+            idx2 = labels.index(item)
+        except ValueError:
+            return # one of the items isn't in th label list
+
+        start_idx, end_idx = sorted((idx1, idx2))
+        self.deselect_all()
+        for i in range(start_idx, end_idx + 1):
+            if not labels[i].is_end_area:
+                self.select(labels[i])
+        self.selection_parent = parent
                 
     def mouse_move_event(self, event: QMouseEvent) -> None:
         point = self.datawindow.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
 
-        self.last_cursor_pos = (x, y)
+        self.last_cursor_pos = (x, y) # save current pos
 
         if self.datawindow.edit_mode_enabled and not self.moving_mode:
             self.hover(x, y) 
@@ -236,10 +282,12 @@ class Selection:
 
         if self.moving_mode:
             if self.dragged_line == self.datawindow.baseline:
+                # Place baseline
                 self.dragged_line.setPen(self.highlighted_style['baseline'])
                 self.highlighted_item = self.dragged_line
                 self.deselect_item(self.dragged_line)
             else:
+                # Place transition line, resetting to previous style
                 labels = self.datawindow.labels
 
                 # get the index of the label area the dragged line belongs to
@@ -267,8 +315,6 @@ class Selection:
 
             self.hover(x,y)
         return     
-           
-
 
 
         
@@ -319,26 +365,26 @@ class Selection:
 
                 left.update_label_area()
                 right.update_label_area()
-
         return
 
 
 
-    def delete_label_area(self, label_area: LabelArea) -> None:
+    def delete_label_area(self, label_area: LabelArea, merge_adjacent: bool = True) -> None:
         """
         Deletes the specified label area and expands the left label area, 
         instead expanding the right label area if the deleted label area 
-        is the first label area.
+        is the first label area. Handles merging same-type labels after a deletion.
         """ 
-        self.deselect_item(label_area)
         labels = self.datawindow.labels
+
+     
         current_idx = labels.index(label_area)
+
+        
         before_idx = current_idx - 1
         after_idx = current_idx + 1
 
         if len(labels) > 1:
-            merging_adjacent = False
-
             if label_area == labels[0] and after_idx < len(labels):  # expand left
                 expanded_label_area = labels[after_idx]
                 new_start_time = label_area.start_time
@@ -353,7 +399,7 @@ class Selection:
                     after_label = labels[after_idx]
                     merging_adjacent = (expanded_label_area.label == after_label.label)
 
-                    if merging_adjacent:
+                    if merging_adjacent and merge_adjacent:
                         new_range = [expanded_label_area.start_time, after_label.start_time + after_label.duration]
                         new_dur = expanded_label_area.duration + label_area.duration + after_label.duration
 
@@ -383,8 +429,8 @@ class Selection:
         Handles the actions performed when the mouse is at 
         a given (x, y) in ViewBox coordinates.
         """
-        TRANSITION_HIGHLIGHT_THRESHOLD = 3 * self.datawindow.devicePixelRatioF() # pixels
-        BASELINE_HIGHLIGHT_THRESHOLD = 3 * self.datawindow.devicePixelRatioF()
+        TRANSITION_HIGHLIGHT_THRESHOLD = 2 * self.datawindow.devicePixelRatioF() # pixels
+        BASELINE_HIGHLIGHT_THRESHOLD = 2 * self.datawindow.devicePixelRatioF()
         
         (x_min, x_max), (y_min, y_max) = self.datawindow.viewbox.viewRange()
 
@@ -395,16 +441,17 @@ class Selection:
 
         pixel_ratio = self.datawindow.devicePixelRatioF()
 
+        # Get distances to relevant items
         transition_line, transition_distance = self.datawindow.get_closest_transition(x)
         baseline, baseline_distance = self.datawindow.get_baseline_distance(y)
         label_area = self.datawindow.get_closest_label_area(x)
 
         if not self.datawindow.baseline.isVisible():
-            baseline_distance = float('inf')
+            baseline_distance = float('inf')  # ignore baseline if not visible
 
         if transition_distance <= TRANSITION_HIGHLIGHT_THRESHOLD * pixel_ratio:
             if transition_line == self.datawindow.labels[0].transition_line:
-                return  # can't drag leftmost transition
+                return  # can't drag the leftmost transition
             self.hovered_item = transition_line
             self.update_highlight(transition_line, cursor = Qt.CursorShape.OpenHandCursor)
         elif baseline_distance <= BASELINE_HIGHLIGHT_THRESHOLD * pixel_ratio:
@@ -415,17 +462,20 @@ class Selection:
             self.update_highlight(label_area, cursor = None)
 
 
-    def update_highlight(self, item, cursor = None):
+    def update_highlight(self, item, cursor: Qt.CursorShape = None):
+        """
+        Handles styling a highlighted item and updating the cursor.
+        """
         if cursor:
             self.datawindow.setCursor(cursor)
         else:
             self.datawindow.setCursor(Qt.CursorShape.ArrowCursor)  # default
 
         if self.is_selected(item):
-            self.unhighlight_item(self.highlighted_item)
+            self.unhighlight_item(self.highlighted_item) # unhighlight previous item
             return  # don't highlight already selected items
 
-        # check if highlighted item needs to change:
+        # Check if highlighted item needs to change:
         if self.highlighted_item != item:
             if self.highlighted_item is not None:
                 self.unhighlight_item(self.highlighted_item) # unhighlight previous item
@@ -449,8 +499,12 @@ class Selection:
             self.highlighted_item = item
 
     def get_highlighted_color(self, color: QColor) -> QColor:
+        """
+        Computes the highlighted color for a given QColor.
+        """
         h, s, l, a = color.getHslF()
-        highlighted_color = QColor.fromHslF(h, min(s * 8, 1), l * 0.9, a)  
+        #highlighted_color = QColor.fromHslF(h, min(s * 5, 1), l * 0.9, a)
+        highlighted_color = QColor.fromHslF(h, max(s, 1 - s**2), l * 0.9, a)    
         highlighted_color.setAlpha(200)
         return highlighted_color
 
