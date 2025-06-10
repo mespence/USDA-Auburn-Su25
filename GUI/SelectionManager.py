@@ -422,6 +422,71 @@ class Selection:
             x, y = self.last_cursor_pos
             self.hover(x, y)
 
+   # TODO: CHANGE TO def merge_labels(self, area1: LabelArea, area2: LabelArea, area3: LabelArea = None, label: str = None) -> tuple[float, float]:
+    def merge_labels(self, label_area: LabelArea) -> tuple[float, float]:
+        """
+        
+        """
+        labels = self.datawindow.labels
+        idx = labels.index(label_area)
+
+        before = labels[idx - 1] if idx > 0 else None
+        after = labels[idx + 1] if idx + 1 < len(labels) else None
+
+        merging_left = (before and before.label == label_area.label)
+        merging_right = (after and after.label == label_area.label)
+
+        def remove_label_area(area: LabelArea):
+            """Helper function to remove label areas from the viewbox and update self.labels."""
+            for item in area.getItems():
+                self.datawindow.viewbox.removeItem(item)
+            if area in labels:
+                labels.remove(area)
+                
+        if merging_left and merging_right:
+            new_start = before.start_time
+            new_dur = before.duration + label_area.duration + after.duration
+            remove_label_area(label_area)
+            remove_label_area(after)
+            before.duration = new_dur
+            before.update_label_area()
+            new_range = (new_start, new_start + new_dur)
+
+        elif merging_left:
+            new_dur = before.duration + label_area.duration
+            remove_label_area(label_area)
+            before.duration = new_dur
+            before.update_label_area()
+            new_range = (before.start_time, before.start_time + new_dur)
+
+        elif merging_right:
+            new_start = label_area.start_time
+            new_dur = label_area.duration + after.duration
+            remove_label_area(after)
+            label_area.duration = new_dur
+            label_area.update_label_area()
+            new_range(new_start, new_start + new_dur)
+
+        else:
+            new_range = (label_area.start_time, label_area.start_time + label_area.duration)
+        
+        return new_range
+
+        # if merging_left and merging_right:
+        #     new_start_time = before_label_area.start_time
+        #     new_dur = before_label_area.duration + label_area.duration + after_label_area.duration
+        #     new_range = [new_start_time, new_start_time + new_dur]
+
+        #     items_to_remove = [la.getItems() for la in [after_label_area, label_area]]
+
+        #     for item in items_to_remove:
+        #         self.datawindow.viewbox.removeItem(item)
+
+        #     del self.datawindow.labels[after_idx]
+        #     del self.datawindow.labels[idx]
+
+
+
     def hover(self, x: float, y: float):
         """
         Handles the actions performed when the mouse is at 
@@ -529,9 +594,6 @@ class Selection:
             item.duration_background.setBrush(mkBrush(color=item.get_background_color()))
 
         self.highlighted_item = None
-
-    
-
 
     def change_label_type(self, label_area: LabelArea, new_label: str) -> None:
         if self.is_selected(label_area):
