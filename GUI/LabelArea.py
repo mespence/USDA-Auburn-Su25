@@ -63,7 +63,7 @@ class LabelArea:
         self.viewbox.addItem(self.label_text)
 
         self.duration = dur
-        self.duration_text = TextItem(str(round(dur, 2)), color='black', anchor=(0.5, 0.5))
+        self.duration_text = TextItem(f"{dur:.2f}", color='black', anchor=(0.5, 0.5))
         self.duration_text.setFont(font)
         self.duration_text.setPos(centered_x, duration_y)
         self.viewbox.addItem(self.duration_text)
@@ -100,7 +100,7 @@ class LabelArea:
 
         self.viewbox.sigTransformChanged.connect(self.update_label_area)  # bug here after deleting all areas
     
-        self.is_end_area = (dur == 0 and label == 'empty')
+        self.is_end_area = (label == 'END AREA')
 
         if self.enable_debug:
             self.toggle_debug_boxes()   
@@ -223,11 +223,16 @@ class LabelArea:
         duration_y = y_max - 0.05 * (y_max - y_min)
         
 
+
         # update text and area if changed
         if self.label_text.toPlainText() != self.label:  # label changed
             self.label_text.setText(self.label)
-        if self.duration_text.toPlainText() != str(round(self.duration, 2)):  # duration changed
-            self.duration_text.setText(str(round(self.duration, 2)))
+            self.area.setBrush(mkBrush(color=Settings.label_to_color[self.label]))
+            self.label_background.setBrush(mkBrush(color=self.get_background_color()))
+            self.duration_background.setBrush(mkBrush(color=self.get_background_color()))
+
+        if self.duration_text.toPlainText() != f"{self.duration:.2f}":  # duration changed
+            self.duration_text.setText(f"{self.duration:.2f}")
             self.area.setRegion((self.start_time, self.start_time + self.duration))
 
         # update text pos
