@@ -391,46 +391,57 @@ class Selection:
 
         if len(labels) > 1:
             if label_area == labels[0] and after_idx < len(labels):  # expand left
-                expanded_label_area = labels[after_idx]
-                new_start_time = label_area.start_time
-                new_range = [new_start_time, expanded_label_area.start_time +  expanded_label_area.duration]
-                new_dur = expanded_label_area.duration + label_area.duration
-                expanded_label_area.start_time = new_start_time
-                expanded_label_area.set_transition_line(new_start_time)
+                expanded_label_area = labels[after_idx] 
+                label_area.label = expanded_label_area.label
+                self.merge_adjacent_labels(label_area)
+
+
+
+                # new_start_time = label_area.start_time
+
+
+                # new_range = [new_start_time, expanded_label_area.start_time +  expanded_label_area.duration]
+                # new_dur = expanded_label_area.duration + label_area.duration
+                # expanded_label_area.start_time = new_start_time
+                # expanded_label_area.set_transition_line(new_start_time)
 
             else:  # expand right
                 expanded_label_area = labels[before_idx]
-                if after_idx < len(labels):
-                    after_label = labels[after_idx]
-                    merging_adjacent = (expanded_label_area.label == after_label.label)
+                label_area.label = expanded_label_area.label
+                self.merge_adjacent_labels(label_area)
 
-                    if merging_adjacent and merge_adjacent:
-                        new_range = [expanded_label_area.start_time, after_label.start_time + after_label.duration]
-                        new_dur = expanded_label_area.duration + label_area.duration + after_label.duration
 
-                        for item in after_label.getItems():
-                            self.datawindow.viewbox.removeItem(item)
-                        del self.datawindow.labels[after_idx]
-                    else:
-                        new_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration]
-                        new_dur = expanded_label_area.duration + label_area.duration
+            #     if after_idx < len(labels):
+            #         after_label = labels[after_idx]
+            #         merging_adjacent = (expanded_label_area.label == after_label.label)
 
-            expanded_label_area.area.setRegion(new_range) 
-            expanded_label_area.duration = new_dur
-            expanded_label_area.duration_text.setText(f"{new_dur:.2f}")
-            expanded_label_area.update_label_area()
+            #         if merging_adjacent and merge_adjacent:
+            #             new_range = [expanded_label_area.start_time, after_label.start_time + after_label.duration]
+            #             new_dur = expanded_label_area.duration + label_area.duration + after_label.duration
 
-        for item in label_area.getItems():
-            self.datawindow.viewbox.removeItem(item)   
+            #             for item in after_label.getItems():
+            #                 self.datawindow.viewbox.removeItem(item)
+            #             del self.datawindow.labels[after_idx]
+            #         else:
+            #             new_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration]
+            #             new_dur = expanded_label_area.duration + label_area.duration
 
-        del self.datawindow.labels[current_idx]
+            # expanded_label_area.area.setRegion(new_range) 
+            # expanded_label_area.duration = new_dur
+            # expanded_label_area.duration_text.setText(f"{new_dur:.2f}")
+            # expanded_label_area.update_label_area()
 
-        if self.last_cursor_pos:
-            x, y = self.last_cursor_pos
-            self.hover(x, y)
+        # for item in label_area.getItems():
+        #     self.datawindow.viewbox.removeItem(item)   
+
+        # del self.datawindow.labels[current_idx]
+
+        # if self.last_cursor_pos:
+        #     x, y = self.last_cursor_pos
+        #     self.hover(x, y)
 
    # TODO: CHANGE TO def merge_labels(self, area1: LabelArea, area2: LabelArea, area3: LabelArea = None, label: str = None) -> tuple[float, float]:
-    def merge_labels(self, label_area: LabelArea) -> tuple[float, float]:
+    def merge_adjacent_labels(self, label_area: LabelArea) -> None:
         """
         
         """
@@ -444,53 +455,42 @@ class Selection:
         merging_right = (after and after.label == label_area.label)
 
         def remove_label_area(area: LabelArea):
-            """Helper function to remove label areas from the viewbox and update self.labels."""
+            """Helper function to remove label areas from the viewbox and update labels."""
             for item in area.getItems():
-                self.datawindow.viewbox.removeItem(item)
-            if area in labels:
-                labels.remove(area)
-                
+                scene = item.scene()
+                if scene is not None:
+                    scene.removeItem(item)
+
+            if area in self.datawindow.labels:
+                if self.is_selected(area):
+                    self.deselect_item(area)
+                self.datawindow.labels.remove(area)
+
         if merging_left and merging_right:
-            new_start = before.start_time
-            new_dur = before.duration + label_area.duration + after.duration
+            if self.is_selected(label_area):
+                self.select(before)
+
             remove_label_area(label_area)
             remove_label_area(after)
-            before.duration = new_dur
+            before.duration = before.duration + label_area.duration + after.duration
             before.update_label_area()
-            new_range = (new_start, new_start + new_dur)
 
         elif merging_left:
-            new_dur = before.duration + label_area.duration
+            if self.is_selected(label_area):
+                self.select(before)
+
             remove_label_area(label_area)
-            before.duration = new_dur
+            before.duration = before.duration + label_area.duration
             before.update_label_area()
-            new_range = (before.start_time, before.start_time + new_dur)
 
         elif merging_right:
-            new_start = label_area.start_time
-            new_dur = label_area.duration + after.duration
             remove_label_area(after)
-            label_area.duration = new_dur
+            label_area.duration = label_area.duration + after.duration
             label_area.update_label_area()
-            new_range(new_start, new_start + new_dur)
 
-        else:
-            new_range = (label_area.start_time, label_area.start_time + label_area.duration)
-        
-        return new_range
-
-        # if merging_left and merging_right:
-        #     new_start_time = before_label_area.start_time
-        #     new_dur = before_label_area.duration + label_area.duration + after_label_area.duration
-        #     new_range = [new_start_time, new_start_time + new_dur]
-
-        #     items_to_remove = [la.getItems() for la in [after_label_area, label_area]]
-
-        #     for item in items_to_remove:
-        #         self.datawindow.viewbox.removeItem(item)
-
-        #     del self.datawindow.labels[after_idx]
-        #     del self.datawindow.labels[idx]
+        if self.last_cursor_pos:
+            x, y = self.last_cursor_pos
+            self.hover(x, y)
 
 
 
@@ -603,17 +603,21 @@ class Selection:
         self.highlighted_item = None
 
     def change_label_type(self, label_area: LabelArea, new_label: str) -> None:
-        if self.is_selected(label_area):
+        if self.is_selected(label_area): # label area selected
             selected_label_areas = [label for label in self.selected_items if isinstance(label, LabelArea)]
-            for label_area in selected_label_areas:
+            for label_area in selected_label_areas: # change without merging
                 label_area.label = new_label
                 label_area.update_label_area()
                 label_area.area.setBrush(self.selected_style['area'])
                 label_area.label_background.setBrush(self.selected_style['text background'])
                 label_area.duration_background.setBrush(self.selected_style['text background'])
-        else:
+            for label_area in selected_label_areas[:]: # merge all labels if necessary
+                if label_area in self.datawindow.labels:
+                    self.merge_adjacent_labels(label_area)
+        else: # label area highlighted
             label_area.label = new_label
             label_area.update_label_area()
+            self.merge_adjacent_labels(label_area)
 
 
         dw = self.datawindow
