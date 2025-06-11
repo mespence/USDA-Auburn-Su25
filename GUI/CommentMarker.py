@@ -55,6 +55,9 @@ class CommentMarker():
 
 
     def show_comment_editor(self, event = QMouseEvent):
+        self.plot_widget.comment_editing = True
+
+        event.accept()
         dialog = QDialog()
         dialog.setWindowTitle(f"Edit Comment @ {self.time:.2f}s")
 

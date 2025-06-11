@@ -14,7 +14,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtCore import Qt, QPointF, QTimer, QObject, QEvent
 
-from PyQt6.QtWidgets import QInputDialog, QMessageBox, QMenu
+from PyQt6.QtWidgets import QPushButton, QVBoxLayout, QLabel, QDialog, QTextEdit, QMessageBox, QMenu
 
 from EPGData import EPGData
 from Settings import Settings
@@ -91,45 +91,46 @@ class PanZoomViewBox(ViewBox):
         # Disable all mouse drag panning/zooming
         event.ignore()
 
-    def contextMenuEvent(self, event):
-        if self.datawindow is None:
-            self.datawindow = self.parentItem().getViewWidget()
 
-        item = self.datawindow.selection.hovered_item
-        if isinstance(item, InfiniteLine):
-            print('Right-clicked InfiniteLine')
-            return  # TODO: infinite line context menu not yet implemented
+    # def contextMenuEvent(self, event):
+    #     if self.datawindow is None:
+    #         self.datawindow = self.parentItem().getViewWidget()
+
+    #     item = self.datawindow.selection.hovered_item
+    #     if isinstance(item, InfiniteLine):
+    #         print('Right-clicked InfiniteLine')
+    #         return  # TODO: infinite line context menu not yet implemented
         
-        menu = QMenu()
-        label_type_dropdown = QMenu("Change Label Type", menu)
+    #     menu = QMenu()
+    #     label_type_dropdown = QMenu("Change Label Type", menu)
 
-        label_names = list(Settings.label_to_color.keys())
-        label_names.remove("END AREA")
-        for label in label_names:            
-            action = QAction(label, menu)
-            action.setCheckable(True)
+    #     label_names = list(Settings.label_to_color.keys())
+    #     label_names.remove("END AREA")
+    #     for label in label_names:            
+    #         action = QAction(label, menu)
+    #         action.setCheckable(True)
 
-            if item.label == label:
-                action.setChecked(True)
+    #         if item.label == label:
+    #             action.setChecked(True)
                 
-            action.triggered.connect(
-                lambda checked, label_area=item, label=label:
-                self.datawindow.selection.change_label_type(label_area, label)
-            )
+    #         action.triggered.connect(
+    #             lambda checked, label_area=item, label=label:
+    #             self.datawindow.selection.change_label_type(label_area, label)
+    #         )
             
 
-            label_type_dropdown.addAction(action)
+    #         label_type_dropdown.addAction(action)
 
 
-        action2 = QAction("Custom Option 2")
-        menu.addMenu(label_type_dropdown)
-        menu.addAction(action2)
+    #     action2 = QAction("Custom Option 2")
+    #     menu.addMenu(label_type_dropdown)
+    #     menu.addAction(action2)
 
-        action = menu.exec(event.screenPos())
-        if action == label_type_dropdown:
-            print("Option 1 selected")
-        elif action == action2:
-            print("Option 2 selected")
+    #     action = menu.exec(event.screenPos())
+    #     if action == label_type_dropdown:
+    #         print("Option 1 selected")
+    #     elif action == action2:
+    #         print("Option 2 selected")
 
 class GlobalMouseTracker(QObject):
     def __init__(self, datawindow):
@@ -174,6 +175,7 @@ class DataWindow(PlotWidget):
         self.labels: list[LabelArea] = []  # the list of LabelAreas
         self.comments: dict[float, CommentMarker] = {} # the dict of Comments
         self.comments_enabled = True
+        self.comment_editing = False
 
         self.selection: Selection = Selection(self)
 
@@ -513,28 +515,50 @@ class DataWindow(PlotWidget):
         existing = df.at[nearest_idx, 'comments']
         
         if existing and str(existing).strip():
-            confirm = QMessageBox.Question(
+            confirm = QMessageBox.question(
                 self,
                 "Overwrite Comment?",
                 f"A comment already exists at {df.at[nearest_idx, 'time']:.2f}s:\n\n\"{existing}\"\n\nReplace it?",
-                QMessageBox.Yes | QMessageBox.No
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                 )
-            if confirm != QMessageBox.Yes:
+            if confirm == QMessageBox.StandardButton.No:
                 return
 
-        text, ok = QInputDialog.getText(self, "Add Comment", f"Comment at {x:.2f} s:")
-        if not ok or not text.strip():
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Add Comment @ {comment_time:.2f}s")
+
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Add Comment:"))
+
+        text = QTextEdit()
+        layout.addWidget(text)
+
+        save_button = QPushButton("Save")
+        cancel_button = QPushButton("Cancel")
+        layout.addWidget(save_button)
+        layout.addWidget(cancel_button)
+        save_button.clicked.connect(dialog.accept)
+        cancel_button.clicked.connect(dialog.reject)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        
+        text = text.toPlainText().strip()
+        if not text:
             return
 
         df.at[nearest_idx, 'comments'] = text
-        
         marker = self.comments.get(comment_time)
         if marker:
             marker.set_text(text)
         else:
             new_marker = CommentMarker(comment_time, text, self)
             self.comments[comment_time] = new_marker
-        
+
+        # self.viewbox.update()
+        self.setFocus(Qt.FocusReason.MouseFocusReason)
+        self.setMouseTracking(True)
+
         return
 
 # TODO need to implement when understand format of comment
@@ -875,13 +899,17 @@ class DataWindow(PlotWidget):
         point = self.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
 
+        print("click event", (x,y))
+
         if event.button() == Qt.MouseButton.LeftButton:
             if self.baseline_preview_enabled:
                 self.set_baseline(event)
             else:
                 self.selection.mouse_press_event(event)
         elif event.button() == Qt.MouseButton.RightButton:
+            print("click event", (x,y))
             self.add_comment(event)
+            print("done")
 
         # (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
         # if not (x_min <= x <= x_max and y_min <= y <= y_max):
@@ -940,6 +968,7 @@ class DataWindow(PlotWidget):
         #     self.add_drop_transitions(event)
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         super().mouseReleaseEvent(event)
+
         self.selection.mouse_release_event(event)
         
         if self.moving_mode:
@@ -962,7 +991,9 @@ class DataWindow(PlotWidget):
         point = self.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
 
-        #self.selection.last_cursor_pos = (x, y)           
+        self.selection.last_cursor_pos = (x, y)  
+
+        print("move event", self.selection.last_cursor_pos)         
 
         if self.baseline_preview_enabled:
             _, (y_min, y_max) = self.viewbox.viewRange()
@@ -987,7 +1018,6 @@ class DataWindow(PlotWidget):
         # horizontal and vertical scrolling along with zoom.
         # """
         self.viewbox.wheelEvent(event)
-
 
 
 # TODO: remove after feature-complete and integrated with main

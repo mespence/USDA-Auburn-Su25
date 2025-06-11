@@ -220,6 +220,15 @@ class Selection:
         
         # ----------- LEFT CLICK -----------
         if event.button() == Qt.MouseButton.LeftButton:
+
+            #COMMENT TESITNG
+
+            if self.datawindow.comment_editing:
+                self.datawindow.comment_editing = False
+                return
+
+            # END
+
             # Left-clicked no item
             if self.hovered_item == None:
                 self.deselect_all()
@@ -268,8 +277,6 @@ class Selection:
     def mouse_move_event(self, event: QMouseEvent) -> None:
         point = self.datawindow.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
-
-        # self.last_cursor_pos = (x, y) # save current pos
 
         if self.datawindow.edit_mode_enabled and not self.moving_mode:
             self.hover(x, y) 
