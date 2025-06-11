@@ -132,6 +132,9 @@ class PanZoomViewBox(ViewBox):
             print("Option 2 selected")
 
 class GlobalMouseTracker(QObject):
+    """
+    Helper class to track mouse position through pop-ups and menus.
+    """
     def __init__(self, datawindow):
         super().__init__()
         self.datawindow: DataWindow = datawindow
@@ -880,8 +883,8 @@ class DataWindow(PlotWidget):
                 self.set_baseline(event)
             else:
                 self.selection.mouse_press_event(event)
-        elif event.button() == Qt.MouseButton.RightButton:
-            self.add_comment(event)
+        # elif event.button() == Qt.MouseButton.RightButton:
+        #     self.add_comment(event)
 
         # (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
         # if not (x_min <= x <= x_max and y_min <= y <= y_max):
@@ -999,7 +1002,7 @@ def main():
     epgdata = EPGData()
     epgdata.load_data("test_recording.csv")
     #epgdata.load_data(r'C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv')
-    print("Data Loaded")
+    #print("Data Loaded")
     
     window = DataWindow(epgdata)
     window.plot_recording(window.epgdata.current_file, 'pre')
