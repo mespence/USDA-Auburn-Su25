@@ -6,18 +6,16 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QGridLayout, QPu
 from PyQt6.QtCore import QRunnable, pyqtSignal, QThreadPool
 from PyQt6.QtGui import QIcon
 
-
 from DataWindow2 import DataWindow
-
 from EPGData import EPGData
 from Labeler import Labeler
-print('Labeler Imported')
 from Settings import Settings
 from FileSelector import FileSelector
 from SettingsWindow import SettingsWindow
 #from ModelSelector import ModelSelector
 
-print('Remaining classes imported')
+import warnings
+warnings.filterwarnings('ignore', module="torch", message="enable_nested_tensor is True.*")
 
 
 

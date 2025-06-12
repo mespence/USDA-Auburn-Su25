@@ -191,6 +191,7 @@ class DataWindow(PlotWidget):
         # UI ITEMS
         super().__init__(viewBox=PanZoomViewBox())
         self.plot_item: PlotItem = self.getPlotItem() # the plotting canvas (axes, grid, data, etc.)
+        self.plot_item.hideButtons()
         self.viewbox: PanZoomViewBox = self.plot_item.getViewBox() # the plotting area (no axes, etc.)
         self.viewbox.datawindow = self
         self.viewbox.menu = None  # disable default menu
@@ -801,6 +802,7 @@ class DataWindow(PlotWidget):
         for label_area in self.labels:
             if label_area.label == label:
                 label_area.area.setBrush(mkBrush(color))
+                label_area.update_label_area()
 
     def change_line_color(self, color: QColor) -> None:
         """

@@ -1,8 +1,9 @@
 from PyQt6.QtWidgets import (
     QWidget, QGridLayout, QCheckBox, QSpinBox, 
-    QDoubleSpinBox, QColorDialog, QMessageBox
+    QDoubleSpinBox, QColorDialog, QMessageBox, QComboBox,
+    QLineEdit, QPushButton, QLabel
 )
-from PyQt6.QtGui import QComboBox, QLineEdit, QPushButton, QLabel, QColor
+from PyQt6.QtGui import QColor
 from PyQt6.QtCore import pyqtSignal, QRandomGenerator, Qt, QSettings
 
 from Settings import Settings
