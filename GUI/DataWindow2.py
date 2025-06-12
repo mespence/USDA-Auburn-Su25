@@ -168,7 +168,9 @@ class DataWindow(PlotWidget):
         self.scatter: ScatterPlotItem = ScatterPlotItem(
             symbol="o", size=4, brush="blue"
         )  # the discrete points shown at high zooms
-        
+
+
+        self.last_cursor_pos: tuple[float, float] = (0,0) # last cursor pos in screen-space coords
         self.cursor_mode: str = "normal"  # cursor state, e.g. normal, baseline selection
         self.compression: float = 0
         self.compression_text: TextItem = TextItem()
@@ -383,6 +385,10 @@ class DataWindow(PlotWidget):
         for label_area in self.labels:
            label_area.update_label_area()
 
+        
+
+        
+
     def update_compression(self) -> None:
         """
         update_compression updates the compression readout
@@ -526,7 +532,7 @@ class DataWindow(PlotWidget):
         
         comments_df = df[~df["comments"].isnull()]
         for time, text in zip(comments_df["time"], comments_df["comments"]):
-            marker = CommentMarker(time, text, self, icon_path="message.svg")
+            marker = CommentMarker(time, text, self, icon_path=r"GUI\message.svg")
             self.comments[time] = marker
         
         return
@@ -1042,6 +1048,7 @@ class DataWindow(PlotWidget):
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         super().mouseMoveEvent(event)
+        self.last_cursor_pos
 
         point = self.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
@@ -1087,7 +1094,6 @@ def main():
     epgdata = EPGData()
     epgdata.load_data("test_recording.csv")
     #epgdata.load_data(r'C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv')
-    #print("Data Loaded")
     
     window = DataWindow(epgdata)
     window.plot_recording(window.epgdata.current_file, 'pre')
