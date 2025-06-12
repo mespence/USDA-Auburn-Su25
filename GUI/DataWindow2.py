@@ -3,16 +3,16 @@ from numpy.typing import NDArray
 import os
 
 from pyqtgraph import (
-    PlotWidget, ViewBox, PlotItem, 
+    PlotWidget, ViewBox, PlotItem, setConfigOptions,
     TextItem, PlotDataItem, ScatterPlotItem, InfiniteLine,
-    mkPen, mkBrush, setConfigOptions
+    mkPen, mkBrush
 )
 
 from PyQt6.QtGui import (
     QKeyEvent, QWheelEvent, QMouseEvent, QColor, 
     QGuiApplication, QCursor, QAction
 )
-from PyQt6.QtCore import Qt, QPointF, QTimer, QObject, QEvent
+from PyQt6.QtCore import Qt, QPoint, QPointF, QTimer, QObject, QEvent
 
 from PyQt6.QtWidgets import QPushButton, QVBoxLayout, QLabel, QDialog, QTextEdit, QMessageBox, QMenu
 
@@ -34,20 +34,26 @@ if os.name == "nt":
 
 class PanZoomViewBox(ViewBox):
     """
-    Helper class to override the default ViewBox behavior
-    of scroll -> zoom and drag -> pan.
+    Custom ViewBox that overrides default mouse/scroll behavior to support
+    pan and zoom using wheel + modifiers.
+
+    Pan/Zoom behavior:
+    - Ctrl + Scroll: horizontal/vertical zoom (with Shift)
+    - Scroll only: pan (horizontal or vertical based on Shift)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.datawindow: DataWindow = None
 
     def wheelEvent(self, event: QWheelEvent, axis=None) -> None:
         """
-        Handles all wheel + modifier inputs and maps 
-        them to the correct pan/zoom action.
-        """
+        Handles wheel input for zooming and panning, based on modifier keys.
 
+        - Ctrl: zoom
+        - Shift: vertical zoom or pan
+        - No modifiers: horizontal pan
+        """
         if self.datawindow is None:
             self.datawindow = self.parentItem().getViewWidget()
         
@@ -88,11 +94,18 @@ class PanZoomViewBox(ViewBox):
         self.datawindow.update_plot()
 
     def mouseDragEvent(self, event, axis=None) -> None:
-        # Disable all mouse drag panning/zooming
+        """
+        Disables default drag-to-pan behavior (drag is used for selections).
+        """
         event.ignore()
 
 
     def contextMenuEvent(self, event):
+        """
+        Displays a context menu for right-clicking on LabelAreas.
+
+        Currently adds a label type submenu to change the label's classification.
+        """
         if self.datawindow is None:
             self.datawindow = self.parentItem().getViewWidget()
 
@@ -132,7 +145,9 @@ class PanZoomViewBox(ViewBox):
 
 class GlobalMouseTracker(QObject):
     """
-    Helper class to track mouse position through pop-ups and menus.
+    Global event filter that updates the cursor hover position inside popups
+    (e.g., menus) by tracking global mouse coordinates and mapping them to
+    DataWindow viewbox space.
     """
     def __init__(self, datawindow):
         super().__init__()
@@ -140,38 +155,61 @@ class GlobalMouseTracker(QObject):
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.MouseMove:
-            global_pos = event.globalPosition().toPoint()
-            local_pos = self.datawindow.mapFromGlobal(global_pos)
-            point = self.datawindow.window_to_viewbox(QPointF(local_pos))
-            x, y = point.x(), point.y()
+            local_pos = event.position()
+            self.datawindow.last_cursor_pos = local_pos
+            view_pos = self.datawindow.window_to_viewbox(local_pos)
 
             selection = self.datawindow.selection
-            selection.last_cursor_pos = (x, y)
-            selection.hovered_item = selection.get_hovered_item(x, y)
-            if isinstance(selection.hovered_item, LabelArea):
-                print(selection.hovered_item.label) 
+            selection.hovered_item = selection.get_hovered_item(view_pos.x(), view_pos.y())
+
         return super().eventFilter(obj, event)
 
 class DataWindow(PlotWidget):
+    """
+    Main widget for visualizing waveform recordings.
+
+    Includes:
+    - Zooming and panning (via `PanZoomViewBox`)
+    - Interactive label areas
+    - Transition lines
+    - Baseline editing
+    - Comment markers
+    - Compression and zoom indicators
+
+    Also handles data loading, rendering, and downsampling for performance.
+    """
     def __init__(self, epgdata: EPGData) -> None:
+        """
+        Initializes the DataWindow with plotting elements, UI overlays, and input handling.
+
+        Parameters:
+            epgdata (EPGData): The waveform and label data source.
+        """
+        # UI ITEMS
         super().__init__(viewBox=PanZoomViewBox())
         self.plot_item: PlotItem = self.getPlotItem() # the plotting canvas (axes, grid, data, etc.)
         self.viewbox: PanZoomViewBox = self.plot_item.getViewBox() # the plotting area (no axes, etc.)
         self.viewbox.datawindow = self
+        self.viewbox.menu = None  # disable default menu
+        self.viewbox.sigRangeChanged.connect(self.update_plot)  # update plot on viewbox change
 
+        # DATA
         self.epgdata: EPGData = epgdata
         self.file: str = None
-        self.prepost: str = "post"
+        self.prepost: str = "pre"
         
         self.xy_data: list[NDArray] = []  # x and y data actually rendered to the screen
         self.curve: PlotDataItem = PlotDataItem(antialias=False) 
         self.scatter: ScatterPlotItem = ScatterPlotItem(
             symbol="o", size=4, brush="blue"
         )  # the discrete points shown at high zooms
+        self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
 
+        # CURSOR
+        self.last_cursor_pos: QPointF = None # last cursor pos in screen-space coords
+        # self.cursor_mode: str = "normal"  # cursor state, e.g. normal, baseline selection
 
-        self.last_cursor_pos: tuple[float, float] = (0,0) # last cursor pos in screen-space coords
-        self.cursor_mode: str = "normal"  # cursor state, e.g. normal, baseline selection
+        # INDICATORS & LABELS
         self.compression: float = 0
         self.compression_text: TextItem = TextItem()
         self.zoom_level: float = 1
@@ -180,9 +218,10 @@ class DataWindow(PlotWidget):
         self.transition_mode: str = 'labels'
         self.labels: list[LabelArea] = []  # the list of LabelAreas
 
+        # SELECTION
         self.selection: Selection = Selection(self)
-
-        self.viewbox.menu = None  # Disable default menu
+        self.moving_mode: bool = False  # whether an interactive item is being moved
+        self.edit_mode_enabled: bool = True  # whether the labels can be interacted with
 
         # BASELINE
         self.baseline: InfiniteLine = InfiniteLine(
@@ -198,7 +237,6 @@ class DataWindow(PlotWidget):
 
         self.addItem(self.baseline_preview)
         self.baseline_preview.setVisible(False)
-
         self.baseline_preview_enabled: bool = False
 
         # COMMENTS
@@ -215,15 +253,14 @@ class DataWindow(PlotWidget):
 
         self.comment_preview_enabled: bool = False
 
-        self.moving_mode: bool = False  # whether an interactice item is being moved
-        self.edit_mode_enabled: bool = True
-        self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
-        
-        self.viewbox.sigRangeChanged.connect(self.update_plot)
 
         self.initUI()
 
     def initUI(self) -> None:
+        """
+        Initializes plot appearance, UI layout, axes labels, and placeholder data.
+        Called once during setup.
+        """
         self.chart_width: int = 400
         self.chart_height: int = 400
         self.setGeometry(0, 0, self.chart_width, self.chart_height)
@@ -264,8 +301,7 @@ class DataWindow(PlotWidget):
 
     def deferred_init(self) -> None:
         """
-        Initalizes the items that need to be initalized after
-        everything has been rendered to the screen.
+        Defers adding compression/zoom overlays until the scene is ready.
         """
         self.compression = 0
         self.compression_text = TextItem(
@@ -287,37 +323,34 @@ class DataWindow(PlotWidget):
 
     def resizeEvent(self, event) -> None:
         """
-        Handles window resizing.
+        Handles window resizing and updates compression indicator.
         """
         super().resizeEvent(event)
         self.update_compression()
 
     def window_to_viewbox(self, point: QPointF) -> QPointF:
         """
-        Converts a point from window (screen) coordinates to viewbox (data)
-        coordinates.
+        Converts between widget (screen) coordinates and data (viewbox) coordinates.
 
-        Inputs:
-            point: point in widget coodinates
+        Parameters:
+            point (QPointF): Point in widget coordinates.
 
         Returns:
-            QPointF: corresponding point in viewbox (data) coordinates
-        """
-        
+            QPointF: The corresponding point in data coordinates.
+        """        
         scene_pos = self.mapToScene(point.toPoint())
         data_pos = self.viewbox.mapSceneToView(scene_pos)
         return data_pos
 
     def viewbox_to_window(self, point: QPointF) -> QPointF:
         """
-        Converts from viewbox (data) coordinates to window (widget) coordinates.
+        Converts between data (viewbox) coordinates and widget (screen) coordinates.
 
-        Inputs:
-            x, y: x and y coordinates in viewbox coordinates
+        Parameters:
+            point (QPointF): Point in data coordinates.
 
         Returns:
-            (window_x, window_y): window coordinates equivalent
-            to the viewbox coordinates.
+            QPointF: The corresponding point in window coordinates.
         """
         return self.viewbox.mapViewToScene(point)
         # scene_pos = self.viewbox.mapViewToScene(QPointF(x, y))
@@ -327,14 +360,7 @@ class DataWindow(PlotWidget):
 
     def reset_view(self) -> None:
         """
-        Resets the viewing window back to default
-        settings (default zoom, scrolling, etc.)
-
-        Inputs:
-            None
-
-        Returns:
-            None
+        Resets the plot to the full initial view, undoing all zoom/pan changes.
         """
         QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
 
@@ -357,13 +383,14 @@ class DataWindow(PlotWidget):
 
         QGuiApplication.restoreOverrideCursor()
 
-
-
     def update_plot(self) -> None:
         """
-        Updates the displayed data, labels, and compression/zoom 
-        indicators.
+        Redraws the waveform curve and label overlays after zoom/pan/data change.
+        Also updates compression and zoom indicators.
         """
+        if self.file is None or self.file not in self.epgdata.dfs:
+            return  # no file displayed yet
+
         (x_min, x_max), _ = self.viewbox.viewRange()
 
         self.viewbox.setLimits(xMin=None, xMax=None, yMin=None, yMax=None) # clear stale data (avoids warning)
@@ -385,27 +412,30 @@ class DataWindow(PlotWidget):
         for label_area in self.labels:
            label_area.update_label_area()
 
-        
+        self.viewbox.update()  # or anything that redraws
 
+        if self.last_cursor_pos is not None:
+            view_pos = self.window_to_viewbox(self.last_cursor_pos)
+            self.selection.hover(view_pos.x(), view_pos.y())
+
+            
         
 
     def update_compression(self) -> None:
         """
-        update_compression updates the compression readout
-        based on the zoom level according to the formula
-        COMPRESSION = (SECONDS/PIXEL) * 125
-        obtained by experimentation with WINDAQ. Note that
-        WINDAQ also has 'negative' compression levels for
-        high levels of zooming out. We do not implement those here.
-
-        TODO: Verify this formula
-
-        Inputs:
-            None
-
-        Outputs:
-            None
+        Calculates the compression level based on the current zoom level.
+        Uses a WinDAQ-derived formula.
         """
+        # """
+        # update_compression updates the compression readout
+        # based on the zoom level according to the formula
+        # COMPRESSION = (SECONDS/PIXEL) * 125
+        # obtained by experimentation with WINDAQ. Note that
+        # WINDAQ also has 'negative' compression levels for
+        # high levels of zooming out. We do not implement those here.
+
+        # TODO: Verify this formula
+        # """
 
         if not self.isVisible():
             return  # don't run prior to initialization
@@ -439,13 +469,7 @@ class DataWindow(PlotWidget):
 
     def update_zoom(self) -> None:
         """
-        Updates the zoom readout based on the current
-        scaling of the plot compared to a full rendering
-        of the data.
-        Inputs:
-            None
-        Outputs:
-            None
+        Updates the displayed zoom percentage based on current vs full-scale width.
         """
         plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
 
@@ -470,16 +494,11 @@ class DataWindow(PlotWidget):
 
     def plot_recording(self, file: str, prepost: str = "post") -> None:
         """
-        plot_recording creates an NDArray for the time series given by file
-        and updates the graph to show it.
+        Loads the time series and comments from a file and displays it.
 
-        Inputs:
-            file: a string containing the key of the recording
-            prepost: a string containing either pre or post
-                 to specify which recording is desired.
-
-        Outputs:
-            None
+        Parameters:
+            file (str): File identifier.
+            prepost (str): Either "pre" or "post" to select pre/post rectifier data.
         """
         self.file = file
         self.prepost = prepost
@@ -513,13 +532,10 @@ class DataWindow(PlotWidget):
 
     def plot_comments(self, file: str) -> None:
         """
-        plot_comments adds pre-existing comments from the file
-        to the viewbox.
+        Adds existing comment markers from the data file to the viewbox.
 
-        Inputs:
-            file: a string containing the key of the recording
-        Outputs:
-            None
+        Parameters:
+            file (str): File identifier.
         """
         if file is not None:
             self.file = file
@@ -539,13 +555,10 @@ class DataWindow(PlotWidget):
 
     def add_comment(self, event: QMouseEvent) -> None:
         """
-        add_comments adds a new comment at the time indicated
-        from a click event to the viewbox.
+        Adds or edits a comment at the clicked location via a dialog popup.
 
-        Inputs:
-            event: the mouse event and where it was clicked
-        Outputs:
-            None
+        Parameters:
+            event (QMouseEvent): The click event triggering comment placement.
         """
         point = self.window_to_viewbox(event.position())
         x = point.x()
@@ -623,18 +636,13 @@ class DataWindow(PlotWidget):
         self, x_range: tuple[float, float] = None, max_points=4000, method = 'peak'
     ) -> tuple[NDArray, NDArray]:
         """
-        Downsamples the data displayed in x_range to max_points using
-        the specifed downsampling method.
-        Modifies self.xy_data in-place.
+        Downsamples waveform data in the visible range using the selected method. Modifies self.xy_data in-place.
 
-        Inputs:
-            x_range: a (x_min, x_max) tuple of the range of the data to be displayed
-            max_points: the number of points (i.e., bins) to downsample to.
-            method: `subsample`, `mean`, or `peak`, which downsampling method to use.
-
-        Output:
-           None
-
+        Parameters:
+            x_range (tuple[float, float]): Optional x-axis range to downsample.
+            max_points (int): Max number of points to plot.
+            method (str): 'subsample', 'mean', or 'peak' downsampling method.
+        
         NOTE: 
             `subsample` samples the first point of each bin (fastest)
             `mean` averages each bin
@@ -697,15 +705,12 @@ class DataWindow(PlotWidget):
 
     def plot_transitions(self, file: str) -> None:
         """
-        plot_transition creates a vertical line for each transition and
-        then colors the region after it and before the next transition
-        accordingly.
-        Inputs:
-            file: a string containing the key of the recording
-            prepost: a string indicating whether the pre- or
-                     post- rectifier data is used
-        Outputs:
-            None
+        Plots labeled regions from label transition data as colored areas on the plot.
+
+        Also inserts a zero-width "END AREA" to terminate the plot visually.
+
+        Parameters:
+            file (str): File identifier.
         """
 
         # clear old labels if present
@@ -726,7 +731,7 @@ class DataWindow(PlotWidget):
         times, _ = self.epgdata.get_recording(self.file, self.prepost)
         transitions = self.epgdata.get_transitions(self.file, self.transition_mode)
 
-        # Only continue if the label column contains labels
+        # only continue if the label column contains labels
         if self.epgdata.dfs[file][self.transition_mode].isna().all():
             return
 
@@ -759,38 +764,53 @@ class DataWindow(PlotWidget):
 
     def change_label_color(self, label: str, color: QColor) -> None:
         """
-        change_label_color is a slot for the signal emitted by the
-        SettingsWindow on changing a label color.
+        Updates all label regions with the specified label to the new background color.
 
-        Inputs:
-            label: label for the waveform background to recolor.
-            color: color to change the label to.
-
-        Returns:
-            None
+        Parameters:
+            label (str): Label type to update.
+            color (QColor): Color to set the label areas to.
         """
+        # """
+        # change_label_color is a slot for the signal emitted by the
+        # SettingsWindow on changing a label color.
+
+        # Inputs:
+        #     label: label for the waveform background to recolor.
+        #     color: color to change the label to.
+
+        # Returns:
+        #     None
+        # """
         for label_area in self.labels:
             if label_area.label == label:
                 label_area.area.setBrush(mkBrush(color))
 
     def change_line_color(self, color: QColor) -> None:
         """
-        change_line_color is a slot for the signal emitted by the
-        SettingsWindow on changing the line color.
+        Changes the waveform curve and scatter plot line color.
 
-        Inputs:
-            color: color to which the recording line is to be changed
-
-        Returns:
-            None
+        Parameters:
+            color (QColor): Color to set the curve and scatter plot to.
         """
+        # """
+        # change_line_color is a slot for the signal emitted by the
+        # SettingsWindow on changing the line color.
+
+        # Inputs:
+        #     color: color to which the recording line is to be changed
+
+        # Returns:
+        #     None
+        # """
         self.curve.setPen(mkPen(color))
         self.scatter.setPen(mkPen(color))  
 
     def composite_on_white(self, color: QColor) -> QColor:
         """
-        Helps function to get the RGB value (no alpha) of 
-        an RGBA color displayed on a white background.
+        Helper function to convert a color with alpha into a RGB (no A) color as if shown on white.
+
+        Parameters:
+            color (QColor): Semi-transparent color to composite with white. 
         """
         r, g, b, a = color.getRgb()
         a = a / 255
@@ -799,27 +819,16 @@ class DataWindow(PlotWidget):
         new_g = round(g * a + 255 * (1 - a))
         new_b = round(b * a + 255 * (1- a))
         return QColor(new_r, new_g, new_b)
-    
-    # def darker_hsl(self, color: QColor, amount: float) -> QColor:
-    #     """
-    #     Returns a darker color by reducing HSL lightness by `amount`.
-    #     """
-    #     h, s, l, a = color.getHsl()
-    #     new_l = max(0, l - int(amount * 255))
-    #     new_color = QColor.fromHsl(h, s, new_l, a)
-    #     return new_color
         
     def get_closest_transition(self, x: float) -> tuple[int, float]:
         """
-        Returns the index and pixel distance from a given x coordinate 
-        to the closest transition line.
+        Finds the transition line closest to the given x-coordinate.
 
-        Inputs: 
-            x: the queried viewbox x-coordinate
-
-        Outputs:
-            index, x_distance: the index of and distance in pixels to the closest transition line
-        """  
+        Parameters:
+            x (float): ViewBox x-coordinate.
+        Returns:
+            (InfiniteLine, float): Closest transition line and pixel distance.
+        """
         if not self.labels:
             return float('inf')  # no labels present
         
@@ -829,22 +838,33 @@ class DataWindow(PlotWidget):
         zero_point = self.viewbox_to_window(QPointF(0,0)).x()
         
         if idx == len(transitions):
+            transition = self.labels[idx-1].transition_line
             dist = abs(transitions[idx-1] - x)
-            return self.labels[idx-1].transition_line, self.viewbox_to_window(QPointF(dist, 0)).x() - zero_point
+            dist_px = self.viewbox_to_window(QPointF(dist, 0)).x() - zero_point
+            return transition, dist_px
+        
         else:
             # Check which of the two neighbors is closer
             dist_to_left = abs(x - transitions[idx-1])
             dist_to_right = abs(transitions[idx] - x)
 
             if dist_to_left <= dist_to_right:
-                return self.labels[idx-1].transition_line, self.viewbox_to_window(QPointF(dist_to_left, 0)).x()- zero_point
+                transition = self.labels[idx-1].transition_line
+                dist_px = self.viewbox_to_window(QPointF(dist_to_left, 0)).x()- zero_point
+                return transition, dist_px
             else:
-                return self.labels[idx].transition_line, self.viewbox_to_window(QPointF(dist_to_right, 0)).x()- zero_point
+                transition = self.labels[idx].transition_line
+                dist_px = self.viewbox_to_window(QPointF(dist_to_right, 0)).x()- zero_point
+                return transition, dist_px
             
     def get_baseline_distance(self, y: float) -> float:
         """
-        Returns the baseline and pixel distance from a given y coordinate 
-        to the baseline.
+        Returns the baseline and the pixel distance to it from a y-coordinate.
+
+        Parameters:
+            y (float): ViewBox y-coordinate.
+        Returns:
+            (InfiniteLine, float): Baseline and pixel distance.
         """
         if self.baseline is None:
             return float('inf')
@@ -853,11 +873,23 @@ class DataWindow(PlotWidget):
         return self.baseline, zero_point - self.viewbox_to_window(QPointF(0, viewbox_distance)).y()
     
     def get_closest_label_area(self, x: float) -> LabelArea:
+        """
+        Returns the LabelArea covering the given x position, or None if out of bounds.
+
+        Parameters:
+            x (float): ViewBox x-coordinate.
+        Returns:
+            LabelArea: Label area the x-coordinate is part of.
+        """
+
         if not self.labels:
             return None
         
         # don't include the last label
         visible_labels = [label for label in self.labels if not label == self.labels[-1]]
+
+        if not visible_labels:
+            return None
 
         if x < visible_labels[0].start_time or x > (visible_labels[-1].start_time + visible_labels[-1].duration):
             return None  # outside the labels
@@ -880,13 +912,11 @@ class DataWindow(PlotWidget):
 
     def set_baseline(self, event: QMouseEvent):
         """
-        set_baseline creates a horizontal line where the
-        user indicates with a click on the graph
-        Inputs:
-            event: the mouse event and where it was clicked
-        Outputs:
-            None
-        """ 
+        Sets a baseline at the clicked y-position and shows the baseline.
+
+        Parameters:
+            event (QMouseEvent): The click event triggering baseline placement.
+        """
         # TODO: edit for when have edit mode functionality
         point = self.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
@@ -908,6 +938,13 @@ class DataWindow(PlotWidget):
         return
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
+        """
+        Handles key shortcuts for setting baseline ("B") or comment ("C").
+        Also forwards key events to the selection manager.
+
+        Parameters:
+            event (QKeyEvent): The key press event.
+        """
         if event.key() == Qt.Key.Key_R:
             self.reset_view()  
         if event.key() == Qt.Key.Key_B:
@@ -955,10 +992,13 @@ class DataWindow(PlotWidget):
             self.zoom_mode = False
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        super().mousePressEvent(event)
+        """
+        Delegates interaction to selection, baseline, and comment handlers based on state.
 
-        # TODO: edit for when have edit mode functionality
-        # For testing baseline preview
+        Parameters:
+            event (QMouseEvent): The mouse click event.
+        """
+        super().mousePressEvent(event)
 
         point = self.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
@@ -970,64 +1010,14 @@ class DataWindow(PlotWidget):
                 self.add_comment(event)
             else:
                 self.selection.mouse_press_event(event)
-        # elif event.button() == Qt.MouseButton.RightButton:
 
-        # (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
-        # if not (x_min <= x <= x_max and y_min <= y <= y_max):
-        #     print('click outside of box')
-        #     for item in self.selection.selected_items:
-        #         self.selection.deselect(item)
-        #     self.scene().update()
-        #     return
-        
-        # if event.button() == Qt.MouseButton.LeftButton:
-        #     # if self.baseline_preview_enabled:
-        #     #     self.set_baseline(event)
-        #     #     self.baseline_preview_enabled = False
-        #     #     self.baseline_preview.setVisible(False)
-
-        #     # elif isinstance(self.hovered_item, InfiniteLine):
-        #     #     # if already part of selection, do not reset selection
-        #     #     if self.selection.is_selected(self.hovered_item):  
-        #     #         self.moving_mode = True
-        #     #         self.setCursor(Qt.CursorShape.ClosedHandCursor)
-        #     #     else:
-        #     #         self.moving_mode = True
-        #     #         self.selection.deselect(self.selection)
-        #     #         self.selection = self.hovered_item
-        #     #         self.setCursor(Qt.CursorShape.ClosedHandCursor)
-
-        #     if isinstance(self.hovered_item, LabelArea):
-
-        #         # no shift: select new label area
-        #         if event.modifiers() == Qt.KeyboardModifier.NoModifier:
-        #             self.deselect(self.selection)
-        #             self.selection = self.hovered_item
-        #         # shift held: create/update list 
-        #         elif event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-        #             if self.selection == None:
-        #                 self.selection = self.hovered_item
-        #             elif not isinstance(self.selection, list):
-        #                 if self.hovered_item != self.selection:
-        #                     self.selection = [self.selection]
-        #                     self.selection.append(self.hovered_item)
-        #             else:
-        #                 if self.hovered_item not in self.selection:
-        #                     self.selection.append(self.hovered_item)
-                    
-        #         self.select_label_area(self.hovered_item)
-        #         print(self.selection)
-        
-    
-        # return
-        # if event.button() == Qt.MouseButton.LeftButton:
-        #     if self.cursor_state == "normal":
-        #         self.handle_transitions(event, "press")
-        #     else:
-        #         self.set_baseline(event)
-        # elif event.button() == Qt.MouseButton.RightButton:
-        #     self.add_drop_transitions(event)
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        """
+        Delegates interaction to selection, baseline, and comment handlers based on state.
+        Parameters:
+            event (QMouseEvent): The mouse release event.
+        """
+
         super().mouseReleaseEvent(event)
 
         self.selection.mouse_release_event(event)
@@ -1047,6 +1037,12 @@ class DataWindow(PlotWidget):
             self.handle_labels(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        """
+        Delegates interaction to selection, baseline, and comment handlers based on state.
+
+        Parameters:
+            event (QMouseEvent): The mouse move event.
+        """
         super().mouseMoveEvent(event)
         self.last_cursor_pos
 

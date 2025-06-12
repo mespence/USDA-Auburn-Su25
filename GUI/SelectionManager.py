@@ -53,8 +53,6 @@ class Selection:
 
         self.moving_mode: bool = False
 
-        self.last_cursor_pos_vb: tuple[float, float] = None  # the last (x,y) of the cursor in viewbox coords
-
     def _sort_key(self, item) -> float:
         """
         Returns a key to sort selected items chronologically.
@@ -235,7 +233,10 @@ class Selection:
 
             for label_area in label_areas_to_delete:
                 print(f"Deleting: {label_area.label} at {label_area.start_time:.2f}s" )
-                self.delete_label_area(label_area)
+                if label_area != label_areas_to_delete[-1]:
+                    self.delete_label_area(label_area, multi_delete = True)
+                else:
+                    self.delete_label_area(label_area, multi_delete = False)  # treat last delete of multi-delete as singular
 
     def mouse_press_event(self, event: QMouseEvent) -> None:
         """
@@ -428,12 +429,13 @@ class Selection:
 
 
 
-    def delete_label_area(self, label_area: LabelArea) -> None:
+    def delete_label_area(self, label_area: LabelArea, multi_delete: bool = False) -> None:
         """
         Deletes a LabelArea and expands an adjacent one to absorb its duration.
 
         Parameters:
             label_area (LabelArea): The LabelArea to delete.
+            multi_delete (bool): Whether the deletion is part of a multi-delete
         """
         labels = self.datawindow.labels
 
@@ -446,26 +448,43 @@ class Selection:
         if len(labels) > 1:
             if label_area == labels[0] and after_idx < len(labels):  # expand the right label area
                 expanded_label_area = labels[after_idx] 
+                if expanded_label_area.is_end_area:
+                    label_area.is_end_area = True
                 label_area.label = expanded_label_area.label
-                self.merge_adjacent_labels(label_area)
+                self.merge_adjacent_labels(label_area, deleting = multi_delete)
 
             else:  # expand the left label area
                 expanded_label_area = labels[before_idx]
                 label_area.label = expanded_label_area.label
-                self.merge_adjacent_labels(label_area)
+                self.merge_adjacent_labels(label_area, deleting = multi_delete)
+                
+        # hide if we expanded into the end area
+        if label_area.is_end_area: 
+            label_area.label_text.setVisible(False)
+            label_area.label_background.setVisible(False)
+            label_area.duration_text.setVisible(False)
+            label_area.duration_background.setVisible(False)
 
-    def merge_adjacent_labels(self, label_area: LabelArea) -> None:
+    def merge_adjacent_labels(self, label_area: LabelArea, deleting = False) -> None:
         """
         Merges the given LabelArea with adjacent ones if they share the same label type.
 
         Parameters:
             label_area (LabelArea): The LabelArea to merge from.
+            deleting (bool): True if the merge is happening as part of a deletion.
         """
         labels = self.datawindow.labels
+        if not labels:
+            return
         idx = labels.index(label_area)
+
 
         before = labels[idx - 1] if idx > 0 else None
         after = labels[idx + 1] if idx + 1 < len(labels) else None
+
+        if deleting:
+            after = None  # dont merge right on deletion
+
 
         merging_left = (before and before.label == label_area.label)
         merging_right = (after and after.label == label_area.label)
@@ -504,10 +523,9 @@ class Selection:
             label_area.duration = label_area.duration + after.duration
             label_area.update_label_area()
 
-        if self.last_cursor_pos:
-            x, y = self.last_cursor_pos
-            self.hover(x, y)
-
+        if self.datawindow.last_cursor_pos:
+            view_pos = self.datawindow.window_to_viewbox(self.datawindow.last_cursor_pos)
+            self.hover(view_pos.x(), view_pos.y())
 
 
     def hover(self, x: float, y: float) -> None:
