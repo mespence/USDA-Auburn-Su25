@@ -1,5 +1,5 @@
 from pyqtgraph import (
-    PlotWidget, TextItem, InfiniteLine, mkPen
+    PlotWidget, InfiniteLine, mkPen
 )
 from PyQt6.QtWidgets import QPushButton, QVBoxLayout, QLabel, QDialog, QTextEdit
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
@@ -54,10 +54,9 @@ class CommentMarker():
         self.icon_item.setVisible(x_min <= self.time <= x_max and icon_right_x <= x_max)
 
 
-    def show_comment_editor(self, event = QMouseEvent):
+    def show_comment_editor(self, event: None):
         self.plot_widget.comment_editing = True
 
-        event.accept()
         dialog = QDialog()
         dialog.setWindowTitle(f"Edit Comment @ {self.time:.2f}s")
 
@@ -79,6 +78,7 @@ class CommentMarker():
         
         save_button.clicked.connect(save)
         cancel_button.clicked.connect(dialog.reject)
+        dialog.setModal(True)
         dialog.exec()
 
     def set_text(self, new_text: str):

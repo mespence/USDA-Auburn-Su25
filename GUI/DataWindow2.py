@@ -92,45 +92,43 @@ class PanZoomViewBox(ViewBox):
         event.ignore()
 
 
-    # def contextMenuEvent(self, event):
-    #     if self.datawindow is None:
-    #         self.datawindow = self.parentItem().getViewWidget()
+    def contextMenuEvent(self, event):
+        if self.datawindow is None:
+            self.datawindow = self.parentItem().getViewWidget()
 
-    #     item = self.datawindow.selection.hovered_item
-    #     if isinstance(item, InfiniteLine):
-    #         print('Right-clicked InfiniteLine')
-    #         return  # TODO: infinite line context menu not yet implemented
+        item = self.datawindow.selection.hovered_item
+        if isinstance(item, InfiniteLine):
+            print('Right-clicked InfiniteLine')
+            return  # TODO: infinite line context menu not yet implemented
         
-    #     menu = QMenu()
-    #     label_type_dropdown = QMenu("Change Label Type", menu)
+        menu = QMenu()
+        label_type_dropdown = QMenu("Change Label Type", menu)
 
-    #     label_names = list(Settings.label_to_color.keys())
-    #     label_names.remove("END AREA")
-    #     for label in label_names:            
-    #         action = QAction(label, menu)
-    #         action.setCheckable(True)
+        label_names = list(Settings.label_to_color.keys())
+        label_names.remove("END AREA")
+        for label in label_names:            
+            action = QAction(label, menu)
+            action.setCheckable(True)
 
-    #         if item.label == label:
-    #             action.setChecked(True)
+            if item.label == label:
+                action.setChecked(True)
                 
-    #         action.triggered.connect(
-    #             lambda checked, label_area=item, label=label:
-    #             self.datawindow.selection.change_label_type(label_area, label)
-    #         )
-            
+            action.triggered.connect(
+                lambda checked, label_area=item, label=label:
+                self.datawindow.selection.change_label_type(label_area, label)
+            )
+        
+            label_type_dropdown.addAction(action)
 
-    #         label_type_dropdown.addAction(action)
+        action2 = QAction("Custom Option 2")
+        menu.addMenu(label_type_dropdown)
+        menu.addAction(action2)
 
-
-    #     action2 = QAction("Custom Option 2")
-    #     menu.addMenu(label_type_dropdown)
-    #     menu.addAction(action2)
-
-    #     action = menu.exec(event.screenPos())
-    #     if action == label_type_dropdown:
-    #         print("Option 1 selected")
-    #     elif action == action2:
-    #         print("Option 2 selected")
+        action = menu.exec(event.screenPos())
+        if action == label_type_dropdown:
+            print("Option 1 selected")
+        elif action == action2:
+            print("Option 2 selected")
 
 class GlobalMouseTracker(QObject):
     """
@@ -142,14 +140,17 @@ class GlobalMouseTracker(QObject):
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.MouseMove:
-            point = self.datawindow.window_to_viewbox(event.globalPosition())
+            global_pos = event.globalPosition().toPoint()
+            local_pos = self.datawindow.mapFromGlobal(global_pos)
+            point = self.datawindow.window_to_viewbox(QPointF(local_pos))
             x, y = point.x(), point.y()
 
             selection = self.datawindow.selection
             selection.last_cursor_pos = (x, y)
             selection.hovered_item = selection.get_hovered_item(x, y)
+            if isinstance(selection.hovered_item, LabelArea):
+                print(selection.hovered_item.label) 
         return super().eventFilter(obj, event)
-
 
 class DataWindow(PlotWidget):
     def __init__(self, epgdata: EPGData) -> None:
@@ -176,32 +177,44 @@ class DataWindow(PlotWidget):
         #self.transitions: list[tuple[float, str]] = []   # the x-values of each label transition
         self.transition_mode: str = 'labels'
         self.labels: list[LabelArea] = []  # the list of LabelAreas
-        self.comments: dict[float, CommentMarker] = {} # the dict of Comments
-        self.comments_enabled = True
-        self.comment_editing = False
 
         self.selection: Selection = Selection(self)
 
         self.viewbox.menu = None  # Disable default menu
 
+        # BASELINE
         self.baseline: InfiniteLine = InfiniteLine(
-            angle = 0, movable=False, pen=mkPen("gray", width = 2)
+            angle = 0, movable=False, pen=mkPen("gray", width = 3)
         )
         self.plot_item.addItem(self.baseline)
         self.baseline.setVisible(False)
         
         self.baseline_preview: InfiniteLine = InfiniteLine(
             angle = 0, movable = False,
-            pen=mkPen("gray", style = Qt.PenStyle.DashLine, width = 2),
+            pen=mkPen("gray", style = Qt.PenStyle.DashLine, width = 3),
         )
 
         self.addItem(self.baseline_preview)
         self.baseline_preview.setVisible(False)
 
         self.baseline_preview_enabled: bool = False
-        self.edit_mode_enabled: bool = True
-        self.moving_mode: bool = False  # whether an interactice item is being moved
 
+        # COMMENTS
+        self.comments: dict[float, CommentMarker] = {} # the dict of Comments
+        self.comment_editing = False
+
+        self.comment_preview: InfiniteLine = InfiniteLine(
+            angle = 90, movable = False,
+            pen=mkPen("gray", style = Qt.PenStyle.DashLine, width = 3),
+        )
+
+        self.addItem(self.comment_preview)
+        self.comment_preview.setVisible(False)
+
+        self.comment_preview_enabled: bool = False
+
+        self.moving_mode: bool = False  # whether an interactice item is being moved
+        self.edit_mode_enabled: bool = True
         self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
         
         self.viewbox.sigRangeChanged.connect(self.update_plot)
@@ -288,6 +301,7 @@ class DataWindow(PlotWidget):
         Returns:
             QPointF: corresponding point in viewbox (data) coordinates
         """
+        
         scene_pos = self.mapToScene(point.toPoint())
         data_pos = self.viewbox.mapSceneToView(scene_pos)
         return data_pos
@@ -473,7 +487,7 @@ class DataWindow(PlotWidget):
         self.initial_downsampled_data = [init_x, init_y]
         df = self.epgdata.dfs[file]
 
-        # create a comments column if doesn't yet exist
+        # create a comments column if doesn't yet exist in df
         if 'comments' not in df.columns:
             df['comments'] = None
 
@@ -492,6 +506,15 @@ class DataWindow(PlotWidget):
         self.plot_comments(file)
 
     def plot_comments(self, file: str) -> None:
+        """
+        plot_comments adds pre-existing comments from the file
+        to the viewbox.
+
+        Inputs:
+            file: a string containing the key of the recording
+        Outputs:
+            None
+        """
         if file is not None:
             self.file = file
 
@@ -509,14 +532,25 @@ class DataWindow(PlotWidget):
         return
 
     def add_comment(self, event: QMouseEvent) -> None:
+        """
+        add_comments adds a new comment at the time indicated
+        from a click event to the viewbox.
+
+        Inputs:
+            event: the mouse event and where it was clicked
+        Outputs:
+            None
+        """
         point = self.window_to_viewbox(event.position())
         x = point.x()
 
         df = self.epgdata.dfs[self.file]
+        # find nearest time clicked
         nearest_idx = (df['time'] - x).abs().idxmin()
         comment_time = df.at[nearest_idx, 'time']
         existing = df.at[nearest_idx, 'comments']
         
+        # if there's already a comment at the time clicked, give an option to replace
         if existing and str(existing).strip():
             confirm = QMessageBox.question(
                 self,
@@ -527,12 +561,13 @@ class DataWindow(PlotWidget):
             if confirm == QMessageBox.StandardButton.No:
                 return
 
+        # Create the dialog popup
         dialog = QDialog(self)
         dialog.setWindowTitle(f"Add Comment @ {comment_time:.2f}s")
+        dialog.setModal(True)
 
         layout = QVBoxLayout(dialog)
         layout.addWidget(QLabel("Add Comment:"))
-
         text = QTextEdit()
         layout.addWidget(text)
 
@@ -546,10 +581,12 @@ class DataWindow(PlotWidget):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         
+        # if the text was just spaces/an empty comment, then don't create a comment
         text = text.toPlainText().strip()
         if not text:
             return
-
+    
+        # create comment
         df.at[nearest_idx, 'comments'] = text
         marker = self.comments.get(comment_time)
         if marker:
@@ -557,11 +594,9 @@ class DataWindow(PlotWidget):
         else:
             new_marker = CommentMarker(comment_time, text, self)
             self.comments[comment_time] = new_marker
-
-        # self.viewbox.update()
-        self.setFocus(Qt.FocusReason.MouseFocusReason)
-        self.setMouseTracking(True)
-
+        
+        self.comment_preview_enabled = False
+        self.comment_preview.setVisible(False)
         return
 
 # TODO need to implement when understand format of comment
@@ -875,16 +910,36 @@ class DataWindow(PlotWidget):
                 self.baseline_preview_enabled = False
                 self.baseline_preview.setVisible(False)
             else:
+                # disable simultaneous "c" click 
+                self.comment_preview_enabled = False
+                self.comment_preview.setVisible(False)
+                # prepare to set baseline
                 self.baseline.setVisible(False)
                 self.baseline_preview_enabled = True
                 self.baseline_preview.setVisible(True)
                 y_pos = self.viewbox.mapSceneToView(self.mapToScene(self.mapFromGlobal(QCursor.pos()))).y()
                 self.baseline_preview.setPos(y_pos)
-
+            self.selection.deselect_all()
+            self.selection.unhighlight_item(self.selection.hovered_item)
+        if event.key() == Qt.Key.Key_C:
+            if self.comment_preview_enabled:
+                # Turn it off
+                self.comment_preview_enabled = False
+                self.comment_preview.setVisible(False)
+            else:
+                # disable simultaneous "b" click 
+                self.baseline_preview_enabled = False
+                self.baseline_preview.setVisible(False)
+                # prepare to add new comment
+                self.comment_preview_enabled = True
+                self.comment_preview.setVisible(True)
+                x_pos = self.viewbox.mapSceneToView(self.mapToScene(self.mapFromGlobal(QCursor.pos()))).x()
+                self.comment_preview.setPos(x_pos)
             self.selection.deselect_all()
             self.selection.unhighlight_item(self.selection.hovered_item)
 
         self.selection.key_press_event(event)
+        self.viewbox.update()
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         return
@@ -902,17 +957,14 @@ class DataWindow(PlotWidget):
         point = self.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
 
-        print("click event", (x,y))
-
         if event.button() == Qt.MouseButton.LeftButton:
             if self.baseline_preview_enabled:
                 self.set_baseline(event)
+            elif self.comment_preview_enabled:
+                self.add_comment(event)
             else:
                 self.selection.mouse_press_event(event)
-        elif event.button() == Qt.MouseButton.RightButton:
-            print("click event", (x,y))
-            self.add_comment(event)
-            print("done")
+        # elif event.button() == Qt.MouseButton.RightButton:
 
         # (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
         # if not (x_min <= x <= x_max and y_min <= y <= y_max):
@@ -973,7 +1025,7 @@ class DataWindow(PlotWidget):
         super().mouseReleaseEvent(event)
 
         self.selection.mouse_release_event(event)
-        
+
         if self.moving_mode:
             # if transition line was released, update data transition line
             if isinstance(self.selected_item, InfiniteLine) and self.selected_item is not self.baseline:
@@ -994,17 +1046,20 @@ class DataWindow(PlotWidget):
         point = self.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
 
-        self.selection.last_cursor_pos = (x, y)  
-
-        print("move event", self.selection.last_cursor_pos)         
+        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
 
         if self.baseline_preview_enabled:
-            _, (y_min, y_max) = self.viewbox.viewRange()
             if y_min <= y <= y_max:
                 self.baseline_preview.setPos(y)
                 self.baseline_preview.setVisible(True)
             else:
                 self.baseline_preview.setVisible(False)
+        elif self.comment_preview_enabled:
+            if x_min <= x <= x_max:
+                self.comment_preview.setPos(x)
+                self.comment_preview.setVisible(True)
+            else:
+                self.comment_preview.setVisible(False)
         else:
             self.selection.mouse_move_event(event)
 

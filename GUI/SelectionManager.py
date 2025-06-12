@@ -620,6 +620,8 @@ class Selection:
             self.merge_adjacent_labels(label_area)
 
 
+
         dw = self.datawindow
+        dw.viewbox.update()
         transitions = [(label_area.start_time, label_area.label) for label_area in dw.labels]
         dw.epgdata.set_transitions(dw.file, transitions, dw.transition_mode)
