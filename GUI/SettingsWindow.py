@@ -1,8 +1,11 @@
-from PyQt6.QtGui import *
-from PyQt6.QtWidgets import *
+from PyQt6.QtWidgets import (
+    QWidget, QGridLayout, QCheckBox, QSpinBox, 
+    QDoubleSpinBox, QColorDialog, QMessageBox
+)
+from PyQt6.QtGui import QComboBox, QLineEdit, QPushButton, QLabel, QColor
 from PyQt6.QtCore import pyqtSignal, QRandomGenerator, Qt, QSettings
+
 from Settings import Settings
-import sys
 
 class SettingsWindow(QWidget):
     # Emit signal from the settings window to objects that need
@@ -287,7 +290,7 @@ class SettingsWindow(QWidget):
 
     def load_settings(self):
         if not self.settings.contains('version'):
-            print("No settings file found. Using default values.")
+            print("No settings file found, using default values.")
             return
         #show_label = self.settings.value("show_label", False, type=bool)
         Settings.show_grid = self.settings.value("gridline_vis_check", Settings.show_grid, type=bool)

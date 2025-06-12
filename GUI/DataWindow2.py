@@ -12,9 +12,12 @@ from PyQt6.QtGui import (
     QKeyEvent, QWheelEvent, QMouseEvent, QColor, 
     QGuiApplication, QCursor, QAction
 )
-from PyQt6.QtCore import Qt, QPoint, QPointF, QTimer, QObject, QEvent
+from PyQt6.QtCore import Qt, QPointF, QTimer, QObject, QEvent
 
-from PyQt6.QtWidgets import QPushButton, QVBoxLayout, QLabel, QDialog, QTextEdit, QMessageBox, QMenu
+from PyQt6.QtWidgets import (
+    QPushButton, QVBoxLayout, QLabel, QDialog, 
+    QTextEdit, QMessageBox, QMenu, QScrollBar
+)
 
 from EPGData import EPGData
 from Settings import Settings
@@ -253,7 +256,6 @@ class DataWindow(PlotWidget):
 
         self.comment_preview_enabled: bool = False
         self.moving_comment: CommentMarker = None
-
 
         self.initUI()
 
@@ -544,7 +546,7 @@ class DataWindow(PlotWidget):
         
         comments_df = df[~df["comments"].isnull()]
         for time, text in zip(comments_df["time"], comments_df["comments"]):
-            marker = CommentMarker(time, text, self, icon_path=r"GUI\message.svg")
+            marker = CommentMarker(time, text, self, icon_path=r"message.svg")
             self.comments[time] = marker
         
         return
@@ -796,17 +798,6 @@ class DataWindow(PlotWidget):
             label (str): Label type to update.
             color (QColor): Color to set the label areas to.
         """
-        # """
-        # change_label_color is a slot for the signal emitted by the
-        # SettingsWindow on changing a label color.
-
-        # Inputs:
-        #     label: label for the waveform background to recolor.
-        #     color: color to change the label to.
-
-        # Returns:
-        #     None
-        # """
         for label_area in self.labels:
             if label_area.label == label:
                 label_area.area.setBrush(mkBrush(color))
@@ -1103,12 +1094,11 @@ class DataWindow(PlotWidget):
     
 
     def wheelEvent(self, event: QWheelEvent) -> None:
-        # """
-        # wheelEvent is called automatically whenever the scroll
-        # wheel is engaged over the chart. We use it to control
-        # horizontal and vertical scrolling along with zoom.
-        # """
+        """
+        Forwards a scroll event to the custom viewbox.
+        """
         self.viewbox.wheelEvent(event)
+        event.ignore()
 
 
 # TODO: remove after feature-complete and integrated with main
