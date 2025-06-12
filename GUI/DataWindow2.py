@@ -148,8 +148,6 @@ class GlobalMouseTracker(QObject):
             selection = self.datawindow.selection
             selection.last_cursor_pos = (x, y)
             selection.hovered_item = selection.get_hovered_item(x, y)
-            if isinstance(selection.hovered_item, LabelArea):
-                print(selection.hovered_item.label) 
         return super().eventFilter(obj, event)
 
 class DataWindow(PlotWidget):
@@ -212,6 +210,7 @@ class DataWindow(PlotWidget):
         self.comment_preview.setVisible(False)
 
         self.comment_preview_enabled: bool = False
+        self.moving_comment: CommentMarker = None
 
         self.moving_mode: bool = False  # whether an interactice item is being moved
         self.edit_mode_enabled: bool = True
@@ -487,21 +486,16 @@ class DataWindow(PlotWidget):
         self.initial_downsampled_data = [init_x, init_y]
         df = self.epgdata.dfs[file]
 
-        # create a comments column if doesn't yet exist in df
-        if 'comments' not in df.columns:
-            df['comments'] = None
-
-        # testing comment appearance
-        tar_time = 420
-        nearest_idx = (df['time'] - tar_time).abs().idxmin()
-        df.at[nearest_idx, 'comments'] = "Test comment"
-
         self.viewbox.setRange(
             xRange=(np.min(self.xy_data[0]), np.max(self.xy_data[0])), 
             yRange=(np.min(self.xy_data[1]), np.max(self.xy_data[1])), 
             padding=0
         )
 
+        # create a comments column if doesn't yet exist in df
+        if 'comments' not in df.columns:
+            df['comments'] = None
+        
         self.update_plot()
         self.plot_comments(file)
 
@@ -547,7 +541,7 @@ class DataWindow(PlotWidget):
         df = self.epgdata.dfs[self.file]
         # find nearest time clicked
         nearest_idx = (df['time'] - x).abs().idxmin()
-        comment_time = df.at[nearest_idx, 'time']
+        comment_time = float(df.at[nearest_idx, 'time'])
         existing = df.at[nearest_idx, 'comments']
         
         # if there's already a comment at the time clicked, give an option to replace
@@ -594,25 +588,55 @@ class DataWindow(PlotWidget):
         else:
             new_marker = CommentMarker(comment_time, text, self)
             self.comments[comment_time] = new_marker
-        
+
         self.comment_preview_enabled = False
         self.comment_preview.setVisible(False)
         return
 
-# TODO need to implement when understand format of comment
-    # def delete_comment(self, time: float) -> None:
-    #     df = self.epgdata.dfs[self.file]
-    #     nearest_idx = (df['time'] - time).abs().idxmin()
-    #     comment_time = df.at[nearest_idx, 'time']
-    #     df.at[nearest_idx, 'comments'] = None
+    def delete_comment(self, time: float) -> None:
+        # update df
+        df = self.epgdata.dfs[self.file]
+        df.loc[df["time"] == time, "comments"] = None
 
-    #     marker = self.comments.pop(comment_time, None)
-    #     if marker:
-    #         marker.remove()
-    #     return
+        # update dict
+        marker = self.comments.pop(time)
+        marker.remove()
+        return
+
+    def move_comment_helper(self, marker: CommentMarker):
+        self.moving_comment = marker
+        self.comment_preview_enabled = True
+        self.comment_preview.setVisible(True)
+
+        x_pos = self.viewbox.mapSceneToView(self.mapToScene(self.mapFromGlobal(QCursor.pos()))).x()
+        self.comment_preview.setPos(x_pos)
+        
+        self.selection.deselect_all()
+        self.selection.unhighlight_item(self.selection.hovered_item)
+        self.viewbox.update()
+        return
     
-    # def update_comment(self, )
+    def move_comment(self, marker: CommentMarker, time: float) -> None:
+        df = self.epgdata.dfs[self.file]
+        new_idx = (df['time'] - time).abs().idxmin()
+        new_time = float(df.at[new_idx, 'time'])
+        old_time = marker.time
+        text = self.comments[old_time].text
 
+        # update df
+        df.loc[df['time'] == old_time, 'comments'] = None
+        df.at[new_idx, 'comments'] = text
+
+        # update comments dict
+        old_marker = self.comments.pop(old_time)
+        old_marker.remove()
+        new_marker = CommentMarker(new_time, text, self)
+        self.comments[new_time] = new_marker
+
+        self.comment_preview_enabled = False
+        self.comment_preview.setVisible(False)
+        return
+        
     def downsample_visible(
         self, x_range: tuple[float, float] = None, max_points=4000, method = 'peak'
     ) -> tuple[NDArray, NDArray]:
@@ -960,6 +984,10 @@ class DataWindow(PlotWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             if self.baseline_preview_enabled:
                 self.set_baseline(event)
+            elif self.comment_preview_enabled and self.moving_comment is not None:
+                new_time = x
+                self.move_comment(self.moving_comment, new_time)
+                self.moving_comment = None
             elif self.comment_preview_enabled:
                 self.add_comment(event)
             else:

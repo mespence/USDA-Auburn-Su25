@@ -4,19 +4,19 @@ from pyqtgraph import (
 from PyQt6.QtWidgets import QPushButton, QVBoxLayout, QLabel, QDialog, QTextEdit
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtGui import QMouseEvent
-from PyQt6.QtCore import Qt, QPointF
+from PyQt6.QtCore import Qt, QPointF, QTimer
 
 class CommentMarker():
     """
     A class for creating comments with a
     vertical dashed line and comment icon
     """
-    def __init__(self, time: float, text: str, plot_widget: PlotWidget, icon_path: str = "message.svg"):
+    def __init__(self, time: float, text: str, datawindow: PlotWidget, icon_path: str = "message.svg"):
         self.time = time
         self.text = text
-        self.plot_widget = plot_widget
-        self.scene = plot_widget.scene()
-        self.viewbox = plot_widget.getPlotItem().getViewBox()
+        self.datawindow = datawindow
+        self.scene = self.datawindow.scene()
+        self.viewbox = self.datawindow.getPlotItem().getViewBox()
         self.icon_path = icon_path
 
         self.marker = InfiniteLine(
@@ -55,7 +55,11 @@ class CommentMarker():
 
 
     def show_comment_editor(self, event: None):
-        self.plot_widget.comment_editing = True
+        """
+        should be able to edit, delete, and move the comment
+        """
+
+        self.datawindow.comment_editing = True
 
         dialog = QDialog()
         dialog.setWindowTitle(f"Edit Comment @ {self.time:.2f}s")
@@ -65,25 +69,46 @@ class CommentMarker():
 
         text_edit = QTextEdit()
         text_edit.setText(self.text)
+
+        cursor = text_edit.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        text_edit.setTextCursor(cursor)
+        
         layout.addWidget(text_edit)
 
         save_button = QPushButton("Save")
+        move_button = QPushButton("Move")
+        delete_button = QPushButton("Delete")
         cancel_button = QPushButton("Cancel")
         layout.addWidget(save_button)
+        layout.addWidget(move_button)
+        layout.addWidget(delete_button)
         layout.addWidget(cancel_button)
 
         def save():
             self.set_text(text_edit.toPlainText())
             dialog.accept()
+
+        def move():
+            self.set_visible(False)
+            dialog.accept()
+            # delay move comment so that it doesn't register the dialog mouse press event
+            QTimer.singleShot(0, lambda: self.datawindow.move_comment_helper(self))
+
+        def delete():
+            dialog.accept()
+            self.datawindow.delete_comment(self.time)
         
         save_button.clicked.connect(save)
+        move_button.clicked.connect(move)
+        delete_button.clicked.connect(delete)
         cancel_button.clicked.connect(dialog.reject)
         dialog.setModal(True)
         dialog.exec()
 
     def set_text(self, new_text: str):
         self.text = new_text
-        df = self.plot_widget.epgdata.dfs[self.plot_widget.file]
+        df = self.datawindow.epgdata.dfs[self.datawindow.file]
         nearest_idx = (df['time'] - self.time).abs().idxmin()
         df.at[nearest_idx, 'comments'] = new_text
 
