@@ -499,7 +499,6 @@ class Selection:
         Handles the actions performed when the mouse is at 
         a given (x, y) in ViewBox coordinates.
         """
-        
         (x_min, x_max), (y_min, y_max) = self.datawindow.viewbox.viewRange()
 
         if not (x_min <= x <= x_max and y_min <= y <= y_max):  # cursor outside viewbox
