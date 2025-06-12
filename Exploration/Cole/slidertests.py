@@ -45,7 +45,8 @@ class MainWindow(QWidget):
         super().__init__(*args, **kwargs)
 
         self.setWindowTitle('PyQt QSlider')
-        self.setMinimumWidth(200)
+        self.setMinimumWidth(800)
+        self.setMinimumHeight(200)
 
         # create a grid layout
         layout = QVBoxLayout()
