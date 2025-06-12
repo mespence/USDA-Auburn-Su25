@@ -11,11 +11,28 @@ from Settings import Settings
 
 class LabelArea:
     """
-    A class handling everything pertaining to EPG labels.
-    Includes the label and duration text, the plot objects 
-    for label coloring, and the background/bounding boxes of text.
+    Handles rendering and layout of a labeled region in a waveform plot.
+    Used to represent labeled time intervals in waveform recordings.
+
+    Each LabelArea includes:
+    - A colored background (`LinearRegionItem`)
+    - A transition line (`InfiniteLine`)
+    - Label and duration text (`TextItem`)
+    - Background rectangles and optional debug boxes
     """
     def __init__(self, time: float, dur: float, label: str, plot_widget: PlotWidget):
+        """
+        Initializes a new LabelArea with a label, duration, and graphical elements.
+
+        Parameters:
+            time (float): Start time of the label region.
+            dur (float): Duration of the labeled region.
+            label (str): Label string (e.g. "FLIGHT", "END AREA").
+            plot_widget (PlotWidget): The parent plotting widget managing this label.
+
+        Notes:
+            Also connects to the viewbox's transformChanged signal.
+        """
         self.plot_widget: PlotWidget  # the parent PlotWidget
         self.viewbox: ViewBox # the ViewBox object that the LabelArea is being rendered in
         self.text_metrics: QFontMetricsF  # metrics about the font for the text
@@ -106,6 +123,11 @@ class LabelArea:
             self.toggle_debug_boxes()   
 
     def toggle_debug_boxes(self) -> None:
+        """
+        Adds or removes red debug rectangles around the label and duration text.
+
+        Called when `enable_debug` is toggled or on redraw.
+        """
         if self.enable_debug:
             if not hasattr(self, "label_debug_box"):
                 self.label_debug_box = QGraphicsRectItem(self.label_bbox)
@@ -128,6 +150,12 @@ class LabelArea:
                 self.viewbox.removeItem(self.duration_debug_box)
 
     def setVisible(self, visible: bool) -> None:
+        """
+        Sets the visibility of all LabelArea components (text, area, background, etc.).
+
+        Parameters:
+            visible (bool): Whether to show or hide the label area.
+        """
         for item in self.getItems():
             item.setVisible(visible)
 
@@ -143,9 +171,12 @@ class LabelArea:
 
     def bounding_box(self, text_item: TextItem) -> QRectF:
         """
-        Returns the bounding box around a TextItem 
-        based on the font metrics. Used in visibility 
-        calculations.
+        Computes the data-space bounding box of a given TextItem.
+
+        Parameters:
+            text_item (TextItem): The text to measure.
+        Returns:
+            QRectF: Bounding box of the text, in ViewBox coordinates.
         """
         # get bounding box from font metrics
         text = text_item.toPlainText()
@@ -166,9 +197,15 @@ class LabelArea:
         return QRectF(view_top_left, view_bottom_right)
 
     
-    def background_box(self, text_item: TextItem, color: QColor = None, alpha: int = 255) -> QGraphicsRectItem:
+    def background_box(self, text_item: TextItem, color: QColor = None) -> QGraphicsRectItem:
         """
-        Returns the background box around a TextItem.
+        Creates a QGraphicsRectItem to serve as a background behind a TextItem.
+
+        Parameters:
+            text_item (TextItem): The text to draw the background behind.
+            color (QColor, optional): Background color. If not provided, computed automatically.
+        Returns:
+            QGraphicsRectItem: The background box.
         """
         if color is None:
             color = self.get_background_color()
@@ -188,12 +225,17 @@ class LabelArea:
     
     def get_background_color(self) -> QColor:
         """
-        Returns the color for a label background in this label.
+        Returns the default background color for this label area.
+
+        Applies blending and darkening to enhance visibility.
+
+        Returns:
+            QColor: The background color.
         """
         color = self.plot_widget.composite_on_white(Settings.label_to_color[self.label]) 
         color = color.darker(110) # 10% darker
         h, s, v, f = color.getHsvF()
-        color = QColor.fromHsvF(h, s * 1.8, v, f)
+        color = QColor.fromHsvF(h, s * 1.8, v, f) # 80% more saturated
         color.setAlpha(200)
         return color
             
@@ -201,19 +243,15 @@ class LabelArea:
     
     def update_label_area(self) -> None:
         """
-        Redraws the area based on the new y_range. 
+        Redraws and repositions label area elements after zoom/pan or label changes.
 
-        Input:
-            y_range: a (y_min, y_max) tuple of the new vertical 
-                     range to display the LabelArea over
-        Output:
-            None
-
+        Called automatically on `sigTransformChanged` or manually after edits.
         """
 
         if self.is_end_area: # clamp end area to zero width
+            self.label = "END AREA"  # double check
             self.area.setRegion((self.start_time, self.start_time))
-            return
+            
         
         self.viewbox = self.plot_widget.getPlotItem().getViewBox()
         _, (y_min, y_max) = self.viewbox.viewRange()
@@ -221,7 +259,6 @@ class LabelArea:
         centered_x = self.start_time + self.duration / 2
         label_y = y_min + 0.05 * (y_max - y_min)
         duration_y = y_max - 0.05 * (y_max - y_min)
-        
 
 
         # update text and area if changed
@@ -257,17 +294,20 @@ class LabelArea:
         
     def update_rect(self, rect: QGraphicsRectItem, bbox: QRectF) -> None:
         """
-        Updates a QGraphicsRectItem to a new QRectF.
+        Updates a QGraphicsRectItem's geometry to match a QRectF.
+
+        Parameters:
+            rect (QGraphicsRectItem): The item to update.
+            bbox (QRectF): The new bounding box.
         """
         rect.setRect(0, 0, bbox.width(), bbox.height())
         rect.setPos(bbox.topLeft())
 
     def update_visibility(self) -> None:
         """
-        Updates the visibility of the text and backgrounds 
-        based on intersection with transition lines.
+        Hides label or duration text and backgrounds when they intersect a transition line.
 
-        Also handles hiding/showing durations based on the settings
+        Also checks whether to display duration text based on `Settings.show_durations`.
         """
         if self.is_end_area:
             return  # keep end area hidden
@@ -284,7 +324,9 @@ class LabelArea:
 
     def getItems(self):
         """
-        Returns a list of the items added to the viewbox.
+        Returns:
+            list: All graphical elements (area, line, texts, backgrounds, and optional debug items)
+                that make up this LabelArea.
         """
         itemsToRemove = [
             self.area, self.label_text, self.duration_text, self.transition_line,
@@ -301,21 +343,12 @@ class LabelArea:
     # unused rn, but maybe could use for manual label editing.
 
 
-    def set_transition_line(self, x_val: float):
+    def set_transition_line(self, x: float):
         """
-        Sets the LabelArea's transition line to the specified x-value and y_range.
+        Moves the transition line to a new x-position.
 
-        Inputs:
-            x_val: the x-value to draw the line at
+        Parameters:
+            x (float): The x-value to set the vertical transition line to.
         """
         
-        self.transition_line.setValue(x_val)
-
-
-    # def set_label(self, label: str) -> None:
-    #     self.label = label
-    #     self.label_text.setText(label)
-
-    # def set_duration(self, duration: float) -> None:
-    #     self.duration = duration
-    #     self.duration_text.setText(duration)
+        self.transition_line.setValue(x)

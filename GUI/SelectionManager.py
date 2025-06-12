@@ -13,11 +13,16 @@ class Selection:
     """
     Manages `DataWindow` selections and the actions performed on them.
 
-    More than one LabelArea can be selected at a time, but only a single 
+    NOTE: More than one LabelArea can be selected at a time, but only a single 
     InfiniteLine can be directly selected.
     """
-    def __init__(self, plot_widget: PlotWidget):
-        
+    def __init__(self, plot_widget: PlotWidget) -> None:
+        """
+        Initializes the selection manager for the given DataWindow (PlotWidget).
+
+        Parameters:
+            `plot_widget` (PlotWidget): The parent widget managing the label data and interactions.
+        """
 
         self.selected_items: list = []  # InfiniteLine | LabelArea, sorted chronologically
         self.selection_parent: LabelArea = None  # which item is the "parent" of a multi-selection
@@ -48,11 +53,15 @@ class Selection:
 
         self.moving_mode: bool = False
 
-        self.last_cursor_pos: tuple[float, float] = None  # the last (x,y) of the cursor in viewbox coords
-
-    def _sort_key(self, item):
+    def _sort_key(self, item) -> float:
         """
-        A sort key used to keep `selected_items` in chronological order.
+        Returns a key to sort selected items chronologically.
+
+        Parameters:
+            item (InfiniteLine | LabelArea): The item to derive the sort key from.
+
+        Returns:
+            float: The time value associated with the item.
         """
         if isinstance(item, LabelArea):
             return item.start_time
@@ -63,10 +72,10 @@ class Selection:
 
     def select(self, item) -> None:
         """
-        Handles styling a selected item and adds it to the selection.
+        Adds the given item to the current selection and updates its visual style.
 
-        Input:
-            `item`: an object to be selected (e.g. InfiniteLine or LabelArea)
+        Parameters:
+            item (InfiniteLine | LabelArea): The item to select.
         """
         self.highlighted_item = None
         if isinstance(item, InfiniteLine):
@@ -99,7 +108,10 @@ class Selection:
     
     def multi_select(self, item: LabelArea) -> None:
         """
-        Selects all LabelAreas between the selection_parent and the given item.
+        Selects all LabelAreas between the selection parent and the given item.
+
+        Parameters:
+            item (LabelArea): The target LabelArea that defines the other end of the selection range.
         """
         if self.selection_parent == None:  # fallback
             self.deselect_all()
@@ -113,7 +125,7 @@ class Selection:
             idx1 = labels.index(parent)
             idx2 = labels.index(item)
         except ValueError:
-            return # one of the items isn't in th label list
+            return # one of the items isn't in the label list
 
         start_idx, end_idx = sorted((idx1, idx2))
         self.deselect_all()
@@ -122,12 +134,12 @@ class Selection:
                 self.select(labels[i])
         self.selection_parent = parent
 
-    def deselect_item(self, item):
+    def deselect_item(self, item: InfiniteLine | LabelArea) -> None:
         """
-        Resets styling an item to pre-selection state and remove it from the selection.
+        Removes the item from selection and resets its visual style.
 
-        Input:
-            `item`: an object to be deselected (e.g. InfiniteLine or LabelArea)
+        Parameters:
+            item (InfiniteLine | LabelArea): The item to deselect.
         """
         if isinstance(item ,InfiniteLine) and item != self.highlighted_item:
             if item == self.datawindow.baseline:
@@ -154,9 +166,9 @@ class Selection:
 
         self.selected_items.remove(item)
 
-    def deselect_all(self):
+    def deselect_all(self) -> None:
         """
-        Deselects all items in the selection.
+        Clears the current selection and resets all selected item styles.
         """
         for item in self.selected_items[:]:
             self.deselect_item(item)
@@ -165,7 +177,13 @@ class Selection:
     
     def is_selected(self, item) -> bool:
         """
-        Returns `True` if `item` is part of the current selection.
+        Checks whether the given item is currently selected.
+
+        Parameters:
+            item (InfiniteLine | LabelArea): The item to check.
+
+        Returns:
+            bool: True if the item is in the current selection, otherwise False.
         """
         if isinstance(item, LabelArea):
             return item in self.selected_items
@@ -175,7 +193,10 @@ class Selection:
 
     def get_selected_lines(self) -> list[InfiniteLine]:
         """
-        Returns all transition lines associated with current selection.
+        Gets a list of InfiniteLines associated with the current selection.
+
+        Returns:
+            list[InfiniteLine]: All selected InfiniteLines, including those adjacent to selected LabelAreas.
         """
         if not self.selected_items:
             return []
@@ -198,17 +219,36 @@ class Selection:
         return lines
 
     def key_press_event(self, event: QKeyEvent) -> None:
+        """
+        Handles keyboard actions on selection.
+
+        If Delete or Backspace is pressed, deletes selected label areas with merge behavior on edge labels.
+
+        Parameters:
+            event (QKeyEvent): The key press event.
+        """
         if event.key() == Qt.Key.Key_Delete or event.key() == Qt.Key.Key_Backspace:
             label_areas_to_delete = [item for item in self.selected_items if isinstance(item, LabelArea)][::-1]
             self.deselect_all()
+
             for label_area in label_areas_to_delete:
                 print(f"Deleting: {label_area.label} at {label_area.start_time:.2f}s" )
-                if label_area == label_areas_to_delete[0] or label_area == label_areas_to_delete[-1]:                    
-                    self.delete_label_area(label_area, merge_adjacent=True) # merge on first and last only
+                if label_area != label_areas_to_delete[-1]:
+                    self.delete_label_area(label_area, multi_delete = True)
                 else:
-                    self.delete_label_area(label_area, merge_adjacent=False)
+                    self.delete_label_area(label_area, multi_delete = False)  # treat last delete of multi-delete as singular
 
     def mouse_press_event(self, event: QMouseEvent) -> None:
+        """
+        Handles mouse click selection logic, including Shift and Ctrl modifiers.
+
+        - Left-click selects or deselects items.
+        - Shift-click performs range multi-selection.
+        - Ctrl-click toggles individual label area selection.
+
+        Parameters:
+            event (QMouseEvent): The mouse click event.
+        """
         point = self.datawindow.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
 
@@ -275,6 +315,12 @@ class Selection:
                         self.deselect_item(self.hovered_item)
                 
     def mouse_move_event(self, event: QMouseEvent) -> None:
+        """
+        Handles hover highlighting and transition line dragging on mouse movement.
+
+        Parameters:
+            event (QMouseEvent): The mouse move event.
+        """
         point = self.datawindow.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
 
@@ -286,6 +332,12 @@ class Selection:
         return
                 
     def mouse_release_event(self, event: QMouseEvent) -> None:
+        """
+        Finalizes a drag operation and updates styling after releasing the mouse button.
+
+        Parameters:
+            event (QMouseEvent): The mouse release event.
+        """
         point = self.datawindow.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
 
@@ -325,8 +377,11 @@ class Selection:
         
     def apply_drag(self, x: float, y: float) -> None:
         """
-        Applies drag movement to the currently selected line (transition or baseline).
-        Called on mouse move while dragging.
+        Applies dragging motion to a transition or baseline line, updating LabelArea boundaries.
+
+        Parameters:
+            x (float): The ViewBox x-coordinate.
+            y (float): The ViewBox y-coordinate.
         """
         line = self.dragged_line
         if line is None:
@@ -374,87 +429,67 @@ class Selection:
 
 
 
-    def delete_label_area(self, label_area: LabelArea, merge_adjacent: bool = True) -> None:
+    def delete_label_area(self, label_area: LabelArea, multi_delete: bool = False) -> None:
         """
-        Deletes the specified label area and expands the left label area, 
-        instead expanding the right label area if the deleted label area 
-        is the first label area. Handles merging same-type labels after a deletion.
-        """ 
+        Deletes a LabelArea and expands an adjacent one to absorb its duration.
+
+        Parameters:
+            label_area (LabelArea): The LabelArea to delete.
+            multi_delete (bool): Whether the deletion is part of a multi-delete
+        """
         labels = self.datawindow.labels
 
-     
         current_idx = labels.index(label_area)
-
         
         before_idx = current_idx - 1
         after_idx = current_idx + 1
 
+        # process deletion by changing label type and merging
         if len(labels) > 1:
-            if label_area == labels[0] and after_idx < len(labels):  # expand left
+            if label_area == labels[0] and after_idx < len(labels):  # expand the right label area
                 expanded_label_area = labels[after_idx] 
+                if expanded_label_area.is_end_area:
+                    label_area.is_end_area = True
                 label_area.label = expanded_label_area.label
-                self.merge_adjacent_labels(label_area)
+                self.merge_adjacent_labels(label_area, deleting = multi_delete)
 
-
-
-                # new_start_time = label_area.start_time
-
-
-                # new_range = [new_start_time, expanded_label_area.start_time +  expanded_label_area.duration]
-                # new_dur = expanded_label_area.duration + label_area.duration
-                # expanded_label_area.start_time = new_start_time
-                # expanded_label_area.set_transition_line(new_start_time)
-
-            else:  # expand right
+            else:  # expand the left label area
                 expanded_label_area = labels[before_idx]
                 label_area.label = expanded_label_area.label
-                self.merge_adjacent_labels(label_area)
+                self.merge_adjacent_labels(label_area, deleting = multi_delete)
+                
+        # hide if we expanded into the end area
+        if label_area.is_end_area: 
+            label_area.label_text.setVisible(False)
+            label_area.label_background.setVisible(False)
+            label_area.duration_text.setVisible(False)
+            label_area.duration_background.setVisible(False)
 
-
-            #     if after_idx < len(labels):
-            #         after_label = labels[after_idx]
-            #         merging_adjacent = (expanded_label_area.label == after_label.label)
-
-            #         if merging_adjacent and merge_adjacent:
-            #             new_range = [expanded_label_area.start_time, after_label.start_time + after_label.duration]
-            #             new_dur = expanded_label_area.duration + label_area.duration + after_label.duration
-
-            #             for item in after_label.getItems():
-            #                 self.datawindow.viewbox.removeItem(item)
-            #             del self.datawindow.labels[after_idx]
-            #         else:
-            #             new_range = [expanded_label_area.start_time, label_area.start_time + label_area.duration]
-            #             new_dur = expanded_label_area.duration + label_area.duration
-
-            # expanded_label_area.area.setRegion(new_range) 
-            # expanded_label_area.duration = new_dur
-            # expanded_label_area.duration_text.setText(f"{new_dur:.2f}")
-            # expanded_label_area.update_label_area()
-
-        # for item in label_area.getItems():
-        #     self.datawindow.viewbox.removeItem(item)   
-
-        # del self.datawindow.labels[current_idx]
-
-        # if self.last_cursor_pos:
-        #     x, y = self.last_cursor_pos
-        #     self.hover(x, y)
-
-   # TODO: CHANGE TO def merge_labels(self, area1: LabelArea, area2: LabelArea, area3: LabelArea = None, label: str = None) -> tuple[float, float]:
-    def merge_adjacent_labels(self, label_area: LabelArea) -> None:
+    def merge_adjacent_labels(self, label_area: LabelArea, deleting = False) -> None:
         """
-        
+        Merges the given LabelArea with adjacent ones if they share the same label type.
+
+        Parameters:
+            label_area (LabelArea): The LabelArea to merge from.
+            deleting (bool): True if the merge is happening as part of a deletion.
         """
         labels = self.datawindow.labels
+        if not labels:
+            return
         idx = labels.index(label_area)
+
 
         before = labels[idx - 1] if idx > 0 else None
         after = labels[idx + 1] if idx + 1 < len(labels) else None
 
+        if deleting:
+            after = None  # dont merge right on deletion
+
+
         merging_left = (before and before.label == label_area.label)
         merging_right = (after and after.label == label_area.label)
 
-        def remove_label_area(area: LabelArea):
+        def remove_label_area(area: LabelArea) -> None:
             """Helper function to remove label areas from the viewbox and update labels."""
             for item in area.getItems():
                 scene = item.scene()
@@ -488,16 +523,18 @@ class Selection:
             label_area.duration = label_area.duration + after.duration
             label_area.update_label_area()
 
-        if self.last_cursor_pos:
-            x, y = self.last_cursor_pos
-            self.hover(x, y)
+        if self.datawindow.last_cursor_pos:
+            view_pos = self.datawindow.window_to_viewbox(self.datawindow.last_cursor_pos)
+            self.hover(view_pos.x(), view_pos.y())
 
 
-
-    def hover(self, x: float, y: float):
+    def hover(self, x: float, y: float) -> None:
         """
-        Handles the actions performed when the mouse is at 
-        a given (x, y) in ViewBox coordinates.
+        Updates the hovered and highlighted item based on cursor position.
+
+        Parameters:
+            x (float): The ViewBox x-coordinate.
+            y (float): The ViewBox y-coordinate.
         """
         (x_min, x_max), (y_min, y_max) = self.datawindow.viewbox.viewRange()
 
@@ -518,6 +555,16 @@ class Selection:
         self.update_highlight(item_to_highlight, cursor=cursor)
 
     def get_hovered_item(self, x:float, y:float) -> InfiniteLine | LabelArea:
+        """
+        Determines the item under the cursor for highlighting or interaction.
+
+        Parameters:
+            x (float): ViewBox x-coordinate.
+            y (float): ViewBox y-coordinate.
+
+        Returns:
+            (LabelArea | InfiniteLine): The item nearest the cursor.
+        """
         TRANSITION_HIGHLIGHT_THRESHOLD = 3 * self.datawindow.devicePixelRatioF() # pixels
         BASELINE_HIGHLIGHT_THRESHOLD = 3 * self.datawindow.devicePixelRatioF()
 
@@ -542,9 +589,13 @@ class Selection:
         return hovered_item
 
 
-    def update_highlight(self, item, cursor: Qt.CursorShape = None):
+    def update_highlight(self, item, cursor: Qt.CursorShape = None) -> None:
         """
-        Handles styling a highlighted item and updating the cursor.
+        Highlights the specified item and sets the appropriate cursor.
+
+        Parameters:
+            item (InfiniteLine | LabelArea): The item to highlight.
+            cursor (Qt.CursorShape, optional): The cursor to display.
         """
         if cursor:
             self.datawindow.setCursor(cursor)
@@ -580,7 +631,13 @@ class Selection:
 
     def get_highlighted_color(self, color: QColor) -> QColor:
         """
-        Computes the highlighted color for a given QColor.
+        Generates a visually emphasized color for hover/highlight feedback.
+
+        Parameters:
+            color (QColor): The base color.
+
+        Returns:
+            QColor: The modified highlighted color.
         """
         h, s, l, a = color.getHslF()
         #highlighted_color = QColor.fromHslF(h, min(s * 5, 1), l * 0.9, a)
@@ -588,7 +645,13 @@ class Selection:
         highlighted_color.setAlpha(200)
         return highlighted_color
 
-    def unhighlight_item(self, item):
+    def unhighlight_item(self, item) -> None:
+        """
+        Resets the style of the currently highlighted item.
+
+        Parameters:
+            item (InfiniteLine | LabelArea): The item to unhighlight.
+        """
         if isinstance(item ,InfiniteLine):
             if item == self.datawindow.baseline:
                 item.setPen(self.default_style['baseline'])
@@ -602,7 +665,14 @@ class Selection:
         self.highlighted_item = None
 
     def change_label_type(self, label_area: LabelArea, new_label: str) -> None:
-        if self.is_selected(label_area): # label area selected
+        """
+        Changes the label type for the given LabelArea (or all selected ones) and merges if applicable.
+
+        Parameters:
+            label_area (LabelArea): The LabelArea to modify.
+            new_label (str): The new label type to assign.
+        """
+        if self.is_selected(label_area): # label area is selected
             selected_label_areas = [label for label in self.selected_items if isinstance(label, LabelArea)]
             for label_area in selected_label_areas: # change without merging
                 label_area.label = new_label
@@ -613,12 +683,10 @@ class Selection:
             for label_area in selected_label_areas[:]: # merge all labels if necessary
                 if label_area in self.datawindow.labels:
                     self.merge_adjacent_labels(label_area)
-        else: # label area highlighted
+        else: # label area is highlighted
             label_area.label = new_label
             label_area.update_label_area()
             self.merge_adjacent_labels(label_area)
-
-
 
         dw = self.datawindow
         dw.viewbox.update()
