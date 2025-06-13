@@ -18,7 +18,6 @@ class EPGData:
         self.prepost_suffix = "_rect"
         self.current_file = "test_recording.csv"
         self.dir_path = os.path.dirname(os.path.realpath(__file__))
-        self.dfs_numpy = []
 
     def load_data(self, file):
         """
@@ -134,13 +133,7 @@ class EPGData:
             raise Exception(f"{file} is not a key in self.dfs")
 
         else:
-            # return unpacked for optimization
-            # if prepost == "pre":
-            #         return self.dfs_numpy[0], self.dfs_numpy[1]
-            # else:
-            #         return self.dfs_numpy[0], self.dfs_numpy[2]
             df = self.dfs[file]
-            # print(type(df['time']), type(df[f'{prepost}{self.prepost_suffix}']))
             return df["time"].values, df[f"{prepost}{self.prepost_suffix}"].values
 
     def set_labels(self, file: str, labels) -> None:
@@ -208,25 +201,29 @@ class EPGData:
         """
         if not file in self.dfs:
             raise Exception(f"{file} is not a key in self.dfs")
+        
 
-        df = self.dfs[file]
+        df: DataFrame = self.dfs[file]
         times = df["time"].values
-        transitions = []
 
         if section_type == "labels":
-            labels = df[self.label_column].values
-            transitions = [(0, labels[0])]
+            values = df[self.label_column].values
+        elif section_type == "probes":
+            values = df[self.probe_column].values
+        else:
+            raise ValueError(f"Unknown section_type: {section_type}")
 
-            for i in range(1, len(labels)):
-                if labels[i] != labels[i - 1]:
-                    transitions.append((times[i], labels[i]))
+        
+        if pd.isna(values).all():
+            return []
 
-        if section_type == "probes":
-            probes = df[self.probe_column].values
-            transitions = [(0, probes[0])]
+        # Find where the value changes (i.e., transitions)
+        change_indices = np.flatnonzero(values[1:] != values[:-1]) + 1
 
-            for i in range(1, len(probes)):
-                if probes[i] != probes[i - 1]:
-                    transitions.append((times[i], probes[i]))
+        # Prepend time 0 with the initial label
+        initial = np.array([[0.0, values[0]]], dtype=object)
+        transitions = np.column_stack((times[change_indices], values[change_indices])) # combine elements pair-wise
+
+        transitions = np.vstack((initial, transitions)) # prepend initial zero
 
         return transitions

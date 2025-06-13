@@ -15,7 +15,7 @@ dependencies = [
     "pyqt6>=6.9.0",
     "pyqt6-charts>=6.9.0",
     "pyqtgraph>=0.13.7",
-    "scikit-learn>=1.6.1",
+    "scikit-learn>=1.7.0",
     "scipy>=1.15.3",
     "torch>=2.7.0",
 ]

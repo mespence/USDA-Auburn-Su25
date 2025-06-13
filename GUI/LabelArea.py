@@ -251,7 +251,7 @@ class LabelArea:
         if self.is_end_area: # clamp end area to zero width
             self.label = "END AREA"  # double check
             self.area.setRegion((self.start_time, self.start_time))
-            
+            return
         
         self.viewbox = self.plot_widget.getPlotItem().getViewBox()
         _, (y_min, y_max) = self.viewbox.viewRange()

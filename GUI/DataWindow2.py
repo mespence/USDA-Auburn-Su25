@@ -504,6 +504,13 @@ class DataWindow(PlotWidget):
             file (str): File identifier.
             prepost (str): Either "pre" or "post" to select pre/post rectifier data.
         """
+        QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
+
+        if self.labels: # clear previous labels, if any
+            self.selection.deselect_all()
+            for label_area in self.labels[::-1]:
+                self.selection.delete_label_area(label_area, multi_delete=False)
+
         self.file = file
         self.prepost = prepost
         times, volts = self.epgdata.get_recording(self.file, self.prepost)
@@ -515,6 +522,7 @@ class DataWindow(PlotWidget):
         init_x, init_y = self.xy_data[0].copy(), self.xy_data[1].copy()
         self.initial_downsampled_data = [init_x, init_y]
         df = self.epgdata.dfs[file]
+
 
         self.viewbox.setRange(
             xRange=(np.min(self.xy_data[0]), np.max(self.xy_data[0])), 
@@ -528,6 +536,8 @@ class DataWindow(PlotWidget):
         
         self.update_plot()
         self.plot_comments(file)
+        QApplication.processEvents()
+        QGuiApplication.restoreOverrideCursor()
 
     def plot_comments(self, file: str) -> None:
         """
@@ -736,12 +746,11 @@ class DataWindow(PlotWidget):
         """
         Plots labeled regions from label transition data as colored areas on the plot.
 
-        Also inserts a zero-width "END AREA" to terminate the plot visually.
+        Also inserts a zero-width "END AREA" to add the final transition line.
 
         Parameters:
             file (str): File identifier.
         """
-
         # clear old labels if present
         for label_area in self.labels:
             self.plot_item.removeItem(label_area.area)
@@ -763,7 +772,7 @@ class DataWindow(PlotWidget):
         # only continue if the label column contains labels
         if self.epgdata.dfs[file][self.transition_mode].isna().all():
             return
-
+        
         durations = []  # elements of (label_start_time, label_duration, label)
         for i in range(len(transitions) - 1):
             time, label = transitions[i]
@@ -849,7 +858,7 @@ class DataWindow(PlotWidget):
             (InfiniteLine, float): Closest transition line and pixel distance.
         """
         if not self.labels:
-            return float('inf')  # no labels present
+            return None, float('inf')  # no labels present
         
         transitions = np.array([label_area.start_time for label_area in self.labels])
         idx = np.searchsorted(transitions, x)
