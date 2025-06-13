@@ -2,8 +2,14 @@ import os
 import sys
 import ctypes
 
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QGridLayout, QPushButton, QComboBox, QProgressBar 
-from PyQt6.QtCore import QRunnable, pyqtSignal, QThreadPool
+from PyQt6.QtWidgets import (
+      QApplication, QMainWindow, QWidget, QGridLayout, 
+      QPushButton, QComboBox, QProgressBar, QMenuBar
+)
+from PyQt6.QtCore import (
+      QRunnable, pyqtSignal, QThreadPool, QObject, 
+      QEvent,
+)
 from PyQt6.QtGui import QIcon
 
 from DataWindow2 import DataWindow
@@ -30,12 +36,11 @@ class LabelingTask(QRunnable):
         self.labeler.start_labeling(self.epgdata, self.datawindow)
 
 
-
 class MainWindow(QMainWindow):
     start_labeling = pyqtSignal()
 
     def __init__(self) -> None:
-        if os.name == 'nt':
+        if os.name == 'nt':  # windows
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('company.app.1')
         super().__init__()
         self.initUI()
@@ -142,7 +147,7 @@ class MainWindow(QMainWindow):
                     # self.settings_window.comments_toggled.connect(self.datawindow.set_comments_visible)
                     # self.settings_window.gridline_toggled.connect(self.datawindow.set_gridlines)
                     # self.settings_window.label_text_toggled.connect(self.datawindow.set_text_visible)
-                    # self.settings_window.duration_toggled.connect(self.datawindow.set_durations_visible)
+                    self.settings_window.duration_toggled.connect(self.datawindow.set_durations_visible)
                     # self.settings_window.h_gridline_changed.connect(self.datawindow.set_h_gridline_spacing)
                     # self.settings_window.v_gridline_changed.connect(self.datawindow.set_v_gridline_spacing)
                     # self.settings_window.h_tick_anchor_changed.connect(self.datawindow.set_h_offset)
@@ -176,7 +181,27 @@ class MainWindow(QMainWindow):
         self.settings_window.raise_()
         self.settings_window.activateWindow() 
 
+class GlobalMouseTracker(QObject):
+    """
+    Global event filter that updates the cursor hover position inside popups
+    (e.g., menus) by tracking global mouse coordinates and mapping them to
+    DataWindow viewbox space.
+    """
+    def __init__(self, mainwindow: MainWindow):
+        super().__init__()
+        self.mainwindow: MainWindow = mainwindow
+        self.datawindow: DataWindow = mainwindow.datawindow
 
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.MouseMove:
+            global_pos = event.globalPosition() # pos relative to top left corner of screen
+            local_pos = self.mainwindow.mapFromGlobal(global_pos) # pos rel. to top left of application
+            self.datawindow.last_cursor_pos = local_pos
+
+            view_pos = self.datawindow.window_to_viewbox(local_pos) # pos rel. to origin of plot
+            selection = self.datawindow.selection
+            selection.hovered_item = selection.get_hovered_item(view_pos.x(), view_pos.y())
+        return super().eventFilter(obj, event)
 
 def main():
         Settings()
@@ -184,6 +209,10 @@ def main():
         window = MainWindow()
         window.showMaximized()
         #window.show()
+
+        tracker = GlobalMouseTracker(window)
+        app.installEventFilter(tracker)
+
         sys.exit(app.exec())
 
 if __name__ == '__main__':

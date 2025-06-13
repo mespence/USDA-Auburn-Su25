@@ -16,7 +16,7 @@ from PyQt6.QtCore import Qt, QPointF, QTimer, QObject, QEvent
 
 from PyQt6.QtWidgets import (
     QPushButton, QVBoxLayout, QLabel, QDialog, 
-    QTextEdit, QMessageBox, QMenu, QScrollBar
+    QTextEdit, QMessageBox, QMenu
 )
 
 from EPGData import EPGData
@@ -146,26 +146,7 @@ class PanZoomViewBox(ViewBox):
         elif action == action2:
             print("Option 2 selected")
 
-class GlobalMouseTracker(QObject):
-    """
-    Global event filter that updates the cursor hover position inside popups
-    (e.g., menus) by tracking global mouse coordinates and mapping them to
-    DataWindow viewbox space.
-    """
-    def __init__(self, datawindow):
-        super().__init__()
-        self.datawindow: DataWindow = datawindow
 
-    def eventFilter(self, obj, event):
-        if event.type() == QEvent.Type.MouseMove:
-            local_pos = event.position()
-            self.datawindow.last_cursor_pos = local_pos
-            view_pos = self.datawindow.window_to_viewbox(local_pos)
-
-            selection = self.datawindow.selection
-            selection.hovered_item = selection.get_hovered_item(view_pos.x(), view_pos.y())
-
-        return super().eventFilter(obj, event)
 
 class DataWindow(PlotWidget):
     """
@@ -210,7 +191,7 @@ class DataWindow(PlotWidget):
         self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
 
         # CURSOR
-        self.last_cursor_pos: QPointF = None # last cursor pos in screen-space coords
+        self.last_cursor_pos: QPointF = None # last cursor pos rel. to top left of application
         # self.cursor_mode: str = "normal"  # cursor state, e.g. normal, baseline selection
 
         # INDICATORS & LABELS
@@ -299,7 +280,6 @@ class DataWindow(PlotWidget):
         ## DEBUG/DEV TOOLS
         self.enable_debug = False
         self.debug_boxes = []
-        Settings.show_durations = True
 
 
 
@@ -334,14 +314,14 @@ class DataWindow(PlotWidget):
 
     def window_to_viewbox(self, point: QPointF) -> QPointF:
         """
-        Converts between widget (screen) coordinates and data (viewbox) coordinates.
+        Converts between window (screen) coordinates and data (viewbox) coordinates.
 
         Parameters:
-            point (QPointF): Point in widget coordinates.
+            point (QPointF): Point in global coordinates.
 
         Returns:
             QPointF: The corresponding point in data coordinates.
-        """        
+        """      
         scene_pos = self.mapToScene(point.toPoint())
         data_pos = self.viewbox.mapSceneToView(scene_pos)
         return data_pos
@@ -820,18 +800,21 @@ class DataWindow(PlotWidget):
         Parameters:
             color (QColor): Color to set the curve and scatter plot to.
         """
-        # """
-        # change_line_color is a slot for the signal emitted by the
-        # SettingsWindow on changing the line color.
-
-        # Inputs:
-        #     color: color to which the recording line is to be changed
-
-        # Returns:
-        #     None
-        # """
         self.curve.setPen(mkPen(color))
         self.scatter.setPen(mkPen(color))  
+
+    def set_durations_visible(self, visible: bool):
+        """
+        Sets the visibility of all label area durations.
+
+        Parameters:
+            visible (bool): Whether to show or hide the durations.
+        """
+        for label_area in self.labels:
+            if label_area.is_end_area:
+                continue
+            label_area.set_duration_visible(visible)
+         
 
     def composite_on_white(self, color: QColor) -> QColor:
         """
@@ -1128,8 +1111,8 @@ def main():
 
     window.showMaximized()
 
-    tracker = GlobalMouseTracker(window)
-    app.installEventFilter(tracker)
+    
+    
 
     sys.exit(app.exec())
 

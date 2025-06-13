@@ -57,7 +57,6 @@ class LabelArea:
 
         self.enable_debug: bool # whether to show debug boxes
         
-        
         # ----- initialize instance variables --------------------------
 
         self.plot_widget = plot_widget
@@ -77,6 +76,7 @@ class LabelArea:
         self.label_text = TextItem(label, color='black', anchor=(0.5, 0.5))
         self.label_text.setFont(font)
         self.label_text.setPos(centered_x, label_y)
+        
         self.viewbox.addItem(self.label_text)
 
         self.duration = dur
@@ -84,6 +84,9 @@ class LabelArea:
         self.duration_text.setFont(font)
         self.duration_text.setPos(centered_x, duration_y)
         self.viewbox.addItem(self.duration_text)
+
+        self.is_end_area = (label == 'END AREA')
+        self.enable_debug = self.plot_widget.enable_debug
 
         self.transition_line = InfiniteLine(
             pos=time,
@@ -113,11 +116,12 @@ class LabelArea:
         self.duration_background = self.background_box(self.duration_text)
         self.viewbox.addItem(self.duration_background)
 
-        self.enable_debug = self.plot_widget.enable_debug
+        #QApplication.processEvents()
 
-        self.viewbox.sigTransformChanged.connect(self.update_label_area)  # bug here after deleting all areas
-    
-        self.is_end_area = (label == 'END AREA')
+        self.set_duration_visible(Settings.show_durations)
+        self.set_label_visible(Settings.show)
+
+        self.viewbox.sigTransformChanged.connect(self.update_label_area)   
 
         if self.enable_debug:
             self.toggle_debug_boxes()   
@@ -160,13 +164,16 @@ class LabelArea:
             item.setVisible(visible)
 
 
-    # def set_duration_visibility(self, state: bool) -> None:
-    #     """
-    #     Toggles the visibility of the duration text and background.
-    #     """
-    #     self.duration_text.setVisible(state)
-    #     self.duration_background.setVisible(state)
-    #     self.update_visibility()  # to handle intersections
+    def set_duration_visible(self, visible: bool) -> None:
+        """
+        Sets the visibility of the duration components (text, background).
+
+        Parameters:
+            visible (bool): Whether to show or hide the duration.
+        """
+        self.duration_text.setOpacity(1.0 if visible else 0.0)
+        self.duration_background.setOpacity(1.0 if visible else 0.0)
+        self.update_label_area()
 
 
     def bounding_box(self, text_item: TextItem) -> QRectF:
@@ -247,7 +254,6 @@ class LabelArea:
 
         Called automatically on `sigTransformChanged` or manually after edits.
         """
-
         if self.is_end_area: # clamp end area to zero width
             self.label = "END AREA"  # double check
             self.area.setRegion((self.start_time, self.start_time))
@@ -268,9 +274,9 @@ class LabelArea:
             self.label_background.setBrush(mkBrush(color=self.get_background_color()))
             self.duration_background.setBrush(mkBrush(color=self.get_background_color()))
 
-        if self.duration_text.toPlainText() != f"{self.duration:.2f}":  # duration changed
-            self.duration_text.setText(f"{self.duration:.2f}")
-            self.area.setRegion((self.start_time, self.start_time + self.duration))
+        # if self.duration_text.toPlainText() != f"{self.duration:.2f}":  # duration changed
+        self.duration_text.setText(f"{self.duration:.2f}")
+        self.area.setRegion((self.start_time, self.start_time + self.duration))
 
         # update text pos
         self.label_text.setPos(centered_x, label_y)
@@ -308,18 +314,23 @@ class LabelArea:
         Hides label or duration text and backgrounds when they intersect a transition line.
 
         Also checks whether to display duration text based on `Settings.show_durations`.
+
+        NOTE: Uses opacity rather than visibilty to keep allow objects to keep updating.
         """
         if self.is_end_area:
             return  # keep end area hidden
-
+    
         label_overlapping = self.label_bbox.left() < self.start_time < self.label_bbox.right()
-        dur_overlapping = self.duration_bbox.left() < self.start_time < self.duration_bbox.right()
+        self.label_text.setOpacity(0.0 if  label_overlapping else 1.0)
+        self.label_background.setOpacity(0.0 if  label_overlapping else 1.0)
 
-        self.label_text.setOpacity(not label_overlapping)
-        self.duration_text.setOpacity(not dur_overlapping and Settings.show_durations)
-
-        self.label_background.setVisible(not label_overlapping)
-        self.duration_background.setVisible(not dur_overlapping and Settings.show_durations)
+        dur_overlapping = self.duration_bbox.left() < self.start_time < self.duration_bbox.right()        
+        if Settings.show_durations:
+            self.duration_text.setOpacity(0.0 if dur_overlapping else 1.0)
+            self.duration_background.setOpacity(0.0 if dur_overlapping else 1.0)
+        else:
+            self.duration_text.setOpacity(0.0)
+            self.duration_background.setOpacity(0.0)
 
 
     def getItems(self):

@@ -92,6 +92,7 @@ class EPGData:
             return False
         return True
 
+    # TODO: check if we need to return end time or begin time
     def export_txt(self, file, destination):
         """
         export_txt saves a plaintext file to disk with timestamps

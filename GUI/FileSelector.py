@@ -20,7 +20,7 @@ class FileSelector:
                 datawindow.plot_transitions(file_path)
                 #datawindow.plot_comments(file_path)
 
-    def export_labeled_data(epgdata, file):
+    def export_labeled_data(epgdata: EPGData, file: str):
         file_dialog = QFileDialog()
         file_dialog.AcceptMode = 1 # save mode
         file_url, selected_filter = file_dialog.getSaveFileUrl(filter="CSV files (*.csv);;text files (*.txt)")
