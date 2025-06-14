@@ -1,105 +1,93 @@
-import socket
-import threading
-import queue
-import time
-import json
 
-import csv
-
-
-recv_queue = queue.Queue()
-send_queue = queue.Queue()
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QGridLayout, QLabel, QComboBox, QLineEdit, QPushButton
+)
+from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt
+import sys, json
 
 
-def device_simulation():
-    """
-    Simulates a device reading (time, voltage) data every 0.01s
-    """
-    DATA_FILE = r"C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv"
-    with open(DATA_FILE, newline="") as file:
-        reader = csv.reader(file)
-        next(reader)  # skip header row
+from SocketClient import SocketClient
 
-        interval = 0.01
-        next_time = time.perf_counter()
-
-        # simulate sending data every 0.01s, 
-        # taking into account execution time
-        for row in reader:
-            data_row = f"{float(row[0]):.4f},DATA,{float(row[1]):.4f},0\n"
-            data_dict = {"type":"data", "value":data_row}
-            send_queue.put_nowait(data_dict)
-            next_time += interval
-            sleep_time = max(0, next_time - time.perf_counter())
-            time.sleep(sleep_time)
-
-
-send_count = 0
-start_time = time.time()
-
-def send_queue_to_socket(sock: socket.socket):
-    """
-    Passes data in the send queue to the socket.
-    """
-    global send_count, start_time
-
-    while True:
-        try:
-            data_dict = send_queue.get(timeout=0.1)
-            json_str = json.dumps(data_dict) + "\n"
-            sock.sendall(json_str.encode("utf-8"))
-
-            send_count += 1
-            now = time.time()
-            if now - start_time >= 1.0:
-                print(f"[ENGR] Send Rate: {send_count}/sec")
-                send_count = 0
-                start_time = now
-
-        except queue.Empty:
-            continue
-        except Exception as e:
-            print(f"[ENGR ERROR] Failed to send data: {e}")
-            break
-
-def socket_to_recv_queue(sock: socket.socket):
-    """
-    Passes received data in the socket to the receive queue.
-    """
-    while True:
-        data = sock.recv(1024)
-        if data:
-            recv_queue.put_nowait(data.decode("utf-8"))
-    
-
-
-def socket_client():
-    HOST = "localhost"
-    PORT = 16671  # arbitrary
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        print("Connecting...")
-        sock.connect((HOST, PORT))
-        sock.sendall(b"client_id=ENGR\n")
-        print(f"Connected to {HOST}:{PORT}")
-
-        device_sim_thread = threading.Thread(target=device_simulation, daemon=True)
-        device_sim_thread.start()
-
-        send_queue_thread = threading.Thread(target=send_queue_to_socket, args=(sock,), daemon=True)
-        send_queue_thread.start()
-
-        recv_queue_thread = threading.Thread(target=socket_to_recv_queue, args=(sock,), daemon=True)
-        recv_queue_thread.start()
-
-        while True:
-            time.sleep(0.1)  # keep client open
-
+class EngrUI(QWidget):
+    def __init__(self, socket_client: SocketClient):
+        super().__init__()
+        self.setWindowTitle("Engineering UI (no sliders)")
+        
+        self.socket_client = socket_client
+        self.control_values = {
+            "Input Resistance": "100K",
+            "PGA 1": 0,
+            "PGA 2": 0,
+            "SCA": 0,
+            "SCO": 0,
+            "DDS": 0,
+            "DDSA": 0,
+            "D0": 0,
+            "D1": 0,
+            "D2": 0,
+            "D3": 0,
+            "Excitation Frequency": 1000,
+        }
         
 
+        self.input_widgets = {}
+        layout = QVBoxLayout()
+        self.grid = QGridLayout()
+
+        # Text label to display the dictionary
+        self.dict_display = QLabel()
+        self.dict_display.setFont(QFont("Courier New", 10))
+        self.dict_display.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.dict_display.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.dict_display.setMinimumWidth(250)
+        self.dict_display.setWordWrap(True)
+
+        # Fill grid with controls and attach update events
+        for i, (key, val) in enumerate(self.control_values.items()):
+            label = QLabel(key)
+            self.grid.addWidget(label, i, 0)
+
+            if key == "Input Resistance":
+                widget = QComboBox()
+                widget.addItems(["100K", "1M", "10M", "100M", "1G", "10G", "100G", "Mux:7"])
+                widget.setCurrentText(val)
+                widget.currentTextChanged.connect(self.update_control_values)
+            elif key == "Excitation Frequency":
+                widget = QComboBox()
+                widget.addItems(["1000", "0", ""])
+                widget.setCurrentText(str(val))
+                widget.currentTextChanged.connect(self.update_control_values)
+            else:
+                widget = QLineEdit(str(val))
+                widget.setAlignment(Qt.AlignmentFlag.AlignRight)
+                widget.textChanged.connect(self.update_control_values)
+
+            self.input_widgets[key] = widget
+            self.grid.addWidget(widget, i, 1)
+
+        self.grid.addWidget(self.dict_display, 0, 2, len(self.control_values), 1)  # span rows
+
+        layout.addLayout(self.grid)
+
+        self.setLayout(layout)
+        self.update_control_values()  # initialize display
+
+    def update_control_values(self):
+        for key, widget in self.input_widgets.items():
+            if isinstance(widget, QComboBox):
+                self.control_values[key] = widget.currentText()
+            else:
+                text = widget.text()
+                try:
+                    self.control_values[key] = int(text)
+                except ValueError:
+                    self.control_values[key] = text  # fallback to raw string
+        self.dict_display.setText(json.dumps(self.control_values, indent=2))
 
 if __name__ == "__main__":
-    socket_client()
-    
-
-# socket_thread = threading.Thread(target=socket_client)
-# socket_thread.start()
+    app = QApplication(sys.argv)
+    socket_client = SocketClient()
+    window = EngrUI(socket_client)
+    window.show()
+    sys.exit(app.exec())
