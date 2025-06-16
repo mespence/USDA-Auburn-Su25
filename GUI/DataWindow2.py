@@ -302,7 +302,8 @@ class DataWindow(PlotWidget):
         self.scene().addItem(self.zoom_text)
         
         # further defer update until the window is actually rendered to the screen
-        QTimer.singleShot(0, self.update_plot)
+        #QApplication.processEvents()
+        #QTimer.singleShot(0, self.update_plot)
 
 
     def resizeEvent(self, event) -> None:
@@ -310,6 +311,8 @@ class DataWindow(PlotWidget):
         Handles window resizing and updates compression indicator.
         """
         super().resizeEvent(event)
+        if self.isVisible():
+            self.update_plot()
         self.update_compression()
 
     def window_to_viewbox(self, point: QPointF) -> QPointF:
@@ -392,9 +395,24 @@ class DataWindow(PlotWidget):
 
         self.update_compression()
         self.update_zoom()
-
         for label_area in self.labels:
-           label_area.update_label_area()
+            # Cull to visible labels
+            if label_area.start_time + label_area.duration < x_min:
+                continue
+            if label_area.start_time > x_max:
+                continue
+
+            # Don't render label areas <1 px wide
+            left_px_loc = self.viewbox_to_window(QPointF(label_area.start_time,0)).x()
+            right_px_loc = self.viewbox_to_window(QPointF(label_area.start_time + label_area.duration, 0)).x()
+            label_width_px = right_px_loc - left_px_loc
+
+            if label_width_px < 1:
+                label_area.setVisible(False)
+                continue
+
+            label_area.setVisible(True)
+            label_area.update_label_area()
 
         self.viewbox.update()  # or anything that redraws
 
@@ -761,6 +779,8 @@ class DataWindow(PlotWidget):
         durations.append((transitions[-1][0], max(times) - transitions[-1][0], transitions[-1][1]))
 
         for i, (time, dur, label) in enumerate(durations):
+            if label == None:
+                continue
             label_area = LabelArea(time, dur, label, self) # init. also adds items to viewbox
             self.labels.append(label_area)
 
@@ -1102,9 +1122,10 @@ def main():
     app = QApplication([])
 
     epgdata = EPGData()
-    epgdata.load_data("test_recording.csv")
+    epgdata.load_data(r"C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\sharpshooter_label2.csv")
+    #epgdata.load_data("test_recording.csv")
+
     #epgdata.load_data(r'C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv')
-    
     window = DataWindow(epgdata)
     window.plot_recording(window.epgdata.current_file, 'pre')
     window.plot_transitions(window.epgdata.current_file)
