@@ -24,13 +24,17 @@ def test_recording_data(receive_queue):
     df = pd.read_csv('/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/GUI/test_recording.csv', usecols=['time', 'post_rect'])
     times = df['time'].values
     volts = df['post_rect'].values
+    interval = 0.01
+    next_time = time.perf_counter()
 
     for i in range(len(times)):
         t = times[i]
         v = volts[i]
         receive_queue.put(f"{t:.2f},{v:.4f}")
-        time.sleep(0.01)
 
+        next_time += interval
+        sleep_time = sleep_time = max(0, next_time - time.perf_counter())
+        time.sleep(sleep_time)
 
 class PanZoomViewBox(ViewBox):
     """
