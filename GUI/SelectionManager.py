@@ -435,8 +435,11 @@ class Selection:
 
         Parameters:
             label_area (LabelArea): The LabelArea to delete.
-            multi_delete (bool): Whether the deletion is part of a multi-delete
+            multi_delete (bool): Whether a multi-selection is being deleted.
         """
+        if label_area.is_end_area:
+            return # dont delete end area
+
         labels = self.datawindow.labels
 
         current_idx = labels.index(label_area)

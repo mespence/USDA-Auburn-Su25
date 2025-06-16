@@ -1,13 +1,14 @@
 import os
 import re
-import sys
-from PyQt6.QtWidgets import *
+#import sys
 
-from DataWindow import DataWindow
+from PyQt6.QtWidgets import QFileDialog
+
+from DataWindow2 import DataWindow
 from EPGData import EPGData
 
 class FileSelector:
-    def load_new_data(epgdata, datawindow):
+    def load_new_data(epgdata: EPGData, datawindow: DataWindow) -> None:
         datawindow.transition_mode = 'labels'
         file_dialog = QFileDialog()
         file_path, _ = file_dialog.getOpenFileUrl()
@@ -15,11 +16,11 @@ class FileSelector:
         if file_path:
             if epgdata.load_data(file_path):
                 datawindow.plot_recording(file_path)
-                datawindow.mode = 'labels'
+                #datawindow.mode = 'labels'
                 datawindow.plot_transitions(file_path)
-                datawindow.plot_comments()
+                #datawindow.plot_comments(file_path)
 
-    def export_labeled_data(epgdata, file):
+    def export_labeled_data(epgdata: EPGData, file: str):
         file_dialog = QFileDialog()
         file_dialog.AcceptMode = 1 # save mode
         file_url, selected_filter = file_dialog.getSaveFileUrl(filter="CSV files (*.csv);;text files (*.txt)")

@@ -12,9 +12,12 @@ from PyQt6.QtGui import (
     QKeyEvent, QWheelEvent, QMouseEvent, QColor, 
     QGuiApplication, QCursor, QAction
 )
-from PyQt6.QtCore import Qt, QPoint, QPointF, QTimer, QObject, QEvent
+from PyQt6.QtCore import Qt, QPointF, QTimer, QObject, QEvent
 
-from PyQt6.QtWidgets import QPushButton, QVBoxLayout, QLabel, QDialog, QTextEdit, QMessageBox, QMenu
+from PyQt6.QtWidgets import (
+    QPushButton, QVBoxLayout, QLabel, QDialog, 
+    QTextEdit, QMessageBox, QMenu
+)
 
 from EPGData import EPGData
 from Settings import Settings
@@ -143,26 +146,7 @@ class PanZoomViewBox(ViewBox):
         elif action == action2:
             print("Option 2 selected")
 
-class GlobalMouseTracker(QObject):
-    """
-    Global event filter that updates the cursor hover position inside popups
-    (e.g., menus) by tracking global mouse coordinates and mapping them to
-    DataWindow viewbox space.
-    """
-    def __init__(self, datawindow):
-        super().__init__()
-        self.datawindow: DataWindow = datawindow
 
-    def eventFilter(self, obj, event):
-        if event.type() == QEvent.Type.MouseMove:
-            local_pos = event.position()
-            self.datawindow.last_cursor_pos = local_pos
-            view_pos = self.datawindow.window_to_viewbox(local_pos)
-
-            selection = self.datawindow.selection
-            selection.hovered_item = selection.get_hovered_item(view_pos.x(), view_pos.y())
-
-        return super().eventFilter(obj, event)
 
 class DataWindow(PlotWidget):
     """
@@ -188,6 +172,7 @@ class DataWindow(PlotWidget):
         # UI ITEMS
         super().__init__(viewBox=PanZoomViewBox())
         self.plot_item: PlotItem = self.getPlotItem() # the plotting canvas (axes, grid, data, etc.)
+        self.plot_item.hideButtons()
         self.viewbox: PanZoomViewBox = self.plot_item.getViewBox() # the plotting area (no axes, etc.)
         self.viewbox.datawindow = self
         self.viewbox.menu = None  # disable default menu
@@ -206,7 +191,7 @@ class DataWindow(PlotWidget):
         self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
 
         # CURSOR
-        self.last_cursor_pos: QPointF = None # last cursor pos in screen-space coords
+        self.last_cursor_pos: QPointF = None # last cursor pos rel. to top left of application
         # self.cursor_mode: str = "normal"  # cursor state, e.g. normal, baseline selection
 
         # INDICATORS & LABELS
@@ -254,7 +239,6 @@ class DataWindow(PlotWidget):
         self.comment_preview_enabled: bool = False
         self.moving_comment: CommentMarker = None
 
-
         self.initUI()
 
     def initUI(self) -> None:
@@ -296,7 +280,6 @@ class DataWindow(PlotWidget):
         ## DEBUG/DEV TOOLS
         self.enable_debug = False
         self.debug_boxes = []
-        Settings.show_durations = True
 
 
 
@@ -331,14 +314,14 @@ class DataWindow(PlotWidget):
 
     def window_to_viewbox(self, point: QPointF) -> QPointF:
         """
-        Converts between widget (screen) coordinates and data (viewbox) coordinates.
+        Converts between window (screen) coordinates and data (viewbox) coordinates.
 
         Parameters:
-            point (QPointF): Point in widget coordinates.
+            point (QPointF): Point in global coordinates.
 
         Returns:
             QPointF: The corresponding point in data coordinates.
-        """        
+        """      
         scene_pos = self.mapToScene(point.toPoint())
         data_pos = self.viewbox.mapSceneToView(scene_pos)
         return data_pos
@@ -501,6 +484,13 @@ class DataWindow(PlotWidget):
             file (str): File identifier.
             prepost (str): Either "pre" or "post" to select pre/post rectifier data.
         """
+        QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
+
+        if self.labels: # clear previous labels, if any
+            self.selection.deselect_all()
+            for label_area in self.labels[::-1]:
+                self.selection.delete_label_area(label_area, multi_delete=False)
+
         self.file = file
         self.prepost = prepost
         times, volts = self.epgdata.get_recording(self.file, self.prepost)
@@ -512,6 +502,7 @@ class DataWindow(PlotWidget):
         init_x, init_y = self.xy_data[0].copy(), self.xy_data[1].copy()
         self.initial_downsampled_data = [init_x, init_y]
         df = self.epgdata.dfs[file]
+
 
         self.viewbox.setRange(
             xRange=(np.min(self.xy_data[0]), np.max(self.xy_data[0])), 
@@ -525,6 +516,8 @@ class DataWindow(PlotWidget):
         
         self.update_plot()
         self.plot_comments(file)
+        QApplication.processEvents()
+        QGuiApplication.restoreOverrideCursor()
 
     def plot_comments(self, file: str) -> None:
         """
@@ -544,7 +537,7 @@ class DataWindow(PlotWidget):
         
         comments_df = df[~df["comments"].isnull()]
         for time, text in zip(comments_df["time"], comments_df["comments"]):
-            marker = CommentMarker(time, text, self, icon_path=r"GUI\message.svg")
+            marker = CommentMarker(time, text, self, icon_path=r"message.svg")
             self.comments[time] = marker
         
         return
@@ -733,12 +726,11 @@ class DataWindow(PlotWidget):
         """
         Plots labeled regions from label transition data as colored areas on the plot.
 
-        Also inserts a zero-width "END AREA" to terminate the plot visually.
+        Also inserts a zero-width "END AREA" to add the final transition line.
 
         Parameters:
             file (str): File identifier.
         """
-
         # clear old labels if present
         for label_area in self.labels:
             self.plot_item.removeItem(label_area.area)
@@ -760,7 +752,7 @@ class DataWindow(PlotWidget):
         # only continue if the label column contains labels
         if self.epgdata.dfs[file][self.transition_mode].isna().all():
             return
-
+        
         durations = []  # elements of (label_start_time, label_duration, label)
         for i in range(len(transitions) - 1):
             time, label = transitions[i]
@@ -796,20 +788,10 @@ class DataWindow(PlotWidget):
             label (str): Label type to update.
             color (QColor): Color to set the label areas to.
         """
-        # """
-        # change_label_color is a slot for the signal emitted by the
-        # SettingsWindow on changing a label color.
-
-        # Inputs:
-        #     label: label for the waveform background to recolor.
-        #     color: color to change the label to.
-
-        # Returns:
-        #     None
-        # """
         for label_area in self.labels:
             if label_area.label == label:
                 label_area.area.setBrush(mkBrush(color))
+                label_area.update_label_area()
 
     def change_line_color(self, color: QColor) -> None:
         """
@@ -818,18 +800,21 @@ class DataWindow(PlotWidget):
         Parameters:
             color (QColor): Color to set the curve and scatter plot to.
         """
-        # """
-        # change_line_color is a slot for the signal emitted by the
-        # SettingsWindow on changing the line color.
-
-        # Inputs:
-        #     color: color to which the recording line is to be changed
-
-        # Returns:
-        #     None
-        # """
         self.curve.setPen(mkPen(color))
         self.scatter.setPen(mkPen(color))  
+
+    def set_durations_visible(self, visible: bool):
+        """
+        Sets the visibility of all label area durations.
+
+        Parameters:
+            visible (bool): Whether to show or hide the durations.
+        """
+        for label_area in self.labels:
+            if label_area.is_end_area:
+                continue
+            label_area.set_duration_visible(visible)
+         
 
     def composite_on_white(self, color: QColor) -> QColor:
         """
@@ -856,7 +841,7 @@ class DataWindow(PlotWidget):
             (InfiniteLine, float): Closest transition line and pixel distance.
         """
         if not self.labels:
-            return float('inf')  # no labels present
+            return None, float('inf')  # no labels present
         
         transitions = np.array([label_area.start_time for label_area in self.labels])
         idx = np.searchsorted(transitions, x)
@@ -1103,12 +1088,11 @@ class DataWindow(PlotWidget):
     
 
     def wheelEvent(self, event: QWheelEvent) -> None:
-        # """
-        # wheelEvent is called automatically whenever the scroll
-        # wheel is engaged over the chart. We use it to control
-        # horizontal and vertical scrolling along with zoom.
-        # """
+        """
+        Forwards a scroll event to the custom viewbox.
+        """
         self.viewbox.wheelEvent(event)
+        event.ignore()
 
 
 # TODO: remove after feature-complete and integrated with main
@@ -1127,8 +1111,8 @@ def main():
 
     window.showMaximized()
 
-    tracker = GlobalMouseTracker(window)
-    app.installEventFilter(tracker)
+    
+    
 
     sys.exit(app.exec())
 

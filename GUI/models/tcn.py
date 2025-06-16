@@ -249,13 +249,13 @@ class ResidualBlock(nn.Module):
 
         self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size, 
                                padding=padding, dilation=dilation)
-        self.conv1 = nn.utils.weight_norm(self.conv1)
+        self.conv1 = nn.utils.parametrizations.weight_norm(self.conv1)
         self.relu1 = nn.ReLU()
         self.dropout1 = nn.Dropout(dropout)
 
         self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size,
                                padding=padding, dilation=dilation)
-        self.conv2 = nn.utils.weight_norm(self.conv2)
+        self.conv2 = nn.utils.parametrizations.weight_norm(self.conv2)
         self.relu2 = nn.ReLU()
         self.dropout2 = nn.Dropout(dropout)
 

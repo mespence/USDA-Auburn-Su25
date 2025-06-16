@@ -1,5 +1,5 @@
 import numpy as np
-import pandas as pd
+#import pandas as pd
 import importlib
 """
 import sys
@@ -10,7 +10,7 @@ sys.path.insert(1, '../ML/')
 from ProbeSplitter import ProbeSplitter
 from PyQt6.QtCore import pyqtSignal, QObject
 
-from models import rf, tcn, unet, transformer
+#from models import rf, tcn, unet, transformer
 
 class Labeler(QObject):
     start_labeling_progress = pyqtSignal(int, int)
@@ -22,13 +22,13 @@ class Labeler(QObject):
         self.model = None
 
     def load_model(self, model_name):
-        name_to_class = {
-            'Random Forests (CSVs only)' : rf.Model, 
-            'UNet (Block)' : unet.Model,
-            'UNet (Attention)' : unet.Model, 
-            'SegTransformer' : transformer.Model,
-            'TCN' : tcn.Model
-        }
+        # name_to_class = {
+        #     'Random Forests (CSVs only)' : rf.Model, 
+        #     'UNet (Block)' : unet.Model,
+        #     'UNet (Attention)' : unet.Model, 
+        #     'SegTransformer' : transformer.Model,
+        #     'TCN' : tcn.Model
+        # }
         name_to_module = {
             'Random Forests (CSVs only)': 'models.rf',
             'UNet (Block)': 'models.unet',
@@ -58,7 +58,9 @@ class Labeler(QObject):
                 kwargs = kwargs | {'epochs': 64, 'lr': 0.0005, 'dropout_rate': 0.1, 'weight_decay': 1e-06, 'num_layers': 8, 'features': 32}
 
 
+        print(f'Importing {model_name}')
         module = importlib.import_module(name_to_module[model_name])
+        print(f'{model_name} imported')
         ModelClass = getattr(module, "Model")
         self.model = ModelClass(**kwargs)
         self.model.load(path = name_to_path[model_name])

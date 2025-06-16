@@ -1,8 +1,12 @@
-from PyQt6.QtGui import *
-from PyQt6.QtWidgets import *
+from PyQt6.QtWidgets import (
+    QWidget, QGridLayout, QCheckBox, QSpinBox, 
+    QDoubleSpinBox, QColorDialog, QMessageBox, QComboBox,
+    QLineEdit, QPushButton, QLabel
+)
+from PyQt6.QtGui import QColor
 from PyQt6.QtCore import pyqtSignal, QRandomGenerator, Qt, QSettings
+
 from Settings import Settings
-import sys
 
 class SettingsWindow(QWidget):
     # Emit signal from the settings window to objects that need
@@ -11,14 +15,14 @@ class SettingsWindow(QWidget):
     line_color_changed = pyqtSignal(object)
     label_deleted = pyqtSignal(object)
     label_added = pyqtSignal(object, object)
-    gridline_toggled = pyqtSignal(object)
+    #gridline_toggled = pyqtSignal(object)
     label_text_toggled = pyqtSignal(object)
     duration_toggled = pyqtSignal(object)
     comments_toggled = pyqtSignal(object)
-    h_gridline_changed = pyqtSignal(object)
-    v_gridline_changed = pyqtSignal(object)
-    h_tick_anchor_changed = pyqtSignal(object)
-    v_tick_anchor_changed = pyqtSignal(object)
+    #h_gridline_changed = pyqtSignal(object)
+    #v_gridline_changed = pyqtSignal(object)
+    #h_tick_anchor_changed = pyqtSignal(object)
+    #v_tick_anchor_changed = pyqtSignal(object)
     label_hidden = pyqtSignal(object, object)
     delete_baseline = pyqtSignal()
 
@@ -64,9 +68,9 @@ class SettingsWindow(QWidget):
         self.line_color_button = QPushButton("Color...")
         self.line_color_button.clicked.connect(self.open_line_color_picker)
 
-        self.gridline_vis_check = QCheckBox("Show grid")
-        self.gridline_vis_check.stateChanged.connect(lambda state: self.gridline_toggled.emit(state == Qt.CheckState.Checked.value))
-        self.gridline_vis_check.setCheckState(Qt.CheckState.Checked if Settings.show_grid else Qt.CheckState.Unchecked)
+        # self.gridline_vis_check = QCheckBox("Show grid")
+        # self.gridline_vis_check.stateChanged.connect(lambda state: self.gridline_toggled.emit(state == Qt.CheckState.Checked.value))
+        # self.gridline_vis_check.setCheckState(Qt.CheckState.Checked if Settings.show_grid else Qt.CheckState.Unchecked)
 
         self.labeltext_vis_check = QCheckBox("Show label text")
         self.labeltext_vis_check.setCheckState(Qt.CheckState.Checked)
@@ -74,35 +78,35 @@ class SettingsWindow(QWidget):
 
         self.durationtext_vis_check = QCheckBox("Show durations")
         self.durationtext_vis_check.setCheckState(Qt.CheckState.Unchecked)
-        self.durationtext_vis_check.stateChanged.connect(lambda state: self.duration_toggled.emit(state == Qt.CheckState.Checked.value))
+        self.durationtext_vis_check.stateChanged.connect(self.handle_toggle_duration_visibility)
 
         self.comments_vis_check = QCheckBox("Show comments")
         self.comments_vis_check.setCheckState(Qt.CheckState.Checked)
         self.comments_vis_check.stateChanged.connect(lambda state: self.comments_toggled.emit(state == Qt.CheckState.Checked.value))
 
-        self.h_gridlines_spacing_label = QLabel("Hori. spacing")
-        self.h_gridlines = QDoubleSpinBox()
-        self.h_gridlines.setValue(Settings.h_maj_gridline_spacing)
-        self.h_gridlines.setRange(1., 200.)
-        self.h_gridlines.setDecimals(1)
-        self.h_gridlines.valueChanged.connect(self.handle_change_h_gridline)
-        self.h_gridlines_offset_label = QLabel("Hori. offset")
-        self.h_gridline_offset = QSpinBox()
-        self.h_gridline_offset.setValue(Settings.h_tick_anchor)
-        self.h_gridline_offset.setRange(-2147483648, 2147483647)
-        self.h_gridline_offset.valueChanged.connect(self.handle_change_h_tick_anchor)
+        # self.h_gridlines_spacing_label = QLabel("Hori. spacing")
+        # self.h_gridlines = QDoubleSpinBox()
+        # #self.h_gridlines.setValue(Settings.h_maj_gridline_spacing)
+        # self.h_gridlines.setRange(1., 200.)
+        # self.h_gridlines.setDecimals(1)
+        # self.h_gridlines.valueChanged.connect(self.handle_change_h_gridline)
+        # self.h_gridlines_offset_label = QLabel("Hori. offset")
+        # self.h_gridline_offset = QSpinBox()
+        # self.h_gridline_offset.setValue(Settings.h_tick_anchor)
+        # self.h_gridline_offset.setRange(-2147483648, 2147483647)
+        # self.h_gridline_offset.valueChanged.connect(self.handle_change_h_tick_anchor)
 
-        self.v_gridlines_spacing_label = QLabel("Vert. spacing")
-        self.v_gridlines = QDoubleSpinBox()
-        self.v_gridlines.setValue(Settings.v_maj_gridline_spacing)
-        self.v_gridlines.setRange(1., 10.)
-        self.v_gridlines.setDecimals(1)
-        self.v_gridlines.valueChanged.connect(self.handle_change_v_gridline)
-        self.v_gridlines_offset_label = QLabel("Vert. offset")
-        self.v_gridline_offset = QSpinBox()
-        self.v_gridline_offset.setValue(Settings.v_tick_anchor)
-        self.v_gridline_offset.setRange(-2147483648, 2147483647)
-        self.v_gridline_offset.valueChanged.connect(self.handle_change_v_tick_anchor)
+        # self.v_gridlines_spacing_label = QLabel("Vert. spacing")
+        # self.v_gridlines = QDoubleSpinBox()
+        # self.v_gridlines.setValue(Settings.v_maj_gridline_spacing)
+        # self.v_gridlines.setRange(1., 10.)
+        # self.v_gridlines.setDecimals(1)
+        # self.v_gridlines.valueChanged.connect(self.handle_change_v_gridline)
+        # self.v_gridlines_offset_label = QLabel("Vert. offset")
+        # self.v_gridline_offset = QSpinBox()
+        # self.v_gridline_offset.setValue(Settings.v_tick_anchor)
+        # self.v_gridline_offset.setRange(-2147483648, 2147483647)
+        # self.v_gridline_offset.valueChanged.connect(self.handle_change_v_tick_anchor)
 
         self.delete_baseline_button = QPushButton("Remove baseline")
         self.delete_baseline_button.clicked.connect(self.handle_delete_baseline)
@@ -121,20 +125,20 @@ class SettingsWindow(QWidget):
         layout.addWidget(self.line_color, 2, 0)
         layout.addWidget(self.line_color_button, 2, 1)
 
-        layout.addWidget(self.gridline_vis_check, 3, 0)
+        #layout.addWidget(self.gridline_vis_check, 3, 0)
         layout.addWidget(self.labeltext_vis_check, 3, 1)
         layout.addWidget(self.durationtext_vis_check, 3, 2)
         layout.addWidget(self.comments_vis_check, 3, 3)
 
-        layout.addWidget(self.h_gridlines_spacing_label, 4, 0)
-        layout.addWidget(self.h_gridlines, 4, 1)
-        layout.addWidget(self.h_gridlines_offset_label, 4, 2)
-        layout.addWidget(self.h_gridline_offset, 4, 3)
+        # layout.addWidget(self.h_gridlines_spacing_label, 4, 0)
+        # layout.addWidget(self.h_gridlines, 4, 1)
+        # layout.addWidget(self.h_gridlines_offset_label, 4, 2)
+        # layout.addWidget(self.h_gridline_offset, 4, 3)
 
-        layout.addWidget(self.v_gridlines_spacing_label, 5, 0)
-        layout.addWidget(self.v_gridlines, 5, 1)
-        layout.addWidget(self.v_gridlines_offset_label, 5, 2)
-        layout.addWidget(self.v_gridline_offset, 5, 3)
+        # layout.addWidget(self.v_gridlines_spacing_label, 5, 0)
+        # layout.addWidget(self.v_gridlines, 5, 1)
+        # layout.addWidget(self.v_gridlines_offset_label, 5, 2)
+        # layout.addWidget(self.v_gridline_offset, 5, 3)
 
         layout.addWidget(self.save_settings_button, 6, 0)
         layout.addWidget(self.delete_baseline_button, 6, 3)
@@ -223,21 +227,21 @@ class SettingsWindow(QWidget):
         # the signal here does not have to be captured and handled, unlike delete.
         self.label_added.emit(label, color)
 
-    def handle_change_h_gridline(self, value: float):
-        Settings.h_maj_gridline_spacing = value
-        self.h_gridline_changed.emit(value)
+    # def handle_change_h_gridline(self, value: float):
+    #     Settings.h_maj_gridline_spacing = value
+    #     self.h_gridline_changed.emit(value)
 
-    def handle_change_v_gridline(self, value: float):
-        Settings.v_maj_gridline_spacing = value
-        self.v_gridline_changed.emit(value)
+    # def handle_change_v_gridline(self, value: float):
+    #     Settings.v_maj_gridline_spacing = value
+    #     self.v_gridline_changed.emit(value)
 
-    def handle_change_h_tick_anchor(self, value: float):
-        Settings.h_tick_anchor = value
-        self.h_tick_anchor_changed.emit(value)
+    # def handle_change_h_tick_anchor(self, value: float):
+    #     Settings.h_tick_anchor = value
+    #     self.h_tick_anchor_changed.emit(value)
 
-    def handle_change_v_tick_anchor(self, value: float):
-        Settings.v_tick_anchor = value
-        self.v_tick_anchor_changed.emit(value)
+    # def handle_change_v_tick_anchor(self, value: float):
+    #     Settings.v_tick_anchor = value
+    #     self.v_tick_anchor_changed.emit(value)
 
     def handle_delete_baseline(self):
         self.delete_baseline.emit()
@@ -251,12 +255,17 @@ class SettingsWindow(QWidget):
         Settings.labels_to_show[label] = value
         self.label_hidden.emit(label, value)
 
-    def set_show_duration(self, state: Qt.CheckState):
-        # Checkbox click is agnostic to what state is being selected
-        duration = self.duration_combo_box.currentText()
+    def handle_toggle_duration_visibility(self, state: int):
         value = state == Qt.CheckState.Checked.value
-        Settings.durations_to_show[duration] = value
-        self.duration_hidden.emit(duration, value)
+        Settings.show_durations = value
+        self.duration_toggled.emit(value)
+
+    # def set_show_duration(self, state: Qt.CheckState):
+    #     # Checkbox click is agnostic to what state is being selected
+    #     duration = self.duration_combo_box.currentText()
+    #     value = state == Qt.CheckState.Checked.value
+    #     Settings.durations_to_show[duration] = value
+    #     self.duration_hidden.emit(duration, value)
 
     def changed_label(self, index: int):
         label = self.label_combo_box.currentText()
@@ -271,11 +280,11 @@ class SettingsWindow(QWidget):
     def save_settings(self):
         self.settings.setValue('version', '1.0')
         #self.settings.setValue("show_label", self.show_label.isChecked())
-        self.settings.setValue("gridline_vis_check", self.gridline_vis_check.isChecked())
-        self.settings.setValue("h_gridlines", self.h_gridlines.value())
-        self.settings.setValue("v_gridlines", self.v_gridlines.value())
-        self.settings.setValue("h_gridline_offset", self.h_gridline_offset.value())
-        self.settings.setValue("v_gridline_offset", self.v_gridline_offset.value())
+        #self.settings.setValue("gridline_vis_check", self.gridline_vis_check.isChecked())
+        # self.settings.setValue("h_gridlines", self.h_gridlines.value())
+        # self.settings.setValue("v_gridlines", self.v_gridlines.value())
+        # self.settings.setValue("h_gridline_offset", self.h_gridline_offset.value())
+        # self.settings.setValue("v_gridline_offset", self.v_gridline_offset.value())
         self.settings.setValue("line_color", Settings.line_color.name())
         self.settings.setValue("alpha", Settings.alpha)
         self.settings.setValue("show_comments", Settings.show_comments)
@@ -287,25 +296,25 @@ class SettingsWindow(QWidget):
 
     def load_settings(self):
         if not self.settings.contains('version'):
-            print("No settings file found. Using default values.")
+            print("No settings file found, using default values.")
             return
         #show_label = self.settings.value("show_label", False, type=bool)
-        Settings.show_grid = self.settings.value("gridline_vis_check", Settings.show_grid, type=bool)
-        Settings.h_maj_gridline_spacing = self.settings.value("h_gridlines", Settings.h_maj_gridline_spacing, type=int)
-        Settings.v_maj_gridline_spacing = self.settings.value("v_gridlines", Settings.v_maj_gridline_spacing, type=int)
-        Settings.h_tick_anchor = self.settings.value("h_gridline_offset", Settings.h_maj_gridline_spacing, type=int)
-        Settings.v_tick_anchor = self.settings.value("v_gridline_offset", Settings.v_maj_gridline_spacing, type=int)
+        # Settings.show_grid = self.settings.value("gridline_vis_check", Settings.show_grid, type=bool)
+        # Settings.h_maj_gridline_spacing = self.settings.value("h_gridlines", Settings.h_maj_gridline_spacing, type=int)
+        # Settings.v_maj_gridline_spacing = self.settings.value("v_gridlines", Settings.v_maj_gridline_spacing, type=int)
+        # Settings.h_tick_anchor = self.settings.value("h_gridline_offset", Settings.h_maj_gridline_spacing, type=int)
+        # Settings.v_tick_anchor = self.settings.value("v_gridline_offset", Settings.v_maj_gridline_spacing, type=int)
         Settings.show_comments = self.settings.value("show_comments", Settings.show_comments, type=bool)
         color_str: str = self.settings.value("line_color", "#2987cd")
         alpha = self.settings.value("alpha", 30, type=int)
 
         #self.show_label.setChecked(show_label)
-        self.gridline_vis_check.setCheckState(Qt.CheckState.Checked if Settings.show_grid else Qt.CheckState.Unchecked)
-        self.comments_vis_check.setCheckState(Qt.CheckState.Checked if Settings.show_comments else Qt.CheckState.Unchecked)
-        self.h_gridlines.setValue(Settings.h_maj_gridline_spacing)
-        self.v_gridlines.setValue(Settings.v_maj_gridline_spacing)
-        self.h_gridline_offset.setValue(Settings.h_tick_anchor)
-        self.v_gridline_offset.setValue(Settings.v_tick_anchor)
+        # self.gridline_vis_check.setCheckState(Qt.CheckState.Checked if Settings.show_grid else Qt.CheckState.Unchecked)
+        # self.comments_vis_check.setCheckState(Qt.CheckState.Checked if Settings.show_comments else Qt.CheckState.Unchecked)
+        # self.h_gridlines.setValue(Settings.h_maj_gridline_spacing)
+        # self.v_gridlines.setValue(Settings.v_maj_gridline_spacing)
+        # self.h_gridline_offset.setValue(Settings.h_tick_anchor)
+        # self.v_gridline_offset.setValue(Settings.v_tick_anchor)
         # Using default color if none is loaded
         if color_str != "#2987cd":
             Settings.line_color = QColor(color_str)
