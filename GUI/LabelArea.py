@@ -119,9 +119,9 @@ class LabelArea:
         #QApplication.processEvents()
 
         self.set_duration_visible(Settings.show_durations)
-        self.set_label_visible(Settings.show)
+        #self.set_label_visible(Settings.show)
 
-        self.viewbox.sigTransformChanged.connect(self.update_label_area)   
+        #self.viewbox.sigTransformChanged.connect(self.update_label_area)   
 
         if self.enable_debug:
             self.toggle_debug_boxes()   
