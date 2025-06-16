@@ -211,7 +211,9 @@ class LiveDataWindow(PlotWidget):
         
         else:
             (x_min, x_max), _ = self.viewbox.viewRange()
-            visible = (x_data >= x_min - 0.01) & (x_data <= x_max + 0.01)
+            # ensure that the lines do not disappear when zooming in because near points out of view
+            dx = 0.01
+            visible = (x_data >= x_min - dx) & (x_data <= x_max + dx)
             self.xy_rendered = [x_data[visible], y_data[visible]]
             self.leading_line.setPos(self.current_time)
 
