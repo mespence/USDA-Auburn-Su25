@@ -2,6 +2,7 @@ from numpy.typing import NDArray
 from collections import deque
 from queue import Queue
 import numpy as np
+import pandas as pd
 import sys, time, threading
 
 from pyqtgraph import InfiniteLine, PlotWidget, PlotItem, PlotDataItem, ViewBox, mkPen 
@@ -16,6 +17,17 @@ def simulate_incoming_data(receive_queue):
         receive_queue.put(f"{t:.2f},{val:.4f}")
         # simulate 100 times a second incoming data
         t += 0.01
+        time.sleep(0.01)
+
+def test_recording_data(receive_queue):
+    df = pd.read_csv('/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/GUI/test_recording.csv', usecols=['time', 'post_rect'])
+    times = df['time'].values
+    volts = df['post_rect'].values
+
+    for i in range(len(times)):
+        t = times[i]
+        v = volts[i]
+        receive_queue.put(f"{t:.2f},{v:.4f}")
         time.sleep(0.01)
 
 class LiveDataWindow(PlotWidget):
@@ -71,7 +83,6 @@ class LiveDataWindow(PlotWidget):
         updated = False
         while not self.receive_queue.empty():
             line = self.receive_queue.get()
-            print("Got point:", line)
             # assuming here text input is t,v  t,v  t,v
             time_str, volt_str = line.strip().split(",")
             time, volt = float(time_str), float(volt_str)
@@ -117,7 +128,6 @@ class LiveDataWindow(PlotWidget):
             self.leading_line.setPos(x_data[-1])
 
         self.curve.setData(x_plot, y_plot)
-        print("Plotting", len(x_plot), "VISIBLE points")
 
     def live_mode_enabled(self):
         self.live_mode = self.button.isChecked()
@@ -139,7 +149,8 @@ class LiveDataWindow(PlotWidget):
 if __name__ == "__main__":
 
     receive_queue = Queue()
-    threading.Thread(target=simulate_incoming_data, args=(receive_queue,), daemon=True).start()
+    # threading.Thread(target=simulate_incoming_data, args=(receive_queue,), daemon=True).start()
+    threading.Thread(target=test_recording_data, args=(receive_queue,), daemon=True).start()
 
     app = QApplication([])
     window = LiveDataWindow(receive_queue)
