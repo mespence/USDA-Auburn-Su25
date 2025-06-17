@@ -5,18 +5,23 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-import sys
+import sys, json
 
 from SocketClient import SocketClient
-
-
-
+import threading
 
 
 class ControlPanel(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Control Panel")
+
+        self.socket_client = SocketClient('CS')
+        self.socket_client.start()
+        threading.Thread(target=self.recv_loop, daemon=True).start()
+
+        self.xy_data = [[],[]]
+
         layout = QVBoxLayout()
         grid = QGridLayout()
 
@@ -107,10 +112,17 @@ class ControlPanel(QWidget):
             "DDSA": self.ddsa_slider,
             "D0": self.d0_slider,
             "D1": self.d1_slider,
-            "D2": self.d1_slider,
-            "D3": self.d1_slider,
+            "D2": self.d2_slider,
+            "D3": self.d3_slider,
             "Excitation Frequency": self.excitation_freq,
         }
+
+        for label, item in self.controls.items():
+            if isinstance(item, QSlider):
+                item.valueChanged.connect(lambda val, l=label: self.on_control_change(l, val))
+            elif isinstance(item, QComboBox):
+                item.currentTextChanged.connect(lambda text, l=label: self.on_control_change(l, text))
+
 
         layout.addLayout(grid)
 
@@ -138,14 +150,37 @@ class ControlPanel(QWidget):
             elif isinstance(item, QComboBox):
                  print(f"{label}: {item.currentText()}")
 
+    def get_items(self):
+        return self.controls.items()
+
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_P:
             self.get_values()
+        if event.key() == Qt.Key.Key_R:
+            print(len(self.socket_client.recv_queue.queue))
         super().keyPressEvent(event)
 
+    def on_control_change(self, label, value):
+        print(f"{label} changed to {value}")
+        data_dict = {"type":"control", "control_type":label, "value":value}
+        self.socket_client.send(data_dict)
 
 
+    def recv_loop(self):
+        while self.socket_client._running:
+            if not self.socket_client.recv_queue.empty():
+                raw_str = self.socket_client.receive()
 
+                message_list = raw_str.split("\n")
+                message_list.remove('')
+            
+                messages = [json.loads(s) for s in message_list]
+                for message in messages:
+                    if message['type'] == 'data':
+                        self.xy_data[0].append(float(message['value'][0]))
+                        self.xy_data[1].append(float(message['value'][1]))
+                    print(self.xy_data[1][-10:])
+                    print()
 
 
 if __name__ == "__main__":

@@ -67,8 +67,8 @@ def process_message(message: str, client_id: str):
         if msg["type"] == "data":
             send_stream(msg)
 
-        elif msg["type"] == "slider":
-            print(f"[{client_id}] SLIDER: {msg["slider"]} = {msg["value"]}")
+        elif msg["type"] == "control":
+            print(f"[{client_id}] control: {msg["control_type"]} = {msg["value"]}")
 
         else:
             print(f"[{client_id}] UNKNOWN TYPE: {msg}")
@@ -89,7 +89,6 @@ def send_stream(message_dict: dict):
         return  # CS client not connected
     
     if message_dict["type"] == "data":
-
         data_list = message_dict["value"].split(",") # [timestamp, DATA, voltage, channel]
         message = {"type": "data", "value": (data_list[0], data_list[2])}
         json_str = json.dumps(message) + "\n"
