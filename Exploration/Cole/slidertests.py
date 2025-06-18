@@ -1,6 +1,7 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QWidget, QSlider, QLabel, QVBoxLayout, QDoubleSpinBox
+from PyQt6.QtWidgets import QApplication, QWidget, QSlider, QLabel, QVBoxLayout, QDoubleSpinBox, QLineEdit, QComboBox, QDial, QProgressBar, QPushButton
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QDoubleValidator
 
 startVal = 50
 
@@ -67,26 +68,50 @@ class MainWindow(QWidget):
         self.numBox = QDoubleSpinBox(self, decimals = 4, maximum = 100, minimum = 0)
         self.numBox.setValue(startVal)
         self.numBox.valueChanged.connect(self.update)
+
+        self.lineEdit = QLineEdit(str(startVal), self)
+        lineValidator = QDoubleValidator(0.0,100.0, 4)
+        lineValidator.setNotation(QDoubleValidator.Notation.StandardNotation)
+        self.lineEdit.setValidator(lineValidator)
+        self.lineEdit.returnPressed.connect(self.lineEditEntered)
+
+        self.comboBox = QComboBox(self)
+        self.dial = QDial(self)
+        self.progressBar = QProgressBar(self)
+        self.pushButton = QPushButton(self)
         
         layout.addWidget(self.slider)
         layout.addWidget(self.result_label)
         layout.addWidget(self.numBox)
+        layout.addWidget(self.lineEdit)
+        layout.addWidget(self.comboBox)
+        layout.addWidget(self.dial)
+        layout.addWidget(self.progressBar)
+        layout.addWidget(self.pushButton)
 
         # show the window
         self.show()
 
-    def update(self, value):
+    def update(self, rawVal):
+        value = float(rawVal)
         # Block signals to prevent recursion
         self.result_label.setText(f'Current Value: {value}')
         if self.numBox.value() != value:
             self.numBox.blockSignals(True)
             self.numBox.setValue(value)
             self.numBox.blockSignals(False)
-        sliderVal = int(value)
-        if self.slider.value() != sliderVal:
+        if self.slider.value() != value:
             self.slider.blockSignals(True)
-            self.slider.setValue(sliderVal)
+            self.slider.setValue(value)
             self.slider.blockSignals(False)
+        if self.lineEdit.text() != value:
+            self.lineEdit.blockSignals(True)
+            self.lineEdit.setText(str(value))
+            self.lineEdit.blockSignals(False)
+
+    def lineEditEntered(self):
+        text = self.lineEdit.text()
+        self.update(text)
 
 
 if __name__ == '__main__':
