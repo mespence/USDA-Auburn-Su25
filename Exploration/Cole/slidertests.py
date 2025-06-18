@@ -8,38 +8,27 @@ max = 100
 min = 0
 
 class CDoubleSlider(QSlider):
-
     # create our our signal that we can connect to if necessary
     doubleValueChanged = pyqtSignal(float)
-
     def __init__(self, *args, decimals=3, **kargs):
         super(CDoubleSlider, self).__init__( *args, **kargs)
         self._multi = 10 ** decimals
-
         self.valueChanged.connect(self.emitDoubleValueChanged)
-
     def emitDoubleValueChanged(self):
         value = float(super(CDoubleSlider, self).value())/self._multi
         self.doubleValueChanged.emit(value)
-
     def value(self):
         return float(super(CDoubleSlider, self).value()) / self._multi
-
     def setMinimum(self, value):
         return super(CDoubleSlider, self).setMinimum(value * self._multi)
-    
     def setRange(self, min, max):
         return super(CDoubleSlider, self).setRange(min * self._multi, max * self._multi)
-
     def setMaximum(self, value):
         return super(CDoubleSlider, self).setMaximum(value * self._multi)
-
     def setSingleStep(self, value):
         return super(CDoubleSlider, self).setSingleStep(value * self._multi)
-
     def singleStep(self):
         return float(super(CDoubleSlider, self).singleStep()) / self._multi
-
     def setValue(self, value):
         super(CDoubleSlider, self).setValue(int(value * self._multi))
 
