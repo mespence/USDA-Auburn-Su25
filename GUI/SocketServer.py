@@ -2,15 +2,27 @@ import socket
 import threading
 import json
 
+import sys
+import logging
 
+# Log output to console even if running in background thread
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(message)s",
+    datefmt="[%Y-%m-%d | %H:%M:%S]",
+    #format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+    force=True
+)
 
 class SocketServer:
     def __init__(self, host = "localhost", port=16671):
-        self.host: str = host 
-        self.port: int = port
-        self.clients: dict[str, socket.socket] = {}
-        self.running = False
-        self._server_socket: socket.socket = None
+        self.host: str = host                        # use "localhost" for interal socket
+        self.port: int = port                        # arbitrary port
+        self.clients: dict[str, socket.socket] = {}  # map of client IDs to their connection objects
+        self.running = False                         # whether the server is running
+        self.ready_event = threading.Event()         # event to signal that the server is ready to receive connections
+        self._server_socket: socket.socket = None    # the socket connection
 
     def start(self):
         """
@@ -20,13 +32,14 @@ class SocketServer:
             return
         self.running = True
         threading.Thread(target = self._listen, daemon = True).start()
+        self.ready_event.wait()  # wait for server to fully initialize
 
     def stop(self):
         """
         Stops the server, closes all sockets, and disconnects any clients.
         """
         self.running = False
-        print("[SERVER] Shutting down...")
+        logging.info("[SERVER] Shutting down...")
 
         # Close client connections
         for client_id, conn in self.clients.items():
@@ -34,9 +47,9 @@ class SocketServer:
                 try:
                     conn.shutdown(socket.SHUT_RDWR)
                     conn.close()
-                    print(f"[SERVER] Disconnected {client_id}")
+                    logging.info(f"[SERVER] Disconnected {client_id}")
                 except Exception as e:
-                    print(f"[SERVER] Error closing {client_id}: {e}")
+                    logging.info(f"[SERVER] Error closing {client_id}: {e}")
 
         self.clients = {}
 
@@ -44,11 +57,11 @@ class SocketServer:
         if self._server_socket:
             try:
                 self._server_socket.close()
-                print("[SERVER] Socket closed")
+                logging.info("[SERVER] Socket closed")
             except Exception as e:
-                print(f"[SERVER] Error closing server socket: {e}")
+                logging.info(f"[SERVER] Error closing server socket: {e}")
 
-        print("[SERVER] Shutdown complete.")
+        logging.info("[SERVER] Shutdown complete.")
 
     def _listen(self):
         """
@@ -60,7 +73,8 @@ class SocketServer:
             server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             server_sock.bind((self.host, self.port))
             server_sock.listen(2)
-            print(f"[SERVER] Listening on {self.host}:{self.port}")
+            self.ready_event.set()
+            logging.info(f"[SERVER] Listening on {self.host}:{self.port}")
 
             while self.running:
                 try:
@@ -77,13 +91,13 @@ class SocketServer:
             initial_message = conn.recv(1024).decode().strip()
             client_id = initial_message.split("=")[1]  
             self.clients[client_id] = conn
-            print(f"[SOCKET] Client [{client_id}] connected from {addr}")
+            logging.info(f"[SOCKET] Client [{client_id}] connected from {addr}")
             self._receive_loop(conn, client_id)
         except Exception as e:
-            print(f"[SERVER ERROR] {addr}: {e}")
+            logging.info(f"[SERVER ERROR] {addr}: {e}")
         finally:
             conn.close()
-            print(f"[SERVER] {addr} disconnected")
+            logging.info(f"[SERVER] {addr} disconnected")
 
     def _receive_loop(self, conn: socket.socket, client_id: str):
         """
@@ -109,15 +123,15 @@ class SocketServer:
         try:
             data = json.loads(message)
         except json.JSONDecodeError:
-            print(f"[SOCKET] Invalid JSON from {client_id}: {message}")
+            logging.info(f"[SOCKET] Invalid JSON from {client_id}: {message}")
             return
         
         if data["type"] == "data":
             self._forward_data(data)
         elif data["type"] == "control":
-            print(f"[{client_id}] Control: {data['control_type']} = {data['value']}")
+            logging.info(f"[{client_id}] Control: {data['control_type']} = {data['value']}")
         else:
-            print(f"[{client_id}] Unknown message type: {data['type']}")
+            logging.info(f"[{client_id}] Unknown message type: {data['type']}")
     
     def _forward_data(self, data: dict):
         """
@@ -126,7 +140,7 @@ class SocketServer:
         """
         cs_conn = self.clients.get("CS")
         if not cs_conn:
-            print("[SERVER] CS not connected, can't forward data.")
+            logging.info("[SERVER] CS not connected, can't forward data.")
             return
 
         data_list = data["value"].split(",")

@@ -1,9 +1,11 @@
 from numpy.typing import NDArray
 from collections import deque
-from queue import Queue
+from queue import Queue, Empty
 import numpy as np
 import pandas as pd
-import sys, time, threading
+import sys
+import threading
+import json
 
 from pyqtgraph import PlotWidget, PlotItem, ScatterPlotItem, PlotDataItem, mkPen 
 
@@ -12,44 +14,56 @@ from PyQt6.QtGui import QWheelEvent
 from PyQt6.QtWidgets import QApplication, QPushButton
 
 from PanZoomViewBox import PanZoomViewBox
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from GUI.SocketServer import SocketServer
+from GUI.SocketClient import SocketClient
 
-def simulate_incoming_data(receive_queue):
-    t = 0
-    while True:
-        val = np.sin(t)
-        receive_queue.put(f"{t:.2f},{val:.4f}")
-        # simulate 100 times a second incoming data
-        t += 0.01
-        time.sleep(0.01)
+# def simulate_incoming_data(receive_queue):
+#     t = 0
+#     while True:
+#         val = np.sin(t)
+#         receive_queue.put(f"{t:.2f},{val:.4f}")
+#         # simulate 100 times a second incoming data
+#         t += 0.01
+#         time.sleep(0.01)
 
-def test_recording_data(receive_queue):
-    df = pd.read_csv('/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/GUI/test_recording.csv', usecols=['time', 'post_rect'])
-    times = df['time'].values
-    volts = df['post_rect'].values
-    interval = 0.01
-    next_time = time.perf_counter()
+# def test_recording_data(receive_queue):
+#     df = pd.read_csv(r'C:\EPG-Project\Summer\CS-Repository\GUI\test_recording.csv', usecols=['time', 'post_rect'])
+#     times = df['time'].values
+#     volts = df['post_rect'].values
+#     interval = 0.01
+#     next_time = time.perf_counter()
 
-    for i in range(len(times)):
-        t = times[i]
-        v = volts[i]
-        receive_queue.put(f"{t:.2f},{v:.4f}")
+#     for i in range(len(times)):
+#         t = times[i]
+#         v = volts[i]
+#         receive_queue.put(f"{t:.2f},{v:.4f}")
 
-        next_time += interval
-        sleep_time = sleep_time = max(0, next_time - time.perf_counter())
-        time.sleep(sleep_time)
+#         next_time += interval
+#         sleep_time = sleep_time = max(0, next_time - time.perf_counter())
+#         time.sleep(sleep_time)
 
 class LiveDataWindow(PlotWidget):
     """
     [EDIT]
     """
-    def __init__(self, receive_queue):
+    def __init__(self):
         super().__init__(viewBox=PanZoomViewBox(datawindow=self))
 
         self.plot_item: PlotItem = self.getPlotItem()
         self.viewbox: PanZoomViewBox = self.plot_item.getViewBox() # the plotting area (no axes, etc.)
         self.viewbox.datawindow = self
 
-        self.receive_queue: Queue = receive_queue
+
+        self.socket_server = SocketServer()
+        self.socket_server.start()
+        self.socket_client = SocketClient(client_id = "CS")
+        self.socket_client.start()
+        self.receive_loop = threading.Thread(target=self.recv_queue_loop, daemon=True)
+        self.receive_loop.start()
+
+
         self.xy_data: list[NDArray] = [np.array([]), np.array([])]
         self.xy_rendered: list[NDArray] = [np.array([]), np.array([])]
         self.curve: PlotDataItem = PlotDataItem(pen=mkPen("blue", width=2))
@@ -95,34 +109,47 @@ class LiveDataWindow(PlotWidget):
         # for live view, follow only 10 seconds of visible data
         self.default_scroll_window = 10
         self.auto_scroll_window = 10
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.read_from_queue)
 
-        # update occurs 100 times / sec, can change
-        self.timer.start(10)
+    def closeEvent(self, event):
+        self.socket_server.stop()
+        super().closeEvent(event)
     
-    def read_from_queue(self):
-        updated = False
-        while not self.receive_queue.empty():
-            line = self.receive_queue.get()
-            # assuming here text input is t,v  t,v  t,v
-            time_str, volt_str = line.strip().split(",")
-            time, volt = float(time_str), float(volt_str)
+    def recv_queue_loop(self):
+        while self.socket_client.running:
+            try:
+                # can include multiple commands/data in one message
+                raw_message = self.socket_client.recv_queue.get(timeout=1.0)
+            except Empty:
+                continue  # restart the loop
 
-            # this copies the np array each time to append so O(n)
-            self.xy_data[0] = np.append(self.xy_data[0], time)
-            self.xy_data[1] = np.append(self.xy_data[1], volt)
+            try:
+                # parse message
+                message_list = raw_message.split("\n")
+                messages = [json.loads(s) for s in message_list if s.strip()]
 
-            # update latest time input
-            self.current_time = time
-            updated = True
+                if '' in message_list:
+                    message_list.remove('')
+
+                for message in messages:
+                    if message['type'] != 'data':
+                        # message is for sliders
+                        continue
+
+                    time = float(message['value'][0])
+                    volt = float(message['value'][1])
+
+                    # this copies the np array each time to append so O(n)
+                    self.xy_data[0] = np.append(self.xy_data[0], time)
+                    self.xy_data[1] = np.append(self.xy_data[1], volt)   
+
+                    # update latest time input
+                    self.current_time = time
+                self.update_plot()
+
+            except Exception as e:
+                print("[RECIEVE LOOP ERROR]", e)
         
-        if not updated:
-            return
-    
-        # updated 100 times a sec, from self.timer.start(10)
-        self.update_plot()
-
+           
     def update_plot(self):
         """
         if live mode enabled then only plot visible data across 10 sec
@@ -267,12 +294,12 @@ class LiveDataWindow(PlotWidget):
         
 if __name__ == "__main__":
 
-    receive_queue = Queue()
+    #receive_queue = Queue()
     # threading.Thread(target=simulate_incoming_data, args=(receive_queue,), daemon=True).start()
-    threading.Thread(target=test_recording_data, args=(receive_queue,), daemon=True).start()
+    #threading.Thread(target=test_recording_data, args=(receive_queue,), daemon=True).start()
 
     app = QApplication([])
-    window = LiveDataWindow(receive_queue)
+    window = LiveDataWindow()
     window.resize(1000, 500)
     window.show()
     sys.exit(app.exec())

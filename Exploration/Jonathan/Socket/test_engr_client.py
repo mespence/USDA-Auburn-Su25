@@ -15,18 +15,18 @@ def device_simulation():
     """
     Simulates a device reading (time, voltage) data every 0.01s
     """
-    DATA_FILE = r"C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv"
+    #DATA_FILE = r"C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv"
+    DATA_FILE = r"C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\sharpshooter_label2.csv"
     with open(DATA_FILE, newline="") as file:
         reader = csv.reader(file)
         next(reader)  # skip header row
-
         interval = 0.01
         next_time = time.perf_counter()
 
         # simulate sending data every 0.01s, 
         # taking into account execution time
         for row in reader:
-            data_row = f"{float(row[0]):.4f},DATA,{float(row[1]):.4f},0\n"
+            data_row = f"{float(row[4]):.4f},DATA,{float(row[5]):.4f},0\n"
             data_dict = {"type":"data", "value":data_row}
             send_queue.put_nowait(data_dict)
             next_time += interval
