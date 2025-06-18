@@ -14,10 +14,6 @@ from PyQt6.QtGui import QWheelEvent
 from PyQt6.QtWidgets import QApplication, QPushButton
 
 from PanZoomViewBox import PanZoomViewBox
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
-from GUI.SocketServer import SocketServer
-from GUI.SocketClient import SocketClient
 
 # def simulate_incoming_data(receive_queue):
 #     t = 0
@@ -54,14 +50,6 @@ class LiveDataWindow(PlotWidget):
         self.plot_item: PlotItem = self.getPlotItem()
         self.viewbox: PanZoomViewBox = self.plot_item.getViewBox() # the plotting area (no axes, etc.)
         self.viewbox.datawindow = self
-
-
-        self.socket_server = SocketServer()
-        self.socket_server.start()
-        self.socket_client = SocketClient(client_id = "CS")
-        self.socket_client.start()
-        self.receive_loop = threading.Thread(target=self.recv_queue_loop, daemon=True)
-        self.receive_loop.start()
 
 
         self.xy_data: list[NDArray] = [np.array([]), np.array([])]

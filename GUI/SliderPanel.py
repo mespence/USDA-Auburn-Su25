@@ -7,8 +7,6 @@ from PyQt6.QtCore import Qt
 
 import sys, json
 
-from SocketClient import SocketClient
-import threading, socket
 
 
 class SliderPanel(QWidget):
@@ -16,9 +14,7 @@ class SliderPanel(QWidget):
         super().__init__(parent=parent)
         self.setWindowTitle("Control Panel")
 
-        self.socket_client: socket.socket = SocketClient('CS')
-        self.socket_client.start()
-        #threading.Thread(target=self.recv_loop, daemon=True).start()
+        self.socket_client = self.parent().socket_client
         
         layout = QVBoxLayout()
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -167,12 +163,12 @@ class SliderPanel(QWidget):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_P:
             self.get_values()
-        if event.key() == Qt.Key.Key_R:
-            print(len(self.socket_client.recv_queue.queue))
+        # if event.key() == Qt.Key.Key_R:
+        #     print(len(self.socket_client.recv_queue.queue))
         super().keyPressEvent(event)
 
     def on_control_change(self, label, value):
-        print(f"{label} changed to {value}")
+        #print(f"{label} changed to {value}")
         data_dict = {"type":"control", "control_type":label, "value":value}
         self.socket_client.send(data_dict)
 
@@ -189,10 +185,6 @@ class SliderPanel(QWidget):
                 for message in messages:
                     if message['type'] == 'data':
                         print('data received')
-                        # self.xy_data[0].append(float(message['value'][0]))
-                        # self.xy_data[1].append(float(message['value'][1]))
-                    #print(self.xy_data[1][-10:])
-                    #print()
 
 
 if __name__ == "__main__":
