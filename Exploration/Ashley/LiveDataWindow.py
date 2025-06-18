@@ -5,11 +5,13 @@ import numpy as np
 import pandas as pd
 import sys, time, threading
 
-from pyqtgraph import InfiniteLine, PlotWidget, PlotItem, ScatterPlotItem, PlotDataItem, ViewBox, mkPen 
+from pyqtgraph import PlotWidget, PlotItem, ScatterPlotItem, PlotDataItem, mkPen 
 
-from PyQt6.QtCore import QTimer, QRect, Qt, QPointF
+from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QWheelEvent
 from PyQt6.QtWidgets import QApplication, QPushButton
+
+from PanZoomViewBox import PanZoomViewBox
 
 def simulate_incoming_data(receive_queue):
     t = 0
@@ -36,105 +38,12 @@ def test_recording_data(receive_queue):
         sleep_time = sleep_time = max(0, next_time - time.perf_counter())
         time.sleep(sleep_time)
 
-class PanZoomViewBox(ViewBox):
-    """
-    Custom ViewBox that overrides default mouse/scroll behavior to support
-    pan and zoom using wheel + modifiers.
-
-    Pan/Zoom behavior:
-    - Ctrl + Scroll: horizontal/vertical zoom (with Shift)
-    - Scroll only: pan (horizontal or vertical based on Shift)
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.datawindow: LiveDataWindow = None
-        self.zoom_viewbox_limit: float = 0.8
-
-    def wheelEvent(self, event: QWheelEvent, axis=None) -> None:
-        """
-        Handles wheel input for zooming and panning, based on modifier keys.
-
-        - Ctrl: zoom
-        - Shift: vertical zoom or pan
-        - No modifiers: horizontal pan
-        """
-        if self.datawindow is None:
-            self.datawindow = self.parentItem().getViewWidget()
-        
-        delta = event.angleDelta().y()
-        modifiers = event.modifiers()
-        live = self.datawindow.live_mode
-
-        ctrl_held = modifiers & Qt.KeyboardModifier.ControlModifier
-        shift_held = modifiers & Qt.KeyboardModifier.ShiftModifier
-
-        if ctrl_held:
-            zoom_factor = 1.001**delta
-            center = self.mapToView(event.position())
-    
-            if shift_held: 
-                # y zoom
-                self.scaleBy((1, 1 / zoom_factor), center)
-            else:
-                # x zoom
-                if live:
-                    (x_min, x_max), _ = self.viewRange()
-                    current_span = x_max - x_min
-                    new_span = current_span / zoom_factor
-                    self.datawindow.auto_scroll_window = new_span
-                else:
-                    (x_min, x_max), _ = self.viewRange()
-                    width = x_max - x_min
-                    new_width = width / zoom_factor
-
-                    center_x = center.x()
-                    new_x_min = center_x - (center_x - x_min) / zoom_factor
-                    zero_ratio = - new_x_min / new_width
-
-                    if zero_ratio > self.zoom_viewbox_limit:
-                        new_x_min = 0 - self.zoom_viewbox_limit * new_width
-                        new_x_max = new_x_min + new_width
-                        self.setXRange(new_x_min, new_x_max, padding=0)
-                    else:
-                        self.scaleBy((1 / zoom_factor, 1), center)
-
-        else:
-            (x_min, x_max), (y_min, y_max) = self.viewRange()
-            width, height = x_max - x_min, y_max - y_min
-
-            if shift_held:
-                # y zoom
-                v_zoom_factor = 5e-4
-                dy = delta * v_zoom_factor * height
-                self.translateBy(y=dy)
-            else:
-                # x zoom
-                if not live:
-                    h_zoom_factor = 2e-4
-                    dx = delta * h_zoom_factor * width
-
-                    new_x_min = x_min + dx
-                    zero_ratio = - new_x_min / width
-
-                    # don't pan if it moves x=0 more than 80% across the ViewBox
-                    if zero_ratio > self.zoom_viewbox_limit:
-                        pass  
-                    else:
-                        self.translateBy(x=dx)
-
-        event.accept()
-        self.datawindow.update_plot()
-
-    def mouseDragEvent(self, event, axis=None) -> None:
-        event.ignore()
-
 class LiveDataWindow(PlotWidget):
     """
     [EDIT]
     """
     def __init__(self, receive_queue):
-        super().__init__(viewBox=PanZoomViewBox())
+        super().__init__(viewBox=PanZoomViewBox(datawindow=self))
 
         self.plot_item: PlotItem = self.getPlotItem()
         self.viewbox: PanZoomViewBox = self.plot_item.getViewBox() # the plotting area (no axes, etc.)
@@ -184,6 +93,7 @@ class LiveDataWindow(PlotWidget):
 
         self.current_time = 0
         # for live view, follow only 10 seconds of visible data
+        self.default_scroll_window = 10
         self.auto_scroll_window = 10
         self.timer = QTimer()
         self.timer.timeout.connect(self.read_from_queue)
@@ -229,8 +139,7 @@ class LiveDataWindow(PlotWidget):
             end = self.current_time
             start = end - self.auto_scroll_window
             self.viewbox.setXRange(start, end, padding=0)
-            (x_min, x_max), _ = self.viewbox.viewRange()
-            self.downsample_visible(x_range=(x_min, x_max))
+            self.downsample_visible(x_range=(start, end))
 
             # dont show scatter during live mode
             self.zoom_level = 1
@@ -248,7 +157,7 @@ class LiveDataWindow(PlotWidget):
                 return float("inf")  # avoid division by zero
             
             pix_per_second = plot_width / time_span
-            default_pix_per_second = plot_width / self.auto_scroll_window
+            default_pix_per_second = plot_width / self.default_scroll_window
             self.zoom_level = pix_per_second / default_pix_per_second
 
             if self.zoom_level >= 3:
@@ -256,8 +165,6 @@ class LiveDataWindow(PlotWidget):
                 self.scatter.setData(self.xy_rendered[0], self.xy_rendered[1])
             else:
                 self.scatter.setVisible(False)
-
-        # print("plotting ", len(self.xy_rendered[0]), " points")
 
         self.curve.setData(self.xy_rendered[0], self.xy_rendered[1])
         self.viewbox.update()
@@ -272,20 +179,13 @@ class LiveDataWindow(PlotWidget):
                                         border-radius: 3px;
                                         padding: 5px;
                                         margin: 15px;""")
+            self.update_plot()
         else:
-        #     (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
-        #     self.viewbox.setXRange(x_min, x_max, padding=0)
-        #     self.viewbox.setYRange(y_min, y_max, padding=0)
             self.button.setStyleSheet("""background-color: #379acc;
                                         color: white;
                                         border-radius: 3px;
                                         padding: 5px;
                                         margin: 15px;""")
-
-
-            # tried doing the above in one setRange call but it weirdly still autoadjusts ?
-                # (x_range), (y_range) = self.viewbox.viewRange()
-                # self.viewbox.setRange(x_range, y_range, padding = 0)
 
     
     def downsample_visible(
@@ -323,7 +223,7 @@ class LiveDataWindow(PlotWidget):
     
         num_points = len(x)
 
-        if num_points <= max_points or num_points < 2:  # no downsampling needed
+        if num_points <= max_points:  # no downsampling needed
             self.xy_rendered[0] = x
             self.xy_rendered[1] = y
             return
