@@ -7,7 +7,7 @@ import sys, time, threading
 
 from pyqtgraph import InfiniteLine, PlotWidget, PlotItem, ScatterPlotItem, PlotDataItem, ViewBox, mkPen 
 
-from PyQt6.QtCore import QTimer, QRect, Qt
+from PyQt6.QtCore import QTimer, QRect, Qt, QPointF
 from PyQt6.QtGui import QWheelEvent
 from PyQt6.QtWidgets import QApplication, QPushButton
 
@@ -49,6 +49,7 @@ class PanZoomViewBox(ViewBox):
     def __init__(self) -> None:
         super().__init__()
         self.datawindow: LiveDataWindow = None
+        self.zoom_viewbox_limit: float = 0.8
 
     def wheelEvent(self, event: QWheelEvent, axis=None) -> None:
         """
@@ -63,6 +64,7 @@ class PanZoomViewBox(ViewBox):
         
         delta = event.angleDelta().y()
         modifiers = event.modifiers()
+        live = self.datawindow.live_mode
 
         ctrl_held = modifiers & Qt.KeyboardModifier.ControlModifier
         shift_held = modifiers & Qt.KeyboardModifier.ShiftModifier
@@ -70,32 +72,56 @@ class PanZoomViewBox(ViewBox):
         if ctrl_held:
             zoom_factor = 1.001**delta
             center = self.mapToView(event.position())
+    
             if shift_held: 
+                # y zoom
                 self.scaleBy((1, 1 / zoom_factor), center)
             else:
-                self.scaleBy((1 / zoom_factor, 1), center)
+                # x zoom
+                if live:
+                    (x_min, x_max), _ = self.viewRange()
+                    current_span = x_max - x_min
+                    new_span = current_span / zoom_factor
+                    self.datawindow.auto_scroll_window = new_span
+                else:
+                    (x_min, x_max), _ = self.viewRange()
+                    width = x_max - x_min
+                    new_width = width / zoom_factor
+
+                    center_x = center.x()
+                    new_x_min = center_x - (center_x - x_min) / zoom_factor
+                    zero_ratio = - new_x_min / new_width
+
+                    if zero_ratio > self.zoom_viewbox_limit:
+                        new_x_min = 0 - self.zoom_viewbox_limit * new_width
+                        new_x_max = new_x_min + new_width
+                        self.setXRange(new_x_min, new_x_max, padding=0)
+                    else:
+                        self.scaleBy((1 / zoom_factor, 1), center)
+
         else:
             (x_min, x_max), (y_min, y_max) = self.viewRange()
             width, height = x_max - x_min, y_max - y_min
 
             if shift_held:
+                # y zoom
                 v_zoom_factor = 5e-4
                 dy = delta * v_zoom_factor * height
                 self.translateBy(y=dy)
             else:
-                h_zoom_factor = 2e-4
-                dx = delta * h_zoom_factor * width
+                # x zoom
+                if not live:
+                    h_zoom_factor = 2e-4
+                    dx = delta * h_zoom_factor * width
 
-                new_x_min = x_min + dx
-                new_x_max = new_x_min + width
+                    new_x_min = x_min + dx
+                    zero_ratio = - new_x_min / width
 
-                left_limit = 0 - 0.8*width
-
-                # don't pan if it moves x=0 more than 0.80% across the ViewBox
-                if new_x_min < left_limit:
-                    pass  
-                else:
-                    self.translateBy(x=dx)
+                    # don't pan if it moves x=0 more than 80% across the ViewBox
+                    if zero_ratio > self.zoom_viewbox_limit:
+                        pass  
+                    else:
+                        self.translateBy(x=dx)
 
         event.accept()
         self.datawindow.update_plot()
@@ -117,13 +143,11 @@ class LiveDataWindow(PlotWidget):
         self.receive_queue: Queue = receive_queue
         self.xy_data: list[NDArray] = [np.array([]), np.array([])]
         self.xy_rendered: list[NDArray] = [np.array([]), np.array([])]
-        self.curve: PlotDataItem = self.plot(pen=mkPen("blue", width=2))
+        self.curve: PlotDataItem = PlotDataItem(pen=mkPen("blue", width=2))
         self.scatter: ScatterPlotItem = ScatterPlotItem(
             symbol="o", size=4, brush="blue"
         )  # the discrete points shown at high zooms
         self.zoom_level: float = 1
-        self.leading_line: InfiniteLine = InfiniteLine(pos=0, angle=90, movable=False, pen=mkPen("red", width=3))
-        self.addItem(self.leading_line)
 
         # Setting up UI of graph (mimics datawindow)
         self.chart_width: int = 400
@@ -140,20 +164,27 @@ class LiveDataWindow(PlotWidget):
         self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color="black")
         self.plot_item.showGrid(x=True, y=True)
         self.plot_item.layout.setContentsMargins(30, 30, 30, 20)
-        self.plot_item.enableAutoRange("y", True)
+
+        # first sec enable auto range
+        self.autorange_disabled = False
+        self.plot_item.enableAutoRange()
 
         # Live mode button
         self.live_mode = True
         self.button = QPushButton("Pause Live View", self)
+        self.button.setStyleSheet("""background-color: gray;
+                                        color: white;
+                                        border-radius: 3px;
+                                        padding: 5px;
+                                        margin: 15px;""")
+
         self.button.setCheckable(True)
         self.button.setChecked(True)
         self.button.clicked.connect(self.live_mode_enabled)
 
         self.current_time = 0
-        # for live view, follow only 8 seconds of visible data
-        self.auto_scroll_window = 8
-        # for live view, have 2 seconds of empty time in front of leading line
-        self.leading_line_pos = 2
+        # for live view, follow only 10 seconds of visible data
+        self.auto_scroll_window = 10
         self.timer = QTimer()
         self.timer.timeout.connect(self.read_from_queue)
 
@@ -187,23 +218,19 @@ class LiveDataWindow(PlotWidget):
         if live mode enabled then only plot visible data across 10 sec
         else plot visible data of what the user scrolls to view
         """
-        (x_min, x_max), _ = self.viewbox.viewRange()
-
         self.viewbox.setLimits(xMin=None, xMax=None, yMin=None, yMax=None) # clear stale data (avoids warning)
 
-        self.downsample_visible(x_range=(x_min, x_max))
-
-        x_data = self.xy_data[0]
-        y_data = self.xy_data[1]
+        # only enable autorange for first second
+        if self.current_time > 1 and not self.autorange_disabled:
+            self.plot_item.disableAutoRange()
+            self.autorange_disabled = True
 
         if self.live_mode:
             end = self.current_time
             start = end - self.auto_scroll_window
-            visible = (x_data >= start) & (x_data <= end)
-            self.xy_rendered = [x_data[visible], y_data[visible]]
-
-            self.viewbox.setXRange(start, end + self.leading_line_pos, padding=0)
-            self.leading_line.setPos(end)
+            self.viewbox.setXRange(start, end, padding=0)
+            (x_min, x_max), _ = self.viewbox.viewRange()
+            self.downsample_visible(x_range=(x_min, x_max))
 
             # dont show scatter during live mode
             self.zoom_level = 1
@@ -211,21 +238,17 @@ class LiveDataWindow(PlotWidget):
         
         else:
             (x_min, x_max), _ = self.viewbox.viewRange()
-            # ensure that the lines do not disappear when zooming in because near points out of view
-            dx = 0.01
-            visible = (x_data >= x_min - dx) & (x_data <= x_max + dx)
-            self.xy_rendered = [x_data[visible], y_data[visible]]
-            self.leading_line.setPos(self.current_time)
+            self.downsample_visible(x_range=(x_min, x_max))
 
             # show scatter if zoom is greater than 300%
             plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
             time_span = x_max - x_min
-            pix_per_second = plot_width / time_span
 
             if time_span == 0:
-                return float("inf")  # Avoid division by zero
+                return float("inf")  # avoid division by zero
             
-            default_pix_per_second = plot_width / (self.auto_scroll_window + self.leading_line_pos)
+            pix_per_second = plot_width / time_span
+            default_pix_per_second = plot_width / self.auto_scroll_window
             self.zoom_level = pix_per_second / default_pix_per_second
 
             if self.zoom_level >= 3:
@@ -234,6 +257,8 @@ class LiveDataWindow(PlotWidget):
             else:
                 self.scatter.setVisible(False)
 
+        # print("plotting ", len(self.xy_rendered[0]), " points")
+
         self.curve.setData(self.xy_rendered[0], self.xy_rendered[1])
         self.viewbox.update()
 
@@ -241,13 +266,21 @@ class LiveDataWindow(PlotWidget):
         self.live_mode = self.button.isChecked()
         self.button.setText("Pause Live View" if self.live_mode else "Live View")
 
-        if self.live_mode :
-            self.plot_item.enableAutoRange("y", True)
+        if self.live_mode:
+            self.button.setStyleSheet("""background-color: gray;
+                                        color: white;
+                                        border-radius: 3px;
+                                        padding: 5px;
+                                        margin: 15px;""")
         else:
-            self.plot_item.enableAutoRange(False)
-            (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
-            self.viewbox.setXRange(x_min, x_max, padding=0)
-            self.viewbox.setYRange(y_min, y_max, padding=0)
+        #     (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
+        #     self.viewbox.setXRange(x_min, x_max, padding=0)
+        #     self.viewbox.setYRange(y_min, y_max, padding=0)
+            self.button.setStyleSheet("""background-color: #379acc;
+                                        color: white;
+                                        border-radius: 3px;
+                                        padding: 5px;
+                                        margin: 15px;""")
 
 
             # tried doing the above in one setRange call but it weirdly still autoadjusts ?
@@ -330,10 +363,7 @@ class LiveDataWindow(PlotWidget):
         """
         Forwards a scroll event to the custom viewbox.
         """
-        if not self.live_mode:
-            self.viewbox.wheelEvent(event)
-        else:
-            event.ignore()
+        self.viewbox.wheelEvent(event)
         
 if __name__ == "__main__":
 
