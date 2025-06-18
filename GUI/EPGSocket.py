@@ -1,7 +1,8 @@
 import socket
 import threading
 import json
-
+import queue
+import time
 import sys
 import logging
 
@@ -10,19 +11,23 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(message)s",
     datefmt="[%Y-%m-%d | %H:%M:%S]",
-    #format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
     force=True
 )
 
 class SocketServer:
+    """
+    A bidirectional socket to connect the CS and ENGR UIs.
+    Forwards EPG data and slider control events beteween the clients. 
+    """
     def __init__(self, host = "localhost", port=16671):
-        self.host: str = host                        # use "localhost" for interal socket
-        self.port: int = port                        # arbitrary port
-        self.clients: dict[str, socket.socket] = {}  # map of client IDs to their connection objects
-        self.running = False                         # whether the server is running
-        self.ready_event = threading.Event()         # event to signal that the server is ready to receive connections
-        self._server_socket: socket.socket = None    # the socket connection
+        self.host: str = host                           # use "localhost" for interal socket
+        self.port: int = port                           # arbitrary port
+        self.clients: dict[str, socket.socket] = {}     # map of client IDs to their connection objects
+        self.running = False                            # whether the server is running
+        self.ready_event = threading.Event()            # event to signal that the server is ready to receive connections
+        self._server_socket: socket.socket = None       # the socket connection
+        self._current_time:float = time.perf_counter()  # time tracker used in logging
 
     def start(self):
         """
@@ -79,9 +84,9 @@ class SocketServer:
             while self.running:
                 try:
                     conn, addr = self._server_socket.accept()
+                    threading.Thread(target=self._handle_client, args=(conn, addr), daemon=True).start()
                 except OSError:
                     break  # socket closed
-                threading.Thread(target=self._handle_client, args=(conn, addr), daemon=True).start()
        
     def _handle_client(self, conn: socket.socket, addr):
         """
@@ -91,7 +96,7 @@ class SocketServer:
             initial_message = conn.recv(1024).decode().strip()
             client_id = initial_message.split("=")[1]  
             self.clients[client_id] = conn
-            logging.info(f"[SOCKET] Client [{client_id}] connected from {addr}")
+            logging.info(f"[SERVER] Client [{client_id}] connected from {addr}")
             self._receive_loop(conn, client_id)
         except Exception as e:
             logging.info(f"[SERVER ERROR] {addr}: {e}")
@@ -101,8 +106,8 @@ class SocketServer:
 
     def _receive_loop(self, conn: socket.socket, client_id: str):
         """
-        Reads newline-delimited JSON messages from the given client connection
-        and dispatches them to the appropriate handler.
+        Backgroung loop to read newline-delimited JSON messages from the given client connection
+        and dispatch them to the appropriate handler.
         """
         buffer = ""
         while True:
@@ -123,7 +128,7 @@ class SocketServer:
         try:
             data = json.loads(message)
         except json.JSONDecodeError:
-            logging.info(f"[SOCKET] Invalid JSON from {client_id}: {message}")
+            logging.info(f"[SERVER] Invalid JSON from {client_id}: {message}")
             return
         
         if data["type"] == "data":
@@ -140,7 +145,9 @@ class SocketServer:
         """
         cs_conn = self.clients.get("CS")
         if not cs_conn:
-            logging.info("[SERVER] CS not connected, can't forward data.")
+            if (time.perf_counter() - self._current_time) > 1: # only send every 1s
+                logging.info("[SERVER] CS not connected, can't forward data.")
+                self._current_time = time.perf_counter()
             return
 
         data_list = data["value"].split(",")
@@ -151,122 +158,75 @@ class SocketServer:
         cs_conn.sendall((json.dumps(msg) + "\n").encode("utf-8"))
 
 
-if __name__ == "__main__":
-    socket_server = SocketServer()
-    socket_server.start()
+class SocketClient:
+    """
+    A client class to connect to the socket and handle sending/receiving data it.
+    Incoming messages are pulled from the recieve queue, and outgoing messages are placed in the send queue.
+    """
+    def __init__(self, client_id, host="localhost", port=16671):
+        self.host: str = host                   # use "localhost" for interal socket
+        self.port: int = port                   # arbitrary port
+        self.client_id: str = client_id         # identifying string for this client (e.g., CS, ENGR) 
+        self.send_queue: queue = queue.Queue()  # queue to send data to other client
+        self.recv_queue: queue = queue.Queue()  # queue to receive data from other client
+        self.running: bool = False              # whether the socket is running
+        self._sock: socket.socket = None        # the socket connection
 
-    input("Press Enter to quit...\n")
+    def start(self):
+        """
+        Starts the client and initializes the connection to the socket.
+        """
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._sock.connect((self.host, self.port))
 
+        # send initial message with client ID to socket
+        self._sock.sendall(f"client_id={self.client_id}\n".encode('utf-8'))
+        self.running = True
 
+        threading.Thread(target=self._send_loop, daemon=True).start()
+        threading.Thread(target=self._recv_loop, daemon=True).start()
 
+    def send(self, data: dict):
+        """
+        Places a JSON-formatted dictionary in the send queue.
+        """
+        self.send_queue.put_nowait(data)
 
-# HOST = 'localhost'
-# PORT = 16671
+    def receive(self):
+        """
+        Gets a JSON-formatted dictionary from the receive queue if it's non-empty.
+        """
+        try:
+            return self.recv_queue.get_nowait()
+        except queue.Empty:
+            return None
 
+    def _send_loop(self):
+        """
+        Background loop to handle outgoing messages.
+        """
+        while self.running:
+            try:
+                msg = self.send_queue.get(timeout=0.1)
+                json_str = json.dumps(msg) + "\n"
+                self._sock.sendall(json_str.encode("utf-8"))
+            except queue.Empty:
+                continue
+            except Exception as e:
+                logging.info("[SocketClient SEND ERROR]", e)
+                self.running = False
+                break
 
-# clients: dict[str, socket.socket] = {
-#     "ENGR": None,
-#     "CS": None,
-# }
-
-# def slider_listener(conn):
-#     """
-#     Background thread: receive control messages (e.g., slider updates).
-#     """
-#     while True:
-#         try:
-#             data = conn.recv(1024)
-#             if not data:
-#                 print("Sliders disconnected.")
-#                 break
-#             print("[CONTROL]", data.decode().strip())
-#         except ConnectionResetError:
-#             print("Client forcibly closed the connection.")
-#             break
-#         except Exception as e:
-#             print("Error in control thread:", e)
-#             break     
-
-
-# def handle_client(conn, addr):
-
-#     initial_data = conn.recv(1024).decode().strip()
-#     client_id = initial_data.split("=")[1]
-
-#     clients[client_id] = conn
-#     print(f"[SERVER] Connected to {client_id} from {addr}")
-
-#     buffer = ""
-
-#     try:
-#         while True:
-#             chunk = conn.recv(1024)
-#             if not chunk:
-#                 break  # client disconnected
-
-#             buffer += chunk.decode()
-
-#             # Split buffer into complete lines
-#             while "\n" in buffer:
-#                 line, buffer = buffer.split("\n", 1)
-#                 process_message(line.strip(), client_id)
-
-#     except Exception as e:
-#         print(f"[ERROR] {addr}: {e}")
-#     finally:
-#         conn.close()
-#         print(f"[DISCONNECTED] {addr}")
-
-# def process_message(message: str, client_id: str):
-#     try:
-#         msg = json.loads(message)
-
-#         if msg["type"] == "data":
-#             send_stream(msg)
-
-#         elif msg["type"] == "control":
-#             print(f"[{client_id}] control: {msg["control_type"]} = {msg["value"]}")
-
-#         else:
-#             print(f"[{client_id}] UNKNOWN TYPE: {msg}")
-
-#     except json.JSONDecodeError:
-#         print(f"[{client_id}] INVALID JSON: {message}")
-
-
-
-# def send_stream(message_dict: dict):
-#     """
-#     Forwards data from the engr client to the cs client.
-#     """
-#     cs_conn = clients["CS"]
-
-#     if cs_conn is None:
-#         print("[SERVER] CS client not connected, cannot forward data.")
-#         return  # CS client not connected
-    
-#     if message_dict["type"] == "data":
-#         data_list = message_dict["value"].split(",") # [timestamp, DATA, voltage, channel]
-#         message = {"type": "data", "value": (data_list[0], data_list[2])}
-#         json_str = json.dumps(message) + "\n"
-
-#         cs_conn.sendall(json_str.encode("utf-8"))
-    
-
-# def main():
-
-#     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-#         s.bind((HOST, PORT))
-#         s.listen(2)
-#         print(f"[SERVER] Listening on {HOST}:{PORT}...")
-
-#         while True:
-#             conn, addr = s.accept()
-
-#             threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start() # client handler
-
-#             # slider_thread = threading.Thread(target=slider_listener, args=(conn,), daemon = True)
-#             # slider_thread.start()
-
-# if __name__ == "__main__":
-#     main()
+    def _recv_loop(self):
+        """
+        Background loop to handle incoming messages.
+        """
+        while self.running:
+            try:
+                data = self._sock.recv(1024)
+                if data:
+                    self.recv_queue.put_nowait(data.decode("utf-8"))
+            except Exception as e:
+                logging.info("[SocketClient RECV ERROR]", e)  
+                self.running = False  
+                break
