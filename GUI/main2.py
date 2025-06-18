@@ -3,12 +3,12 @@ import sys
 import ctypes
 
 from PyQt6.QtWidgets import (
-      QApplication, QMainWindow, QWidget, QGridLayout, 
-      QPushButton, QComboBox, QProgressBar, QMenuBar
+      QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
+      QPushButton, QComboBox, QProgressBar, QToolButton, QMenuBar
 )
 from PyQt6.QtCore import (
       QRunnable, pyqtSignal, QThreadPool, QObject, 
-      QEvent,
+      QEvent, Qt, QSize
 )
 from PyQt6.QtGui import QIcon
 
@@ -18,8 +18,10 @@ from Labeler import Labeler
 from Settings import Settings
 from FileSelector import FileSelector
 from SettingsWindow import SettingsWindow
+from SliderPanel import SliderPanel
 #from ModelSelector import ModelSelector
 
+# TODO: fix the cause of the warning
 import warnings
 warnings.filterwarnings('ignore', module="torch", message="enable_nested_tensor is True.*")
 
@@ -120,43 +122,103 @@ class MainWindow(QMainWindow):
             resetButton = QPushButton("Reset Zoom (R)", self)
             resetButton.setGeometry(10, 10, 100, 30)
             resetButton.clicked.connect(self.datawindow.reset_view)
+
+            self.slider_panel = SliderPanel(parent=self)
+
+            sliderButton = QToolButton(parent=self)
+            sliderButton.setIcon(QIcon("icons/sliders.svg"))
+            sliderButton.setIconSize(QSize(24, 24))
+            sliderButton.setCursor(Qt.CursorShape.PointingHandCursor)
+            sliderButton.setToolTip("Open control sliders")
+            sliderButton.setAutoRaise(True) 
+            self.setStyleSheet("""
+                QToolButton {
+                    color: #FFFFFF; 
+                    border: none;
+                    background: transparent;
+                    padding: 2px;
+                    border-radius: 4px;                  /* rounded corners */
+                }
+                QToolButton:hover {                      /* ← hover state */
+                    background: rgba(160, 160, 215, 50);   /* light blue */
+                }
+            """)
+            sliderButton.clicked.connect(self.openSliders)
+
+            self.slider_panel.hide()
+
             
             # Arrange the widgets
             centralWidget = QWidget()
-            layout = QGridLayout()
-            layout.addWidget(settingsButton, 0, 0)
-            layout.addWidget(self.datawindow, 1, 0, 1, 0)
-            layout.addWidget(openDataButton, 3, 0)
-            layout.addWidget(startSplittingButton, 3, 1)
-            layout.addWidget(startLabelingButton, 3, 2)
-            layout.addWidget(saveDataButton, 3, 3)
-            layout.addWidget(self.progressBar, 4, 0)
-            layout.addWidget(self.stopLabelingButton, 4, 1)
-            layout.addWidget(self.baselineCursorButton, 4, 2)
-            layout.addWidget(modelChooser, 0, 1)
-            layout.addWidget(resetButton, 0, 3)
-        #     layout.addWidget(self.datawindow.h_scrollbar, 2, 0, 1, 0)
-            centralWidget.setLayout(layout)
+
+            main_layout = QHBoxLayout()  # horizontal: left = plot, right = sliders
+            left_layout = QVBoxLayout()  # Left column layout
+
+            # Add top-row controls to a row layout
+            top_controls = QHBoxLayout()
+            top_controls.addWidget(settingsButton)
+            top_controls.addWidget(modelChooser)
+            top_controls.addWidget(resetButton)
+            top_controls.addWidget(sliderButton)
+            left_layout.addLayout(top_controls)
+
+            # Add DataWindow
+            left_layout.addWidget(self.datawindow)
+
+            # Bottom row layout (buttons, progress, etc.)
+            bottom_controls = QHBoxLayout()
+            bottom_controls.addWidget(openDataButton)
+            bottom_controls.addWidget(startSplittingButton)
+            bottom_controls.addWidget(startLabelingButton)
+            bottom_controls.addWidget(saveDataButton)
+            left_layout.addLayout(bottom_controls)
+
+            bottom_controls_2 = QHBoxLayout()
+            bottom_controls_2.addWidget(self.progressBar)
+            bottom_controls_2.addWidget(self.stopLabelingButton)
+            bottom_controls_2.addWidget(self.baselineCursorButton)
+            left_layout.addLayout(bottom_controls_2)
+
+            main_layout.addLayout(left_layout, stretch=4)
+            main_layout.addWidget(self.slider_panel, stretch=1)
+
+            centralWidget.setLayout(main_layout)
+            
+
+        #     layout = QGridLayout()
+        #     layout.addWidget(settingsButton, 0, 0)
+        #     layout.addWidget(self.datawindow, 1, 0, 1, 0)
+        #     layout.addWidget(openDataButton, 3, 0)
+        #     layout.addWidget(startSplittingButton, 3, 1)
+        #     layout.addWidget(startLabelingButton, 3, 2)
+        #     layout.addWidget(saveDataButton, 3, 3)
+        #     layout.addWidget(self.progressBar, 4, 0)
+        #     layout.addWidget(self.stopLabelingButton, 4, 1)
+        #     layout.addWidget(self.baselineCursorButton, 4, 2)
+        #     layout.addWidget(modelChooser, 0, 1)
+        #     layout.addWidget(resetButton, 0, 3)
+        #     layout.addWidget(sliderButton, 0, 4)
+        # #     layout.addWidget(self.datawindow.h_scrollbar, 2, 0, 1, 0)
+        #     centralWidget.setLayout(layout)
             self.setCentralWidget(centralWidget)
             
             if not hasattr(self, 'settings_window') or self.settings_window is None:
-                    self.settings_window = SettingsWindow()
-                    self.settings_window.label_color_changed.connect(self.datawindow.change_label_color)
-                    self.settings_window.line_color_changed.connect(self.datawindow.change_line_color)
-                    #self.settings_window.label_deleted.connect(self.datawindow.delete_label)
-                    # self.settings_window.comments_toggled.connect(self.datawindow.set_comments_visible)
-                    # self.settings_window.gridline_toggled.connect(self.datawindow.set_gridlines)
-                    # self.settings_window.label_text_toggled.connect(self.datawindow.set_text_visible)
-                    self.settings_window.duration_toggled.connect(self.datawindow.set_durations_visible)
-                    # self.settings_window.h_gridline_changed.connect(self.datawindow.set_h_gridline_spacing)
-                    # self.settings_window.v_gridline_changed.connect(self.datawindow.set_v_gridline_spacing)
-                    # self.settings_window.h_tick_anchor_changed.connect(self.datawindow.set_h_offset)
-                    # self.settings_window.v_tick_anchor_changed.connect(self.datawindow.set_v_offset)
-                    # self.settings_window.delete_baseline.connect(self.datawindow.delete_baseline)
-                    # self.settings_window.label_hidden.connect(self.datawindow.hide_label)
-                    self.settings_window.destroyed.connect(lambda: setattr(self, 'settings_window', None))
-                    self.settings_window.load_settings()
-
+                self.settings_window = SettingsWindow()
+                self.settings_window.label_color_changed.connect(self.datawindow.change_label_color)
+                self.settings_window.line_color_changed.connect(self.datawindow.change_line_color)
+                #self.settings_window.label_deleted.connect(self.datawindow.delete_label)
+                # self.settings_window.comments_toggled.connect(self.datawindow.set_comments_visible)
+                # self.settings_window.gridline_toggled.connect(self.datawindow.set_gridlines)
+                # self.settings_window.label_text_toggled.connect(self.datawindow.set_text_visible)
+                self.settings_window.duration_toggled.connect(self.datawindow.set_durations_visible)
+                # self.settings_window.h_gridline_changed.connect(self.datawindow.set_h_gridline_spacing)
+                # self.settings_window.v_gridline_changed.connect(self.datawindow.set_v_gridline_spacing)
+                # self.settings_window.h_tick_anchor_changed.connect(self.datawindow.set_h_offset)
+                # self.settings_window.v_tick_anchor_changed.connect(self.datawindow.set_v_offset)
+                # self.settings_window.delete_baseline.connect(self.datawindow.delete_baseline)
+                # self.settings_window.label_hidden.connect(self.datawindow.hide_label)
+                self.settings_window.destroyed.connect(lambda: setattr(self, 'settings_window', None))
+                self.settings_window.load_settings()
             self.threadpool = QThreadPool()
             
     def start_labeling(self):
@@ -180,6 +242,10 @@ class MainWindow(QMainWindow):
         self.settings_window.show()
         self.settings_window.raise_()
         self.settings_window.activateWindow() 
+
+    def openSliders(self):
+        is_visible = self.slider_panel.isVisible()
+        self.slider_panel.setVisible(not is_visible)
 
 class GlobalMouseTracker(QObject):
     """

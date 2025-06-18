@@ -4,20 +4,21 @@ import queue
 import json
 
 class SocketClient:
-    def __init__(self, uid, host="localhost", port=16671):
-        self.host: str = host  # use "localhost" for interal socket
-        self.port: int = port  # arbitrary port
-        self.uid: str = uid # identifying string for this client (e.g., CS, ENGR) 
+    def __init__(self, client_id, host="localhost", port=16671):
+        self.host: str = host                   # use "localhost" for interal socket
+        self.port: int = port                   # arbitrary port
+        self.client_id: str = client_id         # identifying string for this client (e.g., CS, ENGR) 
         self.send_queue: queue = queue.Queue()  # queue to send data to other client
         self.recv_queue: queue = queue.Queue()  # queue to receive data from other client
-        self._sock: socket.socket = None  # the socket connection
-        self._running: bool = False  # whether the socket is running
+        self._sock: socket.socket = None        # the socket connection
+        self._running: bool = False             # whether the socket is running
 
     def start(self):
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.connect((self.host, self.port))
 
-        self._sock.sendall(f"client_id={self.uid}\n".encode('utf-8'))
+        # send initial message with client ID to socket
+        self._sock.sendall(f"client_id={self.client_id}\n".encode('utf-8'))
         self._running = True
 
         threading.Thread(target=self._send_loop, daemon=True).start()

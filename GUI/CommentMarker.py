@@ -11,7 +11,7 @@ class CommentMarker():
     A class for creating comments with a
     vertical dashed line and comment icon
     """
-    def __init__(self, time: float, text: str, datawindow: PlotWidget, icon_path: str = "message.svg"):
+    def __init__(self, time: float, text: str, datawindow: PlotWidget, icon_path: str = "icons/message.svg"):
         self.time = time
         self.text = text
         self.datawindow = datawindow

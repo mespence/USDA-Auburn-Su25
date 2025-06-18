@@ -1,28 +1,38 @@
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel, QComboBox, 
     QSlider, QLineEdit, QPushButton, QVBoxLayout, 
-    QGridLayout
+    QGridLayout, QFrame
 )
 from PyQt6.QtCore import Qt
 
 import sys, json
 
 from SocketClient import SocketClient
-import threading
+import threading, socket
 
 
-class ControlPanel(QWidget):
-    def __init__(self):
-        super().__init__()
+class SliderPanel(QWidget):
+    def __init__(self, parent: str = None):
+        super().__init__(parent=parent)
         self.setWindowTitle("Control Panel")
 
-        self.socket_client = SocketClient('CS')
+        self.socket_client: socket.socket = SocketClient('CS')
         self.socket_client.start()
-        threading.Thread(target=self.recv_loop, daemon=True).start()
-
-        self.xy_data = [[],[]]
-
+        #threading.Thread(target=self.recv_loop, daemon=True).start()
+        
         layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        title_label = QLabel("EPG Controls")
+        title_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(title_label)
+
+        hr = QFrame()
+        hr.setFrameShape(QFrame.Shape.HLine)
+        hr.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(hr)
+
         grid = QGridLayout()
 
         # Row 0: Input Resistance
@@ -139,6 +149,7 @@ class ControlPanel(QWidget):
         button_grid.addWidget(QPushButton("Apply and Close"), 2, 1)
 
         layout.addLayout(button_grid)
+        layout.addStretch(1)
         self.setLayout(layout)
         
 
@@ -177,14 +188,15 @@ class ControlPanel(QWidget):
                 messages = [json.loads(s) for s in message_list]
                 for message in messages:
                     if message['type'] == 'data':
-                        self.xy_data[0].append(float(message['value'][0]))
-                        self.xy_data[1].append(float(message['value'][1]))
-                    print(self.xy_data[1][-10:])
-                    print()
+                        print('data received')
+                        # self.xy_data[0].append(float(message['value'][0]))
+                        # self.xy_data[1].append(float(message['value'][1]))
+                    #print(self.xy_data[1][-10:])
+                    #print()
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = ControlPanel()
+    window = SliderPanel()
     window.show()
     sys.exit(app.exec())
