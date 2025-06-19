@@ -157,7 +157,7 @@ class LiveDataWindow(PlotWidget):
             self.downsample_visible(x_range=(start, end))
 
             # dont show scatter during live mode
-            self.zoom_level = 1
+            # self.zoom_level = 1
             self.scatter.setVisible(False)
         
         else:

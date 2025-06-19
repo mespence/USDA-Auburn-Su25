@@ -28,6 +28,7 @@ class LiveViewTab(QWidget):
 
 
         self.datawindow = LiveDataWindow()
+        self.datawindow.getPlotItem().hideButtons()
 
         self.slider_panel = SliderPanel(parent=self)
         sliderButton = QToolButton(parent=self)
@@ -39,7 +40,11 @@ class LiveViewTab(QWidget):
         sliderButton.clicked.connect(self.toggleSliders)
         self.slider_panel.hide()
 
+        top_controls = QHBoxLayout()
+        top_controls.addWidget(sliderButton)
+
         left_layout = QVBoxLayout()
+        left_layout.addLayout(top_controls)
         left_layout.addWidget(self.datawindow)
 
         main_layout = QHBoxLayout()
