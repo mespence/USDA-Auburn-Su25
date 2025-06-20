@@ -1127,7 +1127,7 @@ def main():
 
     #epgdata.load_data(r'C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv')
     window = DataWindow(epgdata)
-    window.plot_recording(window.epgdata.current_file, 'pre')
+    window.plot_recording(window.epgdata.current_file, 'post')
     window.plot_transitions(window.epgdata.current_file)
 
     window.showMaximized()

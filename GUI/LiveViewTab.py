@@ -31,20 +31,20 @@ class LiveViewTab(QWidget):
         self.datawindow.getPlotItem().hideButtons()
 
         self.slider_panel = SliderPanel(parent=self)
-        sliderButton = QToolButton(parent=self)
-        sliderButton.setText("EPG Controls")
-        sliderButton.setIcon(QIcon("icons/sliders.svg"))
-        sliderButton.setIconSize(QSize(24, 24))
-        sliderButton.setToolTip("Open control sliders")
-        sliderButton.setAutoRaise(True)
-        sliderButton.setCursor(Qt.CursorShape.PointingHandCursor)
-        sliderButton.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        sliderButton.clicked.connect(self.toggleSliders)
+        self.slider_button = QToolButton(parent=self)
+        self.slider_button.setText("EPG Controls")
+        self.slider_button.setIcon(QIcon("icons/sliders.svg"))
+        self.slider_button.setIconSize(QSize(24, 24))
+        self.slider_button.setToolTip("Open control sliders")
+        self.slider_button.setAutoRaise(True)
+        self.slider_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.slider_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.slider_button.clicked.connect(self.toggleSliders)
         self.slider_panel.hide()
 
         top_controls = QHBoxLayout()
         top_controls.addStretch()  # push slider button to right
-        top_controls.addWidget(sliderButton)
+        top_controls.addWidget(self.slider_button)
 
         left_layout = QVBoxLayout()
         left_layout.addLayout(top_controls)
@@ -60,18 +60,27 @@ class LiveViewTab(QWidget):
         self.recieve_loop = threading.Thread(target=self._socket_recv_loop, daemon=True)
         self.recieve_loop.start()
 
+    def toggleSliders(self):
+        is_visible = self.slider_panel.isVisible()
+        self.slider_panel.setVisible(not is_visible)
+
+        if is_visible:
+            self.slider_button.setToolTip("Open control sliders")
+        else:
+            self.slider_button.setToolTip("Hide control sliders")
+
 
     def _socket_recv_loop(self):
         while self.socket_client.running:
 
             try:
-                # can include multiple commands/data in one message
+                # NOTE: message can include multiple commands/data, i.e. "{<command1>}\n{<command2>}\n"
                 raw_message = self.socket_client.recv_queue.get(timeout=1.0)
             except Empty:
                 continue  # restart the loop
 
             try:
-                # parse message
+                # parse message into individual commands
                 message_list = raw_message.split("\n")
                 messages = [json.loads(s) for s in message_list if s.strip()]
 
@@ -98,8 +107,5 @@ class LiveViewTab(QWidget):
             except Exception as e:
                 print("[RECIEVE LOOP ERROR]", e)
 
-    def toggleSliders(self):
-        self.slider_panel.setVisible(not self.slider_panel.isVisible())
-
-
+   
 

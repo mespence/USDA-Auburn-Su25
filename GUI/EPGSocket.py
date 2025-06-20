@@ -50,6 +50,7 @@ class SocketServer:
         for client_id, conn in self.clients.items():
             if conn:
                 try:
+                    conn.sendall('SERVER SHUTDOWN'.encode('utf-8'))
                     conn.shutdown(socket.SHUT_RDWR)
                     conn.close()
                     logging.info(f"[SOCKET] Disconnected {client_id}")
@@ -130,17 +131,17 @@ class SocketServer:
         Delegates to control or data handlers based on message type.
         """
         try:
-            data = json.loads(message)
+            message = json.loads(message)
         except json.JSONDecodeError:
             logging.info(f"[SOCKET] Invalid JSON from {client_id}: {message}")
             return
-        
-        if data["type"] == "data":
-            self._forward_data(data)
-        elif data["type"] == "control":
-            logging.info(f"[{client_id}] Control: {data['control_type']} = {data['value']}")
+
+        if message["type"] == "data":
+            self._forward_data(message)
+        elif message["type"] == "control":
+            logging.info(f"[{client_id}] Control: {message['control_type']} = {message['value']}")
         else:
-            logging.info(f"[{client_id}] Unknown message type: {data['type']}")
+            logging.info(f"[{client_id}] Unknown message type: {message['type']}")
     
     def _forward_data(self, data: dict):
         """
@@ -227,10 +228,16 @@ class SocketClient:
         """
         while self.running:
             try:
-                data = self._sock.recv(1024)
-                if data:
-                    self.recv_queue.put_nowait(data.decode("utf-8"))
+                message = self._sock.recv(1024)
+                if message:
+                    message = message.decode("utf-8")
+                    if "SERVER SHUTDOWN" in message: # server-ordered shutdown
+                        self.running = False
+                        break
+                    else:
+                        self.recv_queue.put_nowait(message)
+                
             except Exception as e:
-                logging.info("[SocketClient RECV ERROR]", e)  
+                logging.info(f"[SocketClient RECV ERROR] {e}")  
                 self.running = False  
                 break

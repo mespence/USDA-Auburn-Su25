@@ -17,8 +17,8 @@ def device_simulation():
     """
     Simulates a device reading (time, voltage) data every 0.01s
     """
-    #DATA_FILE = r"C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv"
-    DATA_FILE = r"/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Exploration/Jonathan/Data/sharpshooter_label2.csv"
+    DATA_FILE = r"C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\sharpshooter_label2.csv"
+    #DATA_FILE = r"/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Exploration/Jonathan/Data/sharpshooter_label2.csv"
     with open(DATA_FILE, newline="") as file:
         reader = csv.reader(file)
         next(reader)  # skip header row

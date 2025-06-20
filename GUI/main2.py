@@ -47,7 +47,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         if os.name == "nt":  # windows
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                "company.app.1"
+                "company.app.1"  # needed to set taskbar icon on windows
             )
         super().__init__()
         self.initUI()
@@ -90,7 +90,7 @@ class MainWindow(QMainWindow):
             }
             QTabBar::tab:selected {
                 background: #1D2934;
-                padding-bottom: 8rpx;
+                padding-bottom: 8px;
                 border-bottom: 3px solid #4aa8ff;
             }
 
