@@ -1,11 +1,12 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QWidget, QSlider, QLabel, QVBoxLayout, QDoubleSpinBox, QLineEdit, QComboBox, QDial, QProgressBar, QPushButton
+from PyQt6.QtWidgets import QApplication, QWidget, QSlider, QLabel, QVBoxLayout, QDoubleSpinBox, QLineEdit, QComboBox, QDial, QProgressBar, QPushButton, QRadioButton, QButtonGroup
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QDoubleValidator
 
 startVal = 50
 max = 100
 min = 0
+decimals = 2
 
 class CDoubleSlider(QSlider):
     # create our our signal that we can connect to if necessary
@@ -43,7 +44,7 @@ class MainWindow(QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.setWindowTitle('PyQt QSlider')
+        self.setWindowTitle('PyQt Franken-Widget')
         self.setMinimumWidth(800)
         self.setMinimumHeight(200)
 
@@ -51,41 +52,56 @@ class MainWindow(QWidget):
         layout = QVBoxLayout()
         self.setLayout(layout)
 
-        self.slider = CDoubleSlider(Qt.Orientation.Horizontal, self, decimals = 2)
+        self.slider = CDoubleSlider(Qt.Orientation.Horizontal, self, decimals = decimals)
         self.slider.setRange(min, max)
         self.slider.setValue(startVal)
-        #slider.setSingleStep(1) #not doing anything
-        #slider.setPageStep(1) #also not doing anything
-        #slider.setTickPosition(QSlider.TickPosition.TicksAbove)
 
         self.slider.doubleValueChanged.connect(self.update)
 
         self.result_label = QLabel('', self)
         self.result_label.setText(f'Current Value: {startVal}')
         
-        self.numBox = QDoubleSpinBox(self, decimals = 2, maximum = max, minimum = min)
+        self.numBox = QDoubleSpinBox(self, decimals = decimals, maximum = max, minimum = min)
         self.numBox.setValue(startVal)
         self.numBox.valueChanged.connect(self.update)
 
         self.lineEdit = CLineEdit(str(startVal), self)
-        lineValidator = QDoubleValidator(float(min),float(max), 2)
+        lineValidator = QDoubleValidator(float(min),float(max), decimals)
         lineValidator.setNotation(QDoubleValidator.Notation.StandardNotation)
-        self.lineEdit.setValidator(lineValidator) # this is always gonna validate, unless i want to set and reset it a ton of times which i don't want to do unless necessary
+        self.lineEdit.setValidator(lineValidator) # this is always gonna be checking, unless i want to set and reset it a ton of times which i don't want to do unless necessary
         self.lineEdit.returnPressed.connect(self.lineEditEntered)
 
+        self.group1 = QButtonGroup()
+        self.radio_button1 = QRadioButton("Add")
+        self.radio_button1.setChecked(True)
+        self.radio_button2 = QRadioButton("Subtract")
+
         self.comboBox = QComboBox(self)
-        self.dial = QDial(self)
-        self.progressBar = QProgressBar(self)
+        self.comboBox.addItems(['1', '5', '10', '20', '50'])
+
         self.pushButton = QPushButton(self)
+        self.pushButton.pressed.connect(self.buttonUpdate)
+
+        self.dial = QDial(self)
+        self.dial.setRange(min,max)
+        self.dial.setValue(startVal)
+        self.dial.valueChanged.connect(self.update)
+        
+        self.progressBar = QProgressBar(self)
+        self.progressBar.setRange(0,1000)
+        self.progressBar.setValue(0)
+        self.progressBar.setTextVisible(True) #not 100% sure what this is doing, tbh
         
         layout.addWidget(self.slider)
         layout.addWidget(self.result_label)
         layout.addWidget(self.numBox)
         layout.addWidget(self.lineEdit)
         layout.addWidget(self.comboBox)
+        layout.addWidget(self.radio_button1)
+        layout.addWidget(self.radio_button2)
+        layout.addWidget(self.pushButton)
         layout.addWidget(self.dial)
         layout.addWidget(self.progressBar)
-        layout.addWidget(self.pushButton)
 
         # show the window
         self.show()
@@ -111,11 +127,31 @@ class MainWindow(QWidget):
             self.lineEdit.blockSignals(True)
             self.lineEdit.setText(str(value))
             self.lineEdit.blockSignals(False)
+        dialVal = int(value)
+        if self.dial.value() != dialVal:
+            self.dial.blockSignals(True)
+            self.dial.setValue(dialVal)
+            self.dial.blockSignals(False)
+        if self.progressBar.value() == 1000:
+            self.progressBar.setValue(0)
+        self.progressBar.setValue(self.progressBar.value()+1)
 
     def lineEditEntered(self):
         text = self.lineEdit.text()
-        print(self.lineEdit.validator().validate(text, 0))
+        # print(self.lineEdit.validator().validate(text, 0)) NOTE: if there are errors at the other note, this is a good line to test with
         self.update(text)
+    
+    def buttonUpdate(self):
+        addVal = float(self.comboBox.currentText())
+        if self.radio_button1.isChecked():
+            newVal = self.numBox.value() + addVal # NOTE: this is also a good place to check if there are weird errors. I made it dependent on numbox, but any "source of truth" should work
+        else:
+            newVal = self.numBox.value() - addVal
+        if newVal > max:
+            newVal = max
+        if newVal < min:
+            newVal = min
+        self.update(newVal)
 
 
 if __name__ == '__main__':
