@@ -155,31 +155,29 @@ class LiveDataWindow(PlotWidget):
             start = end - self.auto_scroll_window
             self.viewbox.setXRange(start, end, padding=0)
             self.downsample_visible(x_range=(start, end))
-
-            # dont show scatter during live mode
-            # self.zoom_level = 1
-            self.scatter.setVisible(False)
         
         else:
             (x_min, x_max), _ = self.viewbox.viewRange()
             self.downsample_visible(x_range=(x_min, x_max))
 
-            # show scatter if zoom is greater than 300%
-            plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
-            time_span = x_max - x_min
+        # SCATTER
+        (x_min, x_max), _ = self.viewbox.viewRange()
+        plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
+        time_span = x_max - x_min
 
-            if time_span == 0:
-                return float("inf")  # avoid division by zero
-            
-            pix_per_second = plot_width / time_span
-            default_pix_per_second = plot_width / self.default_scroll_window
-            self.zoom_level = pix_per_second / default_pix_per_second
+        if time_span == 0:
+            return float("inf")  # avoid division by zero
+        
+        pix_per_second = plot_width / time_span
+        default_pix_per_second = plot_width / self.default_scroll_window
+        self.zoom_level = pix_per_second / default_pix_per_second
 
-            if self.zoom_level >= 3:
-                self.scatter.setVisible(True)
-                self.scatter.setData(self.xy_rendered[0], self.xy_rendered[1])
-            else:
-                self.scatter.setVisible(False)
+        # scatter if zoom is greater than 300%
+        if self.zoom_level >= 3:
+            self.scatter.setVisible(True)
+            self.scatter.setData(self.xy_rendered[0], self.xy_rendered[1])
+        else:
+            self.scatter.setVisible(False)
 
         self.curve.setData(self.xy_rendered[0], self.xy_rendered[1])
         self.viewbox.update()
