@@ -8,7 +8,9 @@ sys.path.insert(1, '../ML/')
 #from postprocessing import PostProcessor
 #from itertools import groupby
 from ProbeSplitter import ProbeSplitter
-from PyQt6.QtCore import pyqtSignal, QObject
+from PyQt6.QtCore import Qt, pyqtSignal, QObject
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QCursor
 
 #from models import rf, tcn, unet, transformer
 
@@ -16,19 +18,26 @@ class Labeler(QObject):
     start_labeling_progress = pyqtSignal(int, int)
     stopped_labeling = pyqtSignal()
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent = None):
+        super().__init__(parent=parent)
         self.stop_flag = False
         self.model = None
 
     def load_model(self, model_name):
-        # name_to_class = {
-        #     'Random Forests (CSVs only)' : rf.Model, 
-        #     'UNet (Block)' : unet.Model,
-        #     'UNet (Attention)' : unet.Model, 
-        #     'SegTransformer' : transformer.Model,
-        #     'TCN' : tcn.Model
-        # }
+        model_chooser = self.parent().modelChooser
+        model_chooser.blockSignals(True)
+        model_chooser.setEditable(True)
+        model_chooser.lineEdit().setReadOnly(True)
+        model_chooser.setCurrentText(f"Loading {model_name}...")
+        model_chooser.lineEdit().setStyleSheet("color: gray;")
+        model_chooser.setEnabled(False)
+
+
+
+
+        QApplication.setOverrideCursor(QCursor(Qt.CursorShape.BusyCursor))
+        QApplication.processEvents()
+
         name_to_module = {
             'Random Forests (CSVs only)': 'models.rf',
             'UNet (Block)': 'models.unet',
@@ -64,6 +73,15 @@ class Labeler(QObject):
         ModelClass = getattr(module, "Model")
         self.model = ModelClass(**kwargs)
         self.model.load(path = name_to_path[model_name])
+
+
+        model_chooser.setEnabled(True)
+        model_chooser.lineEdit().setStyleSheet("")
+        model_chooser.setEditable(False)
+        model_chooser.setCurrentText(model_name)
+        model_chooser.blockSignals(False)
+
+        QApplication.restoreOverrideCursor()
 
     def leak_probe_finder(self, labels):
         non_np_indices = np.where(labels != 'NP')[0]

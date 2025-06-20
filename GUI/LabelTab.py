@@ -26,7 +26,7 @@ class LabelTab(QWidget):
         super().__init__(parent)
 
         self.epgdata = EPGData()
-        self.labeler = Labeler()
+        self.labeler = Labeler(parent=self)
 
         file = self.epgdata.current_file
         self.epgdata.load_data(file)
@@ -39,16 +39,18 @@ class LabelTab(QWidget):
         openDataButton = QPushButton("Open Data")
         openDataButton.clicked.connect(lambda: FileSelector.load_new_data(self.epgdata, self.datawindow))
 
-        modelChooser = QComboBox()
-        modelChooser.addItems([
+        self.modelChooser = QComboBox()
+        self.modelChooser.addItem("Select model...")
+        self.modelChooser.setItemData(0, 0, Qt.ItemDataRole.UserRole - 1)  # Disable default item
+        self.modelChooser.addItems([
             'UNet (Block)', 
             'UNet (Attention)',
             'SegTransformer', 
             'TCN', 
             'Random Forests (CSVs only)'
         ])
-        modelChooser.currentTextChanged.connect(self.labeler.load_model)
-        self.labeler.load_model("UNet (Block)")
+        self.modelChooser.currentTextChanged.connect(self.labeler.load_model)
+        #self.labeler.load_model("UNet (Block)")
 
         startSplittingButton = QPushButton("Start Probe Splitter")
         startSplittingButton.clicked.connect(lambda: self.labeler.start_probe_splitting(self.epgdata, self.datawindow))
@@ -90,7 +92,7 @@ class LabelTab(QWidget):
         # Top layout
         top_controls = QHBoxLayout()
         top_controls.addWidget(settingsButton)
-        top_controls.addWidget(modelChooser)
+        top_controls.addWidget(self.modelChooser)
         top_controls.addWidget(resetButton)
 
         # Bottom layout
