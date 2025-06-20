@@ -7,14 +7,10 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QWidget,
     QHBoxLayout,
-    QVBoxLayout,
-    QPushButton,
-    QComboBox,
-    QProgressBar,
-    QToolButton,
     QMenuBar,
     QMenu,
     QTabWidget,
+    QTabBar
 )
 from PyQt6.QtCore import QRunnable, pyqtSignal, QThreadPool, QObject, QEvent, Qt, QSize
 from PyQt6.QtGui import QIcon
@@ -83,6 +79,32 @@ class MainWindow(QMainWindow):
 
         # === Tab Widget ===
         self.tabs = QTabWidget()
+
+        self.tabs.setStyleSheet("""
+            QTabBar::tab {
+                font-size: 14px;
+                font-weight: bold;
+                padding: 8px 20px 10px 20px;
+                border: none;
+                margin-right: 0px;
+            }
+            QTabBar::tab:selected {
+                background: #1D2934;
+                padding-bottom: 8rpx;
+                border-bottom: 3px solid #4aa8ff;
+            }
+
+            QTabBar::tab:!selected {
+                background: #1e1e1e;
+                border-bottom: 1px solid #282828;
+            }
+                                
+            QTabWidget::pane {
+                border: 1px solid palette(mid);
+                border-radius: 0px;
+                top: -1px;
+            }
+        """)
         self.setCentralWidget(self.tabs)
 
         # First tab: Live View

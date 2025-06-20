@@ -32,15 +32,18 @@ class LiveViewTab(QWidget):
 
         self.slider_panel = SliderPanel(parent=self)
         sliderButton = QToolButton(parent=self)
+        sliderButton.setText("EPG Controls")
         sliderButton.setIcon(QIcon("icons/sliders.svg"))
         sliderButton.setIconSize(QSize(24, 24))
         sliderButton.setToolTip("Open control sliders")
         sliderButton.setAutoRaise(True)
         sliderButton.setCursor(Qt.CursorShape.PointingHandCursor)
+        sliderButton.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         sliderButton.clicked.connect(self.toggleSliders)
         self.slider_panel.hide()
 
         top_controls = QHBoxLayout()
+        top_controls.addStretch()  # push slider button to right
         top_controls.addWidget(sliderButton)
 
         left_layout = QVBoxLayout()
