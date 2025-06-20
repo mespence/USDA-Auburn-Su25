@@ -13,12 +13,14 @@ from PyQt6.QtWidgets import (
     QTabBar
 )
 from PyQt6.QtCore import QRunnable, pyqtSignal, QThreadPool, QObject, QEvent, Qt, QSize
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QFont, QFontDatabase
 
+from LoadingScreen import LoadingScreen
 from DataWindow2 import DataWindow
 from EPGData import EPGData
 from Labeler import Labeler
 from Settings import Settings
+
 from FileSelector import FileSelector
 from SettingsWindow import SettingsWindow
 
@@ -56,7 +58,7 @@ class MainWindow(QMainWindow):
         # Supervised Classification of Insect Data and Observations
         self.setWindowTitle("SCIDO EPG Labeler")
         self.setWindowIcon(QIcon("SCIDO.png"))
-        self.move(0, 0)
+        self.move(0,0)
 
         # === Menu Bar ===
         menubar = QMenuBar(self)
@@ -178,17 +180,40 @@ class GlobalMouseTracker(QObject):
             )
         return super().eventFilter(obj, event)
 
+def load_fonts():
+    relative_path_list = [
+        "fonts/Inter-Regular.otf",
+        "fonts/Inter-Bold.otf", 
+        "fonts/Inter-Italic.otf", 
+        "fonts/Inter-BoldItalic.otf"
+    ]
+
+    for font in relative_path_list:
+        QFontDatabase.addApplicationFont(font)
+
 
 def main():
     Settings()
     app = QApplication([])
-    window = MainWindow()
-    window.showMaximized()
-    # window.show()
 
+    load_fonts()
+    splash = LoadingScreen()
+    splash.show()
+    QApplication.processEvents()
+
+    window = MainWindow()
+    
+    # Display Focused
+    window.showMaximized()
+    window.raise_()
+    window.activateWindow()
+    window.setFocus()
+    
     tracker = GlobalMouseTracker(window)
     app.installEventFilter(tracker)
 
+    splash.close()
+    
     sys.exit(app.exec())
 
 
