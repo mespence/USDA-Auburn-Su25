@@ -51,7 +51,7 @@ class LoadingScreen(QWidget):
         version.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         logo = QLabel()
-        pixmap = QPixmap(r"C:\EPG-Project\Summer\CS-Repository\GUI\SCIDO.png")
+        pixmap = QPixmap(r"SCIDO.png")
         logo.setPixmap(pixmap.scaledToHeight(300, Qt.TransformationMode.SmoothTransformation))
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
