@@ -6,6 +6,8 @@ import time
 import sys
 import logging
 
+from PyQt6.QtCore import QObject, pyqtSignal
+
 # Log output to console even if running in background thread
 logging.basicConfig(
     level=logging.INFO,
@@ -15,12 +17,16 @@ logging.basicConfig(
     force=True
 )
 
-class SocketServer:
+class SocketServer(QObject):
     """
     A bidirectional socket to connect the CS and ENGR UIs.
     Forwards EPG data and slider control events beteween the clients. 
     """
+    engrConnected = pyqtSignal(bool)
+
     def __init__(self, host = "localhost", port=16671):
+        super().__init__()
+
         self.host: str = host                           # use "localhost" for interal socket
         self.port: int = port                           # arbitrary port
         self.clients: dict[str, socket.socket] = {}     # map of client IDs to their connection objects
@@ -47,7 +53,7 @@ class SocketServer:
         logging.info("[SOCKET] Shutting down...")
 
         # Close client connections
-        for client_id, conn in self.clients.items():
+        for client_id, conn in list(self.clients.items()):
             if conn:
                 try:
                     conn.sendall('SERVER SHUTDOWN'.encode('utf-8'))
@@ -57,7 +63,10 @@ class SocketServer:
                 except Exception as e:
                     logging.info(f"[SOCKET] Error closing {client_id}: {e}")
 
-        self.clients = {}
+                if client_id == "ENGR":
+                    self.engrConnected.emit(False)
+
+        self.clients.clear()
 
         # Close server socket
         if self._server_socket:
@@ -97,17 +106,22 @@ class SocketServer:
             initial_message = conn.recv(1024).decode().strip()
             client_id = initial_message.split("=")[1]  
             self.clients[client_id] = conn
+
+            if client_id == "ENGR":
+                self.engrConnected.emit(True)
+
             logging.info(f"[SOCKET] Client \"{client_id}\" connected from {addr}")
             self._receive_loop(conn, client_id)
         except:
             pass
-        # except Exception as e:
-        #     name = self.clients.get(addr, addr) # default to addr if no client_id
-        #     logging.info(f"[SERVER ERROR] \"{name}\": {e}")
         finally:
             conn.close()
-            # name = self.clients.get(addr, addr) # default to addr if no client_id
-            # logging.info(f"[SERVER] {name} disconnected")
+            for client_id, client in list(self.clients.items()):
+                if client == conn:
+                    del self.clients[client_id]
+                    if client_id == "ENGR":
+                        self.engrConnected.emit(False)
+                    break
 
     def _receive_loop(self, conn: socket.socket, client_id: str):
         """
@@ -168,6 +182,7 @@ class SocketClient:
     A client class to connect to the socket and handle sending/receiving data it.
     Incoming messages are pulled from the recieve queue, and outgoing messages are placed in the send queue.
     """
+
     def __init__(self, client_id, host="localhost", port=16671):
         self.host: str = host                   # use "localhost" for interal socket
         self.port: int = port                   # arbitrary port

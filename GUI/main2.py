@@ -107,6 +107,7 @@ class MainWindow(QMainWindow):
                 top: -1px;
             }
         """)
+        self.tabs.tabBar().setCursor(Qt.CursorShape.PointingHandCursor)
         self.setCentralWidget(self.tabs)
 
         # First tab: Live View
@@ -181,14 +182,14 @@ class GlobalMouseTracker(QObject):
         return super().eventFilter(obj, event)
 
 def load_fonts():
-    relative_path_list = [
+    relative_paths = [
         "fonts/Inter-Regular.otf",
         "fonts/Inter-Bold.otf", 
         "fonts/Inter-Italic.otf", 
         "fonts/Inter-BoldItalic.otf"
     ]
 
-    for font in relative_path_list:
+    for font in relative_paths:
         QFontDatabase.addApplicationFont(font)
 
 

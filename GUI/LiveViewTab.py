@@ -7,11 +7,12 @@ from queue import Empty
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
-    QWidget, QPushButton, QToolButton, QHBoxLayout, QVBoxLayout
+    QWidget, QPushButton, QToolButton, QHBoxLayout, QVBoxLayout, QLabel
 )
 
 
 from LiveDataWindow import LiveDataWindow
+from ConnectionIndicator import ConnectionIndicator
 from SliderPanel import SliderPanel
 from EPGSocket import SocketClient, SocketServer
 
@@ -20,7 +21,10 @@ class LiveViewTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        self.connection_indicator = ConnectionIndicator()
+
         self.socket_server = SocketServer()
+        self.socket_server.engrConnected.connect(self.connection_indicator.set_connected)
         self.socket_server.start()
 
         self.socket_client = SocketClient(client_id='CS')
@@ -29,6 +33,20 @@ class LiveViewTab(QWidget):
 
         self.datawindow = LiveDataWindow()
         self.datawindow.getPlotItem().hideButtons()
+
+        self.pause_button = QPushButton("Pause Live View", self)
+        self.pause_button.setStyleSheet("""
+            background-color: gray;
+            color: white;
+            border-radius: 3px;
+            padding: 5px;
+        """)
+        self.pause_button.setCheckable(True)
+        self.pause_button.setChecked(True)
+        self.pause_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.pause_button.clicked.connect(self.datawindow.live_mode_enabled)
+
+
 
         self.slider_panel = SliderPanel(parent=self)
         self.slider_button = QToolButton(parent=self)
@@ -43,7 +61,9 @@ class LiveViewTab(QWidget):
         self.slider_panel.hide()
 
         top_controls = QHBoxLayout()
+        top_controls.addWidget(self.pause_button)
         top_controls.addStretch()  # push slider button to right
+        top_controls.addWidget(self.connection_indicator)
         top_controls.addWidget(self.slider_button)
 
         left_layout = QVBoxLayout()
