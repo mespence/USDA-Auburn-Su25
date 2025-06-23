@@ -225,7 +225,7 @@ class DataWindow(PlotWidget):
         self.baseline_preview_enabled: bool = False
 
         # COMMENTS
-        self.comments: dict[float, CommentMarker] = {} # the dict of Comments
+        self.comments: dict[float, CommentMarker] = {} # the dict of CommentMarkers
         self.comment_editing = False
 
         self.comment_preview: InfiniteLine = InfiniteLine(
@@ -648,9 +648,9 @@ class DataWindow(PlotWidget):
         self.viewbox.update()
         return
     
-    def move_comment(self, marker: CommentMarker, time: float) -> None:
+    def move_comment(self, marker: CommentMarker, click_time: float) -> None:
         df = self.epgdata.dfs[self.file]
-        new_idx = (df['time'] - time).abs().idxmin()
+        new_idx = (df['time'] - click_time).abs().idxmin()
         new_time = float(df.at[new_idx, 'time'])
         old_time = marker.time
         text = self.comments[old_time].text
@@ -1032,14 +1032,13 @@ class DataWindow(PlotWidget):
         super().mousePressEvent(event)
 
         point = self.window_to_viewbox(event.position())
-        x, y = point.x(), point.y()
+        x, _ = point.x(), point.y()
 
         if event.button() == Qt.MouseButton.LeftButton:
             if self.baseline_preview_enabled:
                 self.set_baseline(event)
             elif self.comment_preview_enabled and self.moving_comment is not None:
-                new_time = x
-                self.move_comment(self.moving_comment, new_time)
+                self.move_comment(self.moving_comment, x)
                 self.moving_comment = None
             elif self.comment_preview_enabled:
                 self.add_comment(event)

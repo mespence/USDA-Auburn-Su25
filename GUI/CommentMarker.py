@@ -1,7 +1,7 @@
 from pyqtgraph import (
     PlotWidget, InfiniteLine, mkPen
 )
-from PyQt6.QtWidgets import QPushButton, QVBoxLayout, QLabel, QDialog, QTextEdit
+from PyQt6.QtWidgets import QPushButton, QVBoxLayout, QLabel, QDialog, QTextEdit, QToolTip
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtCore import Qt, QPointF, QTimer
@@ -28,6 +28,7 @@ class CommentMarker():
         self.viewbox.addItem(self.marker)
         
         self.icon_item = QGraphicsSvgItem(self.icon_path)
+        self.icon_item.setAcceptHoverEvents(True)
         self.icon_item.setScale(1)
         self.icon_item.setZValue(10)
         self.scene.addItem(self.icon_item)
@@ -52,6 +53,7 @@ class CommentMarker():
         icon_right_x = self.viewbox.mapSceneToView(QPointF(icon_scene_x, 0)).x()
         x_min, x_max = self.viewbox.viewRange()[0]
         self.icon_item.setVisible(x_min <= self.time <= x_max and icon_right_x <= x_max)
+        self.marker.setVisible(x_min <= self.time <= x_max)
 
 
     def show_comment_editor(self, event: None):
@@ -120,3 +122,5 @@ class CommentMarker():
         self.viewbox.removeItem(self.marker)
         self.viewbox.removeItem(self.icon_item)
 
+    def hoverIconEvent(self, event):
+        QToolTip.showText(event.screenPos().toPoint(), self.text)

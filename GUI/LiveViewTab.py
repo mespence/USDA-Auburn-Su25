@@ -44,8 +44,10 @@ class LiveViewTab(QWidget):
         self.pause_button.setCheckable(True)
         self.pause_button.setChecked(True)
         self.pause_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.pause_button.clicked.connect(self.datawindow.live_mode_enabled)
+        self.pause_button.clicked.connect(self.toggleLive)
 
+
+        
 
 
         self.slider_panel = SliderPanel(parent=self)
@@ -88,6 +90,25 @@ class LiveViewTab(QWidget):
             self.slider_button.setToolTip("Open control sliders")
         else:
             self.slider_button.setToolTip("Hide control sliders")
+
+
+    def toggleLive(self):
+        live_mode = self.pause_button.isChecked()
+
+        self.pause_button.setText("Pause Live View" if live_mode else "Live View")
+
+        if live_mode:
+            self.pause_button.setStyleSheet("""background-color: gray;
+                                        color: white;
+                                        border-radius: 3px;
+                                        padding: 5px;""")
+        else:
+            self.pause_button.setStyleSheet("""background-color: #379acc;
+                                        color: white;
+                                        border-radius: 3px;
+                                        padding: 5px;""")
+        
+        self.datawindow.set_live_mode(live_mode)
 
 
     def _socket_recv_loop(self):

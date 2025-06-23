@@ -69,12 +69,12 @@ class PanZoomViewBox(ViewBox):
             width, height = x_max - x_min, y_max - y_min
 
             if shift_held:
-                # y zoom
+                # y pan
                 v_zoom_factor = 5e-4
                 dy = delta * v_zoom_factor * height
                 self.translateBy(y=dy)
             else:
-                # x zoom
+                # x pan
                 if not live:
                     h_zoom_factor = 2e-4
                     dx = delta * h_zoom_factor * width
