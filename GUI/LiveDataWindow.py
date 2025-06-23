@@ -116,6 +116,7 @@ class LiveDataWindow(PlotWidget):
         self.comment_preview_enabled: bool = False
         self.moving_comment: CommentMarker = None
         
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.update_plot()
 
     def closeEvent(self, event):
@@ -476,6 +477,9 @@ class LiveDataWindow(PlotWidget):
         if event.key() == Qt.Key.Key_Space and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             print("add")
             self.add_comment_at_current() 
+            return
+        
+        super().keyPressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """

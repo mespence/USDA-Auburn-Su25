@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QTabWidget,
     QTabBar
 )
-from PyQt6.QtCore import QRunnable, pyqtSignal, QThreadPool, QObject, QEvent, Qt, QSize
+from PyQt6.QtCore import QRunnable, pyqtSignal, QThreadPool, QObject, QEvent, Qt, QSize, QTimer
 from PyQt6.QtGui import QIcon, QFont, QFontDatabase
 
 from LoadingScreen import LoadingScreen
@@ -81,6 +81,8 @@ class MainWindow(QMainWindow):
 
         # === Tab Widget ===
         self.tabs = QTabWidget()
+        self.tabs.currentChanged.connect(self.handle_tab_change)
+        QTimer.singleShot(0, self.set_initial_focus)
 
         self.tabs.setStyleSheet("""
             QTabBar::tab {
@@ -122,7 +124,20 @@ class MainWindow(QMainWindow):
         self.live_view_tab.socket_server.stop()
         super().closeEvent(event)
 
-
+    def set_initial_focus(self):
+        current_widget = self.tabs.currentWidget()
+        if isinstance(current_widget, LiveViewTab):
+            current_widget.datawindow.setFocus()
+        elif isinstance(current_widget, LabelTab):
+            current_widget.datawindow.setFocus()
+    
+    def handle_tab_change(self, index: int):
+        widget = self.tabs.widget(index)
+        if isinstance(widget, LiveViewTab):
+            widget.datawindow.setFocus()
+        elif isinstance(widget, LabelTab):
+            widget.datawindow.setFocus()
+    
     def start_labeling(self):
         task = LabelingTask(self.labeler, self.epgdata, self.datawindow)
         self.threadpool.start(task)

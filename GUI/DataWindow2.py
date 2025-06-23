@@ -239,6 +239,7 @@ class DataWindow(PlotWidget):
         self.comment_preview_enabled: bool = False
         self.moving_comment: CommentMarker = None
 
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.initUI()
 
     def initUI(self) -> None:

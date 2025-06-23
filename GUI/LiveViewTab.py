@@ -36,19 +36,22 @@ class LiveViewTab(QWidget):
 
         self.pause_button = QPushButton("Pause Live View", self)
         self.pause_button.setStyleSheet("""
-            background-color: gray;
-            color: white;
-            border-radius: 3px;
-            padding: 5px;
+            QPushButton {
+                background-color: gray;
+                color: white;
+                border-radius: 3px;
+                padding: 5px;
+            }
+            QPushButton:focus {
+                outline: 2px solid #4aa8ff;
+            }
         """)
         self.pause_button.setCheckable(True)
         self.pause_button.setChecked(True)
         self.pause_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.pause_button.clicked.connect(self.toggleLive)
-
-
+        self.pause_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         
-
 
         self.slider_panel = SliderPanel(parent=self)
         self.slider_button = QToolButton(parent=self)
@@ -60,6 +63,17 @@ class LiveViewTab(QWidget):
         self.slider_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.slider_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.slider_button.clicked.connect(self.toggleSliders)
+        self.slider_button.setStyleSheet("""
+            QToolButton {
+                border: none;
+                padding: 5px;
+                border-radius: 3px;
+            }
+            QToolButton:focus {
+                outline: 2px solid #4aa8ff;
+            }
+        """)
+        self.slider_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.slider_panel.hide()
 
         top_controls = QHBoxLayout()
@@ -98,15 +112,27 @@ class LiveViewTab(QWidget):
         self.pause_button.setText("Pause Live View" if live_mode else "Live View")
 
         if live_mode:
-            self.pause_button.setStyleSheet("""background-color: gray;
+            self.pause_button.setStyleSheet("""
+                                    QPushButton {
+                                        background-color: gray;
                                         color: white;
                                         border-radius: 3px;
-                                        padding: 5px;""")
+                                        padding: 5px;
+                                    }
+                                    QPushButton:focus {
+                                        outline: 2px solid #4aa8ff;
+                                    }""")
         else:
-            self.pause_button.setStyleSheet("""background-color: #379acc;
+            self.pause_button.setStyleSheet("""
+                                    QPushButton {
+                                        background-color: 379acc;
                                         color: white;
                                         border-radius: 3px;
-                                        padding: 5px;""")
+                                        padding: 5px;
+                                    }
+                                    QPushButton:focus {
+                                        outline: 2px solid #4aa8ff;
+                                    }""")
         
         self.datawindow.set_live_mode(live_mode)
 
