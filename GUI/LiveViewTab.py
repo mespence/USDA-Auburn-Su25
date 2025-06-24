@@ -77,7 +77,7 @@ class LiveViewTab(QWidget):
         self.pause_button.setCheckable(True)
         self.pause_button.setChecked(True)
         self.pause_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.pause_button.clicked.connect(self.toggleLive)
+        self.pause_button.clicked.connect(self.toggle_live)
 
 
         self.slider_panel = SliderPanel(parent=self)
