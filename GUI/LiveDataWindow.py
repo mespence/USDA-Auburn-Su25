@@ -61,6 +61,7 @@ class LiveDataWindow(PlotWidget):
         self.plot_item: PlotItem = self.getPlotItem()
         self.viewbox: PanZoomViewBox = self.plot_item.getViewBox() # the plotting area (no axes, etc.)
         self.viewbox.datawindow = self
+        self.viewbox.menu = None  # disable default menu
 
         self.xy_data: list[NDArray] = [np.array([]), np.array([])]
         self.xy_rendered: list[NDArray] = [np.array([]), np.array([])]
@@ -89,8 +90,7 @@ class LiveDataWindow(PlotWidget):
         self.addItem(self.leading_line)
 
         # first sec enable auto range
-        self.autorange_disabled = False
-        self.plot_item.enableAutoRange()
+        self.plot_item.disableAutoRange()
 
         # Live mode button
         self.live_mode = True
@@ -178,11 +178,7 @@ class LiveDataWindow(PlotWidget):
         else plot visible data of what the user scrolls to view
         """
         self.viewbox.setLimits(xMin=None, xMax=None, yMin=None, yMax=None) # clear stale data (avoids warning)
-
-        # only enable autorange for first second
-        if self.current_time > 1 and not self.autorange_disabled:
-            self.plot_item.disableAutoRange()
-            self.autorange_disabled = True
+        self.viewbox.setYRange(-0.5, 1, padding=0)
 
         if self.live_mode:
             end = self.current_time
@@ -374,6 +370,7 @@ class LiveDataWindow(PlotWidget):
         new_marker = CommentMarker(comment_time, text, self)
         self.comments[comment_time] = new_marker
 
+        print(self.comments)
         self.update_plot()
     
     def add_comment_at_current(self) -> None:
@@ -390,6 +387,7 @@ class LiveDataWindow(PlotWidget):
         new_marker = CommentMarker(comment_time, text, self)
         self.comments[comment_time] = new_marker
 
+        print(self.comments)
         self.update_plot()
 
     def move_comment_helper(self, marker: CommentMarker):
@@ -418,6 +416,7 @@ class LiveDataWindow(PlotWidget):
         self.comment_preview_enabled = False
         self.comment_preview.setVisible(False)
 
+        print(self.comments)
         self.update_plot()
         return
     
@@ -442,13 +441,14 @@ class LiveDataWindow(PlotWidget):
                 nearest_idx = idx - 1
 
         nearest_time = x[nearest_idx]
-        return nearest_time
+        return float(nearest_time)
     
     def delete_comment(self, time: float) -> None:
         # update dict
         marker = self.comments.pop(time)
         # remove marker from viewbox
         marker.remove()
+        print(self.comments)
         return
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
@@ -458,14 +458,16 @@ class LiveDataWindow(PlotWidget):
         point = self.window_to_viewbox(event.position())
         x, _ = point.x(), point.y()
 
+        # any press event outside of graph box shouldn't register
+        if not self.getViewBox().sceneBoundingRect().contains(event.scenePosition()):
+            event.ignore()
+            return
+
         if event.button() == Qt.MouseButton.LeftButton:
             # for moving comment
             if self.comment_preview_enabled and self.moving_comment is not None:
                 self.move_comment(self.moving_comment, x)
                 self.moving_comment = None
-        elif event.button() == Qt.MouseButton.RightButton:
-            # for past comment creation
-            self.add_comment_to_past(x)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """

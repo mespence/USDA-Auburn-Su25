@@ -223,7 +223,6 @@ def main():
     window.showMaximized()
     window.raise_()
     window.activateWindow()
-    window.setFocus()
     
     tracker = GlobalMouseTracker(window)
     app.installEventFilter(tracker)

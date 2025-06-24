@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import (
     QWidget, QPushButton, QToolButton, QHBoxLayout, QVBoxLayout, QLabel
 )
 
-
 from LiveDataWindow import LiveDataWindow
 from ConnectionIndicator import ConnectionIndicator
 from SliderPanel import SliderPanel
@@ -35,22 +34,42 @@ class LiveViewTab(QWidget):
         self.datawindow.getPlotItem().hideButtons()
 
         self.pause_button = QPushButton("Pause Live View", self)
+        self.pause_button.setCheckable(True)
+        self.pause_button.setChecked(True)
+        self.pause_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.pause_button.setStyleSheet("""
             QPushButton {
                 background-color: gray;
                 color: white;
                 border-radius: 3px;
                 padding: 5px;
+                outline: none;
             }
             QPushButton:focus {
-                outline: 2px solid #4aa8ff;
+                border: 3px solid #4aa8ff;
+                padding: 2px;
             }
         """)
-        self.pause_button.setCheckable(True)
-        self.pause_button.setChecked(True)
-        self.pause_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.pause_button.clicked.connect(self.toggleLive)
         self.pause_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.pause_button.clicked.connect(self.toggle_live)
+
+        self.add_comment_button = QPushButton("Add Comment", self)
+        self.add_comment_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.add_comment_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.add_comment_button.setStyleSheet("""
+            QPushButton {
+                background-color: gray;
+                color: white;
+                border-radius: 3px;
+                padding: 5px;
+                outline: none;
+            }
+            QPushButton:focus {
+                border: 3px solid #4aa8ff;
+                padding: 2px;
+            }
+        """)
+        self.add_comment_button.clicked.connect(self.add_comment)
         
 
         self.slider_panel = SliderPanel(parent=self)
@@ -66,11 +85,12 @@ class LiveViewTab(QWidget):
         self.slider_button.setStyleSheet("""
             QToolButton {
                 border: none;
-                padding: 5px;
                 border-radius: 3px;
+                outline: none;
             }
             QToolButton:focus {
-                outline: 2px solid #4aa8ff;
+                border: 3px solid #4aa8ff;
+                padding: 2px;
             }
         """)
         self.slider_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -78,6 +98,7 @@ class LiveViewTab(QWidget):
 
         top_controls = QHBoxLayout()
         top_controls.addWidget(self.pause_button)
+        top_controls.addWidget(self.add_comment_button)
         top_controls.addStretch()  # push slider button to right
         top_controls.addWidget(self.connection_indicator)
         top_controls.addWidget(self.slider_button)
@@ -106,7 +127,7 @@ class LiveViewTab(QWidget):
             self.slider_button.setToolTip("Hide control sliders")
 
 
-    def toggleLive(self):
+    def toggle_live(self):
         live_mode = self.pause_button.isChecked()
 
         self.pause_button.setText("Pause Live View" if live_mode else "Live View")
@@ -118,24 +139,30 @@ class LiveViewTab(QWidget):
                                         color: white;
                                         border-radius: 3px;
                                         padding: 5px;
+                                        outline: none;
                                     }
                                     QPushButton:focus {
-                                        outline: 2px solid #4aa8ff;
+                                        border: 3px solid #4aa8ff;
+                                        padding: 2px;
                                     }""")
         else:
             self.pause_button.setStyleSheet("""
                                     QPushButton {
-                                        background-color: 379acc;
+                                        background-color: #379acc;
                                         color: white;
                                         border-radius: 3px;
                                         padding: 5px;
+                                        outline: none;
                                     }
                                     QPushButton:focus {
-                                        outline: 2px solid #4aa8ff;
+                                        border: 3px solid #4aa8ff;
+                                        padding: 2px;
                                     }""")
         
         self.datawindow.set_live_mode(live_mode)
 
+    def add_comment(self):
+        self.datawindow.add_comment_at_current()
 
     def _socket_recv_loop(self):
         while self.socket_client.running:

@@ -1,7 +1,8 @@
 from pyqtgraph import ViewBox
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QWheelEvent
+from PyQt6.QtGui import QWheelEvent, QAction
+from PyQt6.QtWidgets import QMenu
 
 class PanZoomViewBox(ViewBox):
     """
@@ -93,6 +94,36 @@ class PanZoomViewBox(ViewBox):
 
         event.accept()
         self.datawindow.update_plot()
+
+    def contextMenuEvent(self, event):
+        """
+        Displays a context menu for right-clicking on viewbox.
+
+        Currently only allows for add comment
+        """
+        if self.datawindow is None:
+            self.datawindow = self.parentItem().getViewWidget()
+
+        if self.datawindow.live_mode:
+            return
+
+        scene_pos = event.scenePos()
+        data_pos = self.mapSceneToView(scene_pos)
+        x = data_pos.x()  
+
+        menu = QMenu()
+        action1 = QAction("Add Comment", menu)
+        action2 = QAction("Custom Option 2", menu)
+        menu.addAction(action1)
+        menu.addAction(action2)
+
+        selected_action = menu.exec(event.screenPos())
+
+        if selected_action == action1:
+            self.datawindow.add_comment_to_past(x)
+            print(x)
+        elif selected_action == action2:
+            print("Option 2 selected")
 
     def mouseDragEvent(self, event, axis=None) -> None:
         event.ignore()

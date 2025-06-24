@@ -14,5 +14,7 @@ class TextEdit(QTextEdit):
             else:
                 # if just enter, emit custom signal
                 self.returnPressed.emit()
+
+            # add functionality with tab
         else:
             super().keyPressEvent(event)
