@@ -24,6 +24,7 @@ from Settings import Settings
 from LabelArea import LabelArea
 from CommentMarker import CommentMarker
 from SelectionManager import Selection
+from TextEdit import TextEdit
 
 
 # DEBUG ONLY TODO remove imports for testing
@@ -624,6 +625,13 @@ class DataWindow(PlotWidget):
 
         self.comment_preview_enabled = False
         self.comment_preview.setVisible(False)
+
+        # DELETE AFTER TESTING
+        print("add")
+        for time, marker in self.comments.items():
+            print(f"time: {time:.2f}, text: {marker.text}")
+
+
         return
 
     def delete_comment(self, time: float) -> None:
@@ -634,6 +642,12 @@ class DataWindow(PlotWidget):
         # update dict
         marker = self.comments.pop(time)
         marker.remove()
+
+        # DELETE AFTER TESTING
+        print("delete")
+        for time, marker in self.comments.items():
+            print(f"time: {time:.2f}, text: {marker.text}")
+
         return
 
     def move_comment_helper(self, marker: CommentMarker):
@@ -668,13 +682,25 @@ class DataWindow(PlotWidget):
 
         self.comment_preview_enabled = False
         self.comment_preview.setVisible(False)
+
+        # DELETE AFTER TESTING
+        print("move")
+        for time, marker in self.comments.items():
+            print(f"time: {time:.2f}, text: {marker.text}")
+
+
         return
 
     def edit_comment(self, marker: CommentMarker, new_text: str) -> None:
         # chck func
         df = self.epgdata.dfs[self.file]
         nearest_idx = (df['time'] - semarkerlf.time).abs().idxmin()
-        df.at[nearest_idx, 'comments'] = new_text
+        df.at[nearest_idx, 'comments'].text = new_text
+
+        # DELETE AFTER TESTING
+        print("edit")
+        for time, marker in self.comments.items():
+            print(f"time: {time:.2f}, text: {marker.text}")
 
         return
         

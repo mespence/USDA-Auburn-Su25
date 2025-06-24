@@ -14,6 +14,8 @@ class TextEdit(QTextEdit):
             else:
                 # if just enter, emit custom signal
                 self.returnPressed.emit()
+        elif event.key() == Qt.Key.Key_Tab:
+            
 
             # add functionality with tab
         else:

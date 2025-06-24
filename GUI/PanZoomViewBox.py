@@ -28,7 +28,6 @@ class PanZoomViewBox(ViewBox):
         - No modifiers: horizontal pan
         """
         
-        print("wheel")
         delta = event.angleDelta().y()
         modifiers = event.modifiers()
         live = self.datawindow.live_mode
@@ -42,9 +41,7 @@ class PanZoomViewBox(ViewBox):
     
             if shift_held: 
                 # y zoom
-                print("y zoom")
                 self.scaleBy((1, 1 / zoom_factor), center)
-                print(zoom_factor)
             else:
                 # x zoom
                 if live:
@@ -73,11 +70,9 @@ class PanZoomViewBox(ViewBox):
             width, height = x_max - x_min, y_max - y_min
 
             if shift_held:
-                print("ypan")
                 # y pan
                 v_zoom_factor = 5e-4
                 dy = delta * v_zoom_factor * height
-                print(dy)
                 self.translateBy(y=dy)
             else:
                 # x pan
@@ -126,7 +121,6 @@ class PanZoomViewBox(ViewBox):
 
         if selected_action == action1:
             self.datawindow.add_comment_to_past(x)
-            print(x)
         elif selected_action == action2:
             print("Option 2 selected")
 

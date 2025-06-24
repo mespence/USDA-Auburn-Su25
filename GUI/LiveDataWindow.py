@@ -369,8 +369,6 @@ class LiveDataWindow(PlotWidget):
         # create comment
         new_marker = CommentMarker(comment_time, text, self)
         self.comments[comment_time] = new_marker
-
-        print(self.comments)
         self.update_plot()
     
     def add_comment_at_current(self) -> None:
@@ -383,11 +381,10 @@ class LiveDataWindow(PlotWidget):
             return
     
         # create comment
-        # i thnk commentmarker handles viisbility out of range
+        # commentmarker handles viisbility out of range
         new_marker = CommentMarker(comment_time, text, self)
         self.comments[comment_time] = new_marker
 
-        print(self.comments)
         self.update_plot()
 
     def move_comment_helper(self, marker: CommentMarker):
@@ -416,14 +413,13 @@ class LiveDataWindow(PlotWidget):
         self.comment_preview_enabled = False
         self.comment_preview.setVisible(False)
 
-        print(self.comments)
         self.update_plot()
         return
     
     def edit_comment(self, marker: CommentMarker, new_text: str) -> None:
         time = marker.time
-        self.comments[time] = new_text
-        
+        marker = self.comments[time]
+        marker.text = new_text
         return
 
     def find_nearest_time(self, time: float) -> float:
@@ -454,7 +450,6 @@ class LiveDataWindow(PlotWidget):
         marker = self.comments.pop(time)
         # remove marker from viewbox
         marker.remove()
-        print(self.comments)
         return
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
@@ -471,20 +466,18 @@ class LiveDataWindow(PlotWidget):
 
         if event.button() == Qt.MouseButton.LeftButton:
             # for moving comment
-            if self.comment_preview_enabled and self.moving_comment is not None:
+            if self.comment_preview_enabled and self.moving_comment is not None
                 self.move_comment(self.moving_comment, x)
                 self.moving_comment = None
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        """
+        """T
         Handles key shortcuts for adding comment at current time ("Shift+Space").
 
         Parameters:
             event (QKeyEvent): The key press event.
         """
-        print("key pressed: ", event.key(), "Modifir ", event.modifiers())
         if event.key() == Qt.Key.Key_Space and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-            print("add")
             self.add_comment_at_current() 
             return
         else:

@@ -111,6 +111,7 @@ class CommentMarker():
             self.datawindow.delete_comment(self.time)
             dialog.accept()
 
+        text_edit.returnPressed.connect(save)
             
         save_btn.clicked.connect(save)
         move_btn.clicked.connect(move)
