@@ -88,6 +88,7 @@ class LiveDataWindow(PlotWidget):
         self.plot_item.layout.setContentsMargins(30, 30, 30, 20)
         self.leading_line: InfiniteLine = InfiniteLine(pos=0, angle=90, movable=False, pen=mkPen("red", width=3))
         self.addItem(self.leading_line)
+        self.viewbox.setYRange(-0.5, 1, padding=0)
 
         # first sec enable auto range
         self.plot_item.disableAutoRange()
@@ -178,7 +179,6 @@ class LiveDataWindow(PlotWidget):
         else plot visible data of what the user scrolls to view
         """
         self.viewbox.setLimits(xMin=None, xMax=None, yMin=None, yMax=None) # clear stale data (avoids warning)
-        self.viewbox.setYRange(-0.5, 1, padding=0)
 
         if self.live_mode:
             end = self.current_time
@@ -339,7 +339,7 @@ class LiveDataWindow(PlotWidget):
         # enter pressed, dialog accepts
         text.returnPressed.connect(dialog.accept)
 
-        # focus + default button behavior
+        # focus + default button behavior to save if press enter
         text.setFocus()
         buttons.button(QDialogButtonBox.StandardButton.Save).setAutoDefault(True)
 
@@ -420,6 +420,12 @@ class LiveDataWindow(PlotWidget):
         self.update_plot()
         return
     
+    def edit_comment(self, marker: CommentMarker, new_text: str) -> None:
+        time = marker.time
+        self.comments[time] = new_text
+        
+        return
+
     def find_nearest_time(self, time: float) -> float:
         """ for add comment in past and move comment need to find nearest valid time index"""
         # xy rendered sorted in downsampling
@@ -476,12 +482,16 @@ class LiveDataWindow(PlotWidget):
         Parameters:
             event (QKeyEvent): The key press event.
         """
+        print("key pressed: ", event.key(), "Modifir ", event.modifiers())
         if event.key() == Qt.Key.Key_Space and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             print("add")
             self.add_comment_at_current() 
             return
-        
-        super().keyPressEvent(event)
+        else:
+            super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event: QKeyEvent) -> None:
+        super().keyReleaseEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """

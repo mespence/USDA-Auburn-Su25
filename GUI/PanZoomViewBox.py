@@ -28,6 +28,7 @@ class PanZoomViewBox(ViewBox):
         - No modifiers: horizontal pan
         """
         
+        print("wheel")
         delta = event.angleDelta().y()
         modifiers = event.modifiers()
         live = self.datawindow.live_mode
@@ -41,7 +42,9 @@ class PanZoomViewBox(ViewBox):
     
             if shift_held: 
                 # y zoom
+                print("y zoom")
                 self.scaleBy((1, 1 / zoom_factor), center)
+                print(zoom_factor)
             else:
                 # x zoom
                 if live:
@@ -70,9 +73,11 @@ class PanZoomViewBox(ViewBox):
             width, height = x_max - x_min, y_max - y_min
 
             if shift_held:
+                print("ypan")
                 # y pan
                 v_zoom_factor = 5e-4
                 dy = delta * v_zoom_factor * height
+                print(dy)
                 self.translateBy(y=dy)
             else:
                 # x pan
@@ -93,7 +98,6 @@ class PanZoomViewBox(ViewBox):
                         self.translateBy(x=dx)
 
         event.accept()
-        self.datawindow.update_plot()
 
     def contextMenuEvent(self, event):
         """
@@ -105,6 +109,7 @@ class PanZoomViewBox(ViewBox):
             self.datawindow = self.parentItem().getViewWidget()
 
         if self.datawindow.live_mode:
+            event.ignore()
             return
 
         scene_pos = event.scenePos()
@@ -124,6 +129,8 @@ class PanZoomViewBox(ViewBox):
             print(x)
         elif selected_action == action2:
             print("Option 2 selected")
+
+        event.accept()
 
     def mouseDragEvent(self, event, axis=None) -> None:
         event.ignore()

@@ -669,6 +669,14 @@ class DataWindow(PlotWidget):
         self.comment_preview_enabled = False
         self.comment_preview.setVisible(False)
         return
+
+    def edit_comment(self, marker: CommentMarker, new_text: str) -> None:
+        # chck func
+        df = self.epgdata.dfs[self.file]
+        nearest_idx = (df['time'] - semarkerlf.time).abs().idxmin()
+        df.at[nearest_idx, 'comments'] = new_text
+
+        return
         
     def downsample_visible(
         self, x_range: tuple[float, float] = None, max_points=4000, method = 'peak'

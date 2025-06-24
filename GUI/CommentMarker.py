@@ -1,10 +1,12 @@
 from pyqtgraph import (
     PlotWidget, InfiniteLine, mkPen
 )
-from PyQt6.QtWidgets import QPushButton, QVBoxLayout, QLabel, QDialog, QTextEdit, QToolTip
+from PyQt6.QtWidgets import QPushButton, QVBoxLayout, QLabel, QDialog, QTextEdit, QToolTip, QDialogButtonBox
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtCore import Qt, QPointF, QTimer
+
+from TextEdit import TextEdit
 
 class CommentMarker():
     """
@@ -69,23 +71,31 @@ class CommentMarker():
         layout = QVBoxLayout(dialog)
         layout.addWidget(QLabel("Edit Comment:"))
 
-        text_edit = QTextEdit()
-        text_edit.setText(self.text)
+        text_edit = TextEdit()
+        text_edit.setText(self.text) # show old text
 
+        # have cursor at end of old text
         cursor = text_edit.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
         text_edit.setTextCursor(cursor)
         
         layout.addWidget(text_edit)
 
-        save_button = QPushButton("Save")
-        move_button = QPushButton("Move")
-        delete_button = QPushButton("Delete")
-        cancel_button = QPushButton("Cancel")
-        layout.addWidget(save_button)
-        layout.addWidget(move_button)
-        layout.addWidget(delete_button)
-        layout.addWidget(cancel_button)
+        buttons = QDialogButtonBox()
+
+        save_btn = QPushButton("Save")
+        move_btn = QPushButton("Move")
+        discard_btn = QPushButton("Discard")
+        cancel_btn = QPushButton("Cancel")
+
+        #enter sHOUL SAVE4
+
+        buttons.addButton(save_btn, QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.addButton(move_btn, QDialogButtonBox.ButtonRole.ActionRole)
+        buttons.addButton(discard_btn, QDialogButtonBox.ButtonRole.DestructiveRole)
+        buttons.addButton(cancel_btn, QDialogButtonBox.ButtonRole.RejectRole)
+
+        layout.addWidget(buttons)
 
         def save():
             self.set_text(text_edit.toPlainText())
@@ -93,26 +103,25 @@ class CommentMarker():
 
         def move():
             self.set_visible(False)
-            dialog.accept()
             # delay move comment so that it doesn't register the dialog mouse press event
             QTimer.singleShot(0, lambda: self.datawindow.move_comment_helper(self))
-
-        def delete():
             dialog.accept()
+
+        def discard():
             self.datawindow.delete_comment(self.time)
-        
-        save_button.clicked.connect(save)
-        move_button.clicked.connect(move)
-        delete_button.clicked.connect(delete)
-        cancel_button.clicked.connect(dialog.reject)
+            dialog.accept()
+
+            
+        save_btn.clicked.connect(save)
+        move_btn.clicked.connect(move)
+        discard_btn.clicked.connect(discard)
+        cancel_btn.clicked.connect(dialog.reject)
         dialog.setModal(True)
         dialog.exec()
 
     def set_text(self, new_text: str):
         self.text = new_text
-        df = self.datawindow.epgdata.dfs[self.datawindow.file]
-        nearest_idx = (df['time'] - self.time).abs().idxmin()
-        df.at[nearest_idx, 'comments'] = new_text
+        self.datawindow.edit_comment(self, new_text)
 
     def set_visible(self, visible: bool):
         self.marker.setVisible(visible)
