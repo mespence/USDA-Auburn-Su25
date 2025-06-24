@@ -167,9 +167,9 @@ class SliderPanel(QWidget):
         #     print(len(self.socket_client.recv_queue.queue))
         super().keyPressEvent(event)
 
-    def on_control_change(self, label, value):
+    def on_control_change(self, name, value):
         #print(f"{label} changed to {value}")
-        data_dict = {"type":"control", "control_type":label, "value":value}
+        data_dict = {"type": "control", "name": name, "value": value}
         self.socket_client.send(data_dict)
 
 

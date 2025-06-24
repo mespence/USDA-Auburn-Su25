@@ -1,11 +1,9 @@
 from numpy.typing import NDArray
-from collections import deque
-from queue import Queue, Empty
+from queue import Empty
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
 import sys
-import threading
 import json
 
 from pyqtgraph import PlotWidget, PlotItem, ScatterPlotItem, PlotDataItem, mkPen, InfiniteLine
@@ -17,31 +15,6 @@ from PyQt6.QtWidgets import QApplication, QPushButton, QDialog, QVBoxLayout, QLa
 from PanZoomViewBox import PanZoomViewBox
 from CommentMarker import CommentMarker
 from TextEdit import TextEdit
-
-# def simulate_incoming_data(receive_queue):
-#     t = 0
-#     while True:
-#         val = np.sin(t)
-#         receive_queue.put(f"{t:.2f},{val:.4f}")
-#         # simulate 100 times a second incoming data
-#         t += 0.01
-#         time.sleep(0.01)
-
-# def test_recording_data(receive_queue):
-#     df = pd.read_csv(r'C:\EPG-Project\Summer\CS-Repository\GUI\test_recording.csv', usecols=['time', 'post_rect'])
-#     times = df['time'].values
-#     volts = df['post_rect'].values
-#     interval = 0.01
-#     next_time = time.perf_counter()
-
-#     for i in range(len(times)):
-#         t = times[i]
-#         v = volts[i]
-#         receive_queue.put(f"{t:.2f},{v:.4f}")
-
-#         next_time += interval
-#         sleep_time = sleep_time = max(0, next_time - time.perf_counter())
-#         time.sleep(sleep_time)
 
 class LiveDataWindow(PlotWidget):
     """
@@ -533,11 +506,6 @@ class LiveDataWindow(PlotWidget):
         self.viewbox.wheelEvent(event)
         
 if __name__ == "__main__":
-
-    #receive_queue = Queue()
-    # threading.Thread(target=simulate_incoming_data, args=(receive_queue,), daemon=True).start()
-    #threading.Thread(target=test_recording_data, args=(receive_queue,), daemon=True).start()
-
     app = QApplication([])
     window = LiveDataWindow()
     window.resize(1000, 500)
