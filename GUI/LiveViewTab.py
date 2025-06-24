@@ -29,7 +29,6 @@ class LiveViewTab(QWidget):
         self.socket_client = SocketClient(client_id='CS')
         self.socket_client.start()
 
-
         self.datawindow = LiveDataWindow()
         self.datawindow.getPlotItem().hideButtons()
 
@@ -50,12 +49,10 @@ class LiveViewTab(QWidget):
                 padding: 2px;
             }
         """)
-        self.pause_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.pause_button.clicked.connect(self.toggle_live)
 
         self.add_comment_button = QPushButton("Add Comment", self)
         self.add_comment_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.add_comment_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.add_comment_button.setStyleSheet("""
             QPushButton {
                 background-color: gray;
@@ -71,7 +68,6 @@ class LiveViewTab(QWidget):
         """)
         self.add_comment_button.clicked.connect(self.add_comment)
         
-
         self.slider_panel = SliderPanel(parent=self)
         self.slider_button = QToolButton(parent=self)
         self.slider_button.setText("EPG Controls")
@@ -93,7 +89,6 @@ class LiveViewTab(QWidget):
                 padding: 2px;
             }
         """)
-        self.slider_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.slider_panel.hide()
 
         top_controls = QHBoxLayout()
@@ -111,8 +106,12 @@ class LiveViewTab(QWidget):
         main_layout.addLayout(left_layout, 4)
         main_layout.addWidget(self.slider_panel, 1)
 
-        self.setLayout(main_layout)
+        # can't figure out the 2 random tabs --> this logic below doesnt work either
+        # self.setTabOrder(self.pause_button, self.add_comment_button)
+        # self.setTabOrder(self.add_comment_button, self.slider_button)
+        # self.setTabOrder(self.slider_button, self.pause_button)
 
+        self.setLayout(main_layout)
 
         self.recieve_loop = threading.Thread(target=self._socket_recv_loop, daemon=True)
         self.recieve_loop.start()

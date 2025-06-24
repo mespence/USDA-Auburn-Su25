@@ -78,37 +78,33 @@ class CommentMarker():
         cursor = text_edit.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
         text_edit.setTextCursor(cursor)
-        
         layout.addWidget(text_edit)
 
         buttons = QDialogButtonBox()
 
         save_btn = QPushButton("Save")
-        move_btn = QPushButton("Move")
         discard_btn = QPushButton("Discard")
+        move_btn = QPushButton("Move")
         cancel_btn = QPushButton("Cancel")
 
-        #enter sHOUL SAVE4
-
         buttons.addButton(save_btn, QDialogButtonBox.ButtonRole.AcceptRole)
-        buttons.addButton(move_btn, QDialogButtonBox.ButtonRole.ActionRole)
         buttons.addButton(discard_btn, QDialogButtonBox.ButtonRole.DestructiveRole)
+        buttons.addButton(move_btn, QDialogButtonBox.ButtonRole.ActionRole)
         buttons.addButton(cancel_btn, QDialogButtonBox.ButtonRole.RejectRole)
-
         layout.addWidget(buttons)
 
         def save():
             self.set_text(text_edit.toPlainText())
             dialog.accept()
 
+        def discard():
+            self.datawindow.delete_comment(self.time)
+            dialog.accept()
+
         def move():
             self.set_visible(False)
             # delay move comment so that it doesn't register the dialog mouse press event
             QTimer.singleShot(0, lambda: self.datawindow.move_comment_helper(self))
-            dialog.accept()
-
-        def discard():
-            self.datawindow.delete_comment(self.time)
             dialog.accept()
 
         text_edit.returnPressed.connect(save)

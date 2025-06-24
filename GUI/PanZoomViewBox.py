@@ -112,14 +112,14 @@ class PanZoomViewBox(ViewBox):
         x = data_pos.x()  
 
         menu = QMenu()
-        action1 = QAction("Add Comment", menu)
+        add_comment = QAction("Add Comment", menu)
         action2 = QAction("Custom Option 2", menu)
-        menu.addAction(action1)
+        menu.addAction(add_comment)
         menu.addAction(action2)
 
         selected_action = menu.exec(event.screenPos())
 
-        if selected_action == action1:
+        if selected_action == add_comment:
             self.datawindow.add_comment_to_past(x)
         elif selected_action == action2:
             print("Option 2 selected")

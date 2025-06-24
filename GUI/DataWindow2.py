@@ -15,8 +15,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtCore import Qt, QPointF, QTimer, QObject, QEvent
 
 from PyQt6.QtWidgets import (
-    QPushButton, QVBoxLayout, QLabel, QDialog, 
-    QTextEdit, QMessageBox, QMenu
+    QPushButton, QVBoxLayout, QLabel, QDialog, QMessageBox, QMenu, QDialogButtonBox
 )
 
 from EPGData import EPGData
@@ -117,6 +116,10 @@ class PanZoomViewBox(ViewBox):
         if isinstance(item, InfiniteLine):
             print('Right-clicked InfiniteLine')
             return  # TODO: infinite line context menu not yet implemented
+
+        scene_pos = event.scenePos()
+        data_pos = self.mapSceneToView(scene_pos)
+        x = data_pos.x()  
         
         menu = QMenu()
         label_type_dropdown = QMenu("Change Label Type", menu)
@@ -137,16 +140,21 @@ class PanZoomViewBox(ViewBox):
         
             label_type_dropdown.addAction(action)
 
-        action2 = QAction("Custom Option 2")
+        add_comment = QAction("Add Comment", menu)
+
+        action3 = QAction("Custom Option 3")
         menu.addMenu(label_type_dropdown)
-        menu.addAction(action2)
+        menu.addAction(add_comment)
+        menu.addAction(action3)
 
         action = menu.exec(event.screenPos())
         if action == label_type_dropdown:
             print("Option 1 selected")
-        elif action == action2:
+        elif action == add_comment:
+            self.datawindow.add_comment(x)
             print("Option 2 selected")
-
+        else:
+            print("Option 2 selected")
 
 
 class DataWindow(PlotWidget):
@@ -183,6 +191,7 @@ class DataWindow(PlotWidget):
         self.epgdata: EPGData = epgdata
         self.file: str = None
         self.prepost: str = "pre"
+        self.df = None
         
         self.xy_data: list[NDArray] = []  # x and y data actually rendered to the screen
         self.curve: PlotDataItem = PlotDataItem(antialias=False) 
@@ -485,7 +494,7 @@ class DataWindow(PlotWidget):
         if time_span == 0:
             return float("inf")  # Avoid division by zero
 
-        file_length_sec = self.epgdata.dfs[self.file]["time"].iloc[-1]
+        file_length_sec = self.df["time"].iloc[-1]
         default_pix_per_second = plot_width / file_length_sec
 
         self.zoom_level = pix_per_second / default_pix_per_second
@@ -521,8 +530,7 @@ class DataWindow(PlotWidget):
         self.curve.setData(self.xy_data[0], self.xy_data[1])
         init_x, init_y = self.xy_data[0].copy(), self.xy_data[1].copy()
         self.initial_downsampled_data = [init_x, init_y]
-        df = self.epgdata.dfs[file]
-
+        self.df = self.epgdata.dfs[file]  
 
         self.viewbox.setRange(
             xRange=(np.min(self.xy_data[0]), np.max(self.xy_data[0])), 
@@ -531,8 +539,8 @@ class DataWindow(PlotWidget):
         )
 
         # create a comments column if doesn't yet exist in df
-        if 'comments' not in df.columns:
-            df['comments'] = None
+        if 'comments' not in self.df.columns:
+            self.df['comments'] = None
         
         self.update_plot()
         self.plot_comments(file)
@@ -549,41 +557,35 @@ class DataWindow(PlotWidget):
         if file is not None:
             self.file = file
 
-        df = self.epgdata.dfs[self.file]
-
         for marker in self.comments:
             marker.remove()
         self.comments.clear()
         
-        comments_df = df[~df["comments"].isnull()]
+        comments_df = self.df[~self.df["comments"].isnull()]
         for time, text in zip(comments_df["time"], comments_df["comments"]):
             marker = CommentMarker(time, text, self, icon_path=r"message.svg")
             self.comments[time] = marker
         
         return
 
-    def add_comment(self, event: QMouseEvent) -> None:
+    def add_comment(self, click_time: float) -> None:
         """
-        Adds or edits a comment at the clicked location via a dialog popup.
+        Adds via a dialog popup.
 
         Parameters:
             event (QMouseEvent): The click event triggering comment placement.
         """
-        point = self.window_to_viewbox(event.position())
-        x = point.x()
 
-        df = self.epgdata.dfs[self.file]
         # find nearest time clicked
-        nearest_idx = (df['time'] - x).abs().idxmin()
-        comment_time = float(df.at[nearest_idx, 'time'])
-        existing = df.at[nearest_idx, 'comments']
+        nearest_idx, comment_time = self.find_nearest_idx_time(click_time)
+        existing = self.df.at[nearest_idx, 'comments']
         
         # if there's already a comment at the time clicked, give an option to replace
         if existing and str(existing).strip():
             confirm = QMessageBox.question(
                 self,
                 "Overwrite Comment?",
-                f"A comment already exists at {df.at[nearest_idx, 'time']:.2f}s:\n\n\"{existing}\"\n\nReplace it?",
+                f"A comment already exists at {self.df.at[nearest_idx, 'time']:.2f}s:\n\n\"{existing}\"\n\nReplace it?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                 )
             if confirm == QMessageBox.StandardButton.No:
@@ -596,57 +598,32 @@ class DataWindow(PlotWidget):
 
         layout = QVBoxLayout(dialog)
         layout.addWidget(QLabel("Add Comment:"))
-        text = QTextEdit()
+        text = TextEdit()
         layout.addWidget(text)
 
-        save_button = QPushButton("Save")
-        cancel_button = QPushButton("Cancel")
-        layout.addWidget(save_button)
-        layout.addWidget(cancel_button)
-        save_button.clicked.connect(dialog.accept)
-        cancel_button.clicked.connect(dialog.reject)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        layout.addWidget(buttons)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+
+        # enter pressed, dialog accepts
+        text.returnPressed.connect(dialog.accept)
 
         if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        
-        # if the text was just spaces/an empty comment, then don't create a comment
+            return None
+
         text = text.toPlainText().strip()
-        if not text:
-            return
     
-        # create comment
-        df.at[nearest_idx, 'comments'] = text
+        # create a new comment
+        self.df.at[nearest_idx, 'comments'] = text
         marker = self.comments.get(comment_time)
         if marker:
+            # if overwriting, edit text
             marker.set_text(text)
         else:
+            # new comment
             new_marker = CommentMarker(comment_time, text, self)
             self.comments[comment_time] = new_marker
-
-        self.comment_preview_enabled = False
-        self.comment_preview.setVisible(False)
-
-        # DELETE AFTER TESTING
-        print("add")
-        for time, marker in self.comments.items():
-            print(f"time: {time:.2f}, text: {marker.text}")
-
-
-        return
-
-    def delete_comment(self, time: float) -> None:
-        # update df
-        df = self.epgdata.dfs[self.file]
-        df.loc[df["time"] == time, "comments"] = None
-
-        # update dict
-        marker = self.comments.pop(time)
-        marker.remove()
-
-        # DELETE AFTER TESTING
-        print("delete")
-        for time, marker in self.comments.items():
-            print(f"time: {time:.2f}, text: {marker.text}")
 
         return
 
@@ -664,15 +641,13 @@ class DataWindow(PlotWidget):
         return
     
     def move_comment(self, marker: CommentMarker, click_time: float) -> None:
-        df = self.epgdata.dfs[self.file]
-        new_idx = (df['time'] - click_time).abs().idxmin()
-        new_time = float(df.at[new_idx, 'time'])
+        new_idx, new_time = self.find_nearest_idx_time(click_time)
         old_time = marker.time
         text = self.comments[old_time].text
 
         # update df
-        df.loc[df['time'] == old_time, 'comments'] = None
-        df.at[new_idx, 'comments'] = text
+        self.df.loc[self.df['time'] == old_time, 'comments'] = None
+        self.df.at[new_idx, 'comments'] = text
 
         # update comments dict
         old_marker = self.comments.pop(old_time)
@@ -683,26 +658,39 @@ class DataWindow(PlotWidget):
         self.comment_preview_enabled = False
         self.comment_preview.setVisible(False)
 
-        # DELETE AFTER TESTING
-        print("move")
-        for time, marker in self.comments.items():
-            print(f"time: {time:.2f}, text: {marker.text}")
-
-
         return
 
     def edit_comment(self, marker: CommentMarker, new_text: str) -> None:
         # chck func
-        df = self.epgdata.dfs[self.file]
-        nearest_idx = (df['time'] - semarkerlf.time).abs().idxmin()
-        df.at[nearest_idx, 'comments'].text = new_text
+        nearest_idx = self.find_nearest_idx_time(marker.time)[0]
 
-        # DELETE AFTER TESTING
-        print("edit")
-        for time, marker in self.comments.items():
-            print(f"time: {time:.2f}, text: {marker.text}")
+        # update df
+        self.df.at[nearest_idx, 'comments'] = new_text
+
+        # update comments dict
+        time = marker.time
+        marker = self.comments[time]
+        marker.text = new_text
 
         return
+
+    def delete_comment(self, time: float) -> None:
+        # update df
+        self.df.loc[self.df["time"] == time, "comments"] = None
+
+        # update dict
+        marker = self.comments.pop(time)
+        marker.remove()
+
+        return
+
+    def find_nearest_idx_time(self, time: float) -> (int, float):
+        """ EDIT 
+        returns tuple of int for idx and float for time 
+        """ 
+        nearest_idx = (self.df['time'] - time).abs().idxmin()
+        comment_time = float(self.df.at[nearest_idx, 'time'])
+        return (nearest_idx, comment_time)
         
     def downsample_visible(
         self, x_range: tuple[float, float] = None, max_points=4000, method = 'peak'
@@ -1019,31 +1007,12 @@ class DataWindow(PlotWidget):
                 self.baseline_preview_enabled = False
                 self.baseline_preview.setVisible(False)
             else:
-                # disable simultaneous "c" click 
-                self.comment_preview_enabled = False
-                self.comment_preview.setVisible(False)
                 # prepare to set baseline
                 self.baseline.setVisible(False)
                 self.baseline_preview_enabled = True
                 self.baseline_preview.setVisible(True)
                 y_pos = self.viewbox.mapSceneToView(self.mapToScene(self.mapFromGlobal(QCursor.pos()))).y()
                 self.baseline_preview.setPos(y_pos)
-            self.selection.deselect_all()
-            self.selection.unhighlight_item(self.selection.hovered_item)
-        if event.key() == Qt.Key.Key_C:
-            if self.comment_preview_enabled:
-                # Turn it off
-                self.comment_preview_enabled = False
-                self.comment_preview.setVisible(False)
-            else:
-                # disable simultaneous "b" click 
-                self.baseline_preview_enabled = False
-                self.baseline_preview.setVisible(False)
-                # prepare to add new comment
-                self.comment_preview_enabled = True
-                self.comment_preview.setVisible(True)
-                x_pos = self.viewbox.mapSceneToView(self.mapToScene(self.mapFromGlobal(QCursor.pos()))).x()
-                self.comment_preview.setPos(x_pos)
             self.selection.deselect_all()
             self.selection.unhighlight_item(self.selection.hovered_item)
 
@@ -1066,17 +1035,18 @@ class DataWindow(PlotWidget):
         """
         super().mousePressEvent(event)
 
+        placing_in_view = self.getViewBox().sceneBoundingRect().contains(event.scenePosition())
+
+
         point = self.window_to_viewbox(event.position())
         x, _ = point.x(), point.y()
 
         if event.button() == Qt.MouseButton.LeftButton:
             if self.baseline_preview_enabled:
                 self.set_baseline(event)
-            elif self.comment_preview_enabled and self.moving_comment is not None:
+            elif self.comment_preview_enabled and self.moving_comment is not None and placing_in_view:
                 self.move_comment(self.moving_comment, x)
                 self.moving_comment = None
-            elif self.comment_preview_enabled:
-                self.add_comment(event)
             else:
                 self.selection.mouse_press_event(event)
 

@@ -12,7 +12,7 @@ from pyqtgraph import PlotWidget, PlotItem, ScatterPlotItem, PlotDataItem, mkPen
 
 from PyQt6.QtCore import QTimer, Qt, QPointF
 from PyQt6.QtGui import QWheelEvent, QMouseEvent, QCursor, QKeyEvent
-from PyQt6.QtWidgets import QApplication, QPushButton, QDialog, QVBoxLayout, QLabel, QTextEdit, QDialogButtonBox
+from PyQt6.QtWidgets import QApplication, QPushButton, QDialog, QVBoxLayout, QLabel, QDialogButtonBox
 
 from PanZoomViewBox import PanZoomViewBox
 from CommentMarker import CommentMarker
@@ -329,7 +329,6 @@ class LiveDataWindow(PlotWidget):
         layout.addWidget(QLabel("Add Comment:"))
         text = TextEdit()
         layout.addWidget(text)
-
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         layout.addWidget(buttons)
 
@@ -338,19 +337,6 @@ class LiveDataWindow(PlotWidget):
 
         # enter pressed, dialog accepts
         text.returnPressed.connect(dialog.accept)
-
-        # focus + default button behavior to save if press enter
-        text.setFocus()
-        buttons.button(QDialogButtonBox.StandardButton.Save).setAutoDefault(True)
-
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return None
-
-        text = text.toPlainText().strip()
-        return text if text else None
-
-        save_button.clicked.connect(dialog.accept)
-        cancel_button.clicked.connect(dialog.reject)
 
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -421,7 +407,14 @@ class LiveDataWindow(PlotWidget):
         marker = self.comments[time]
         marker.text = new_text
         return
-
+    
+    def delete_comment(self, time: float) -> None:
+        # update dict
+        marker = self.comments.pop(time)
+        # remove marker from viewbox
+        marker.remove()
+        return
+    
     def find_nearest_time(self, time: float) -> float:
         """ for add comment in past and move comment need to find nearest valid time index"""
         # xy rendered sorted in downsampling
@@ -445,13 +438,6 @@ class LiveDataWindow(PlotWidget):
         nearest_time = x[nearest_idx]
         return float(nearest_time)
     
-    def delete_comment(self, time: float) -> None:
-        # update dict
-        marker = self.comments.pop(time)
-        # remove marker from viewbox
-        marker.remove()
-        return
-    
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """ only move commment and add past comment func for now"""
         super().mousePressEvent(event)
@@ -466,7 +452,7 @@ class LiveDataWindow(PlotWidget):
 
         if event.button() == Qt.MouseButton.LeftButton:
             # for moving comment
-            if self.comment_preview_enabled and self.moving_comment is not None
+            if self.comment_preview_enabled and self.moving_comment is not None:
                 self.move_comment(self.moving_comment, x)
                 self.moving_comment = None
 
