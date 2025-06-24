@@ -12,28 +12,25 @@ from PyQt6.QtCore import QObject, pyqtSignal
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(message)s",
-    datefmt="[%Y-%m-%d | %H:%M:%S]",
+    datefmt="[%H:%M:%S]",
     handlers=[logging.StreamHandler(sys.stdout)],
     force=True
 )
 
-class SocketServer(QObject):
+class SocketServer:
     """
     A bidirectional socket to connect the CS and ENGR UIs.
     Forwards EPG data and slider control events beteween the clients. 
     """
-    engrConnected = pyqtSignal(bool)
-
     def __init__(self, host = "localhost", port=16671):
         super().__init__()
-
-        self.host: str = host                           # use "localhost" for interal socket
-        self.port: int = port                           # arbitrary port
-        self.clients: dict[str, socket.socket] = {}     # map of client IDs to their connection objects
-        self.running = False                            # whether the server is running
-        self.ready_event = threading.Event()            # event to signal that the server is ready to receive connections
-        self._server_socket: socket.socket = None       # the socket connection
-        self._current_time:float = time.perf_counter()  # time tracker used in logging
+        self.host: str = host                                                   # use "localhost" for interal socket
+        self.port: int = port                                                   # arbitrary port
+        self.clients: dict[str, socket.socket] = {"CS": None, "ENGR": None}     # map of client IDs to their connection objects
+        self.running = False                                                    # whether the server is running
+        self.ready_event = threading.Event()                                    # event to signal that the server is ready to receive connections
+        self._server_socket: socket.socket = None                               # the socket connection
+        self._current_time:float = time.perf_counter()                          # time tracker used in logging
 
     def start(self):
         """
@@ -53,20 +50,16 @@ class SocketServer(QObject):
         logging.info("[SOCKET] Shutting down...")
 
         # Close client connections
-        for client_id, conn in list(self.clients.items()):
-            if conn:
+        for client_id, client_sock in list(self.clients.items()):
+            if client_sock:
                 try:
-                    conn.sendall('SERVER SHUTDOWN'.encode('utf-8'))
-                    conn.shutdown(socket.SHUT_RDWR)
-                    conn.close()
+                    client_sock.sendall('SERVER SHUTDOWN'.encode('utf-8'))
                     logging.info(f"[SOCKET] Disconnected {client_id}")
                 except Exception as e:
-                    logging.info(f"[SOCKET] Error closing {client_id}: {e}")
+                    logging.warning(f"[SOCKET] Error closing {client_id}: {e}")
 
-                if client_id == "ENGR":
-                    self.engrConnected.emit(False)
 
-        self.clients.clear()
+        self.clients = {"CS": None, "ENGR": None}
 
         # Close server socket
         if self._server_socket:
@@ -74,7 +67,7 @@ class SocketServer(QObject):
                 self._server_socket.close()
                 logging.info("[SOCKET] Socket closed")
             except Exception as e:
-                logging.info(f"[SOCKET] Error closing socket: {e}")
+                logging.warning(f"[SOCKET] Error closing socket: {e}")
 
         logging.info("[SOCKET] Shutdown complete")
 
@@ -98,45 +91,86 @@ class SocketServer(QObject):
                 except OSError:
                     break  # socket closed
        
-    def _handle_client(self, conn: socket.socket, addr):
+    def _handle_client(self, sock: socket.socket, addr):
         """
         Processes new client connections and begins reading messages from it.
         """
+        client_id = None
         try:
-            initial_message = conn.recv(1024).decode().strip()
-            client_id = initial_message.split("=")[1]  
-            self.clients[client_id] = conn
+            client_id = sock.recv(1024).decode().strip().split("=")[1]  
+            if self.clients.get(client_id) is not None:  # duplicate connection
+                sock.close()
+                logging.info(f"[SOCKET] Ignoring duplicate client connection request from \"{client_id}\"")
 
-            if client_id == "ENGR":
-                self.engrConnected.emit(True)
+            self.clients[client_id] = sock
 
+            # Notify new client of current peer statuses
+            for peer_id, peer_sock in self.clients.items():
+                if peer_id != client_id and peer_sock:
+                    msg = json.dumps({
+                        "type": "peer_status",
+                        "peer_id": peer_id,
+                        "status": "connected"
+                    }) + "\n"
+                    try:
+                        sock.sendall(msg.encode('utf-8'))
+                    except:
+                        pass
+
+            self.broadcast_peer_status(client_id, "connected")
             logging.info(f"[SOCKET] Client \"{client_id}\" connected from {addr}")
-            self._receive_loop(conn, client_id)
-        except:
-            pass
+            self._receive_loop(sock, client_id)
+        except Exception as e:
+            logging.warning(f"[SOCKET] Error in _handle_client: {e}")
         finally:
-            conn.close()
-            for client_id, client in list(self.clients.items()):
-                if client == conn:
-                    del self.clients[client_id]
-                    if client_id == "ENGR":
-                        self.engrConnected.emit(False)
-                    break
+            if client_id:
+                self.clients[client_id] = None         
+                self.broadcast_peer_status(client_id, "disconnected")   
+            try:
+                sock.close()
+            except:
+                pass
 
-    def _receive_loop(self, conn: socket.socket, client_id: str):
+
+    def broadcast_peer_status(self, changed_id: str, status: str):
+        message = json.dumps({
+            "type": "status",
+            "peer_id": changed_id,
+            "status": status
+        }).encode('utf-8')
+
+        for client_id, client_sock in self.clients.items():
+            if client_id != changed_id and client_sock:  # don’t echo to sender
+                try:
+                    client_sock.sendall(message + b"\n")
+                except:
+                    pass  # handle closed socket case if needed
+        
+    def _receive_loop(self, sock: socket.socket, client_id: str):
         """
         Backgroung loop to read newline-delimited JSON messages from the given client connection
         and dispatch them to the appropriate handler.
         """
         buffer = ""
-        while True:
-            chunk = conn.recv(1024)
-            if not chunk:
-                break  # client disconnected
-            buffer += chunk.decode()
-            while "\n" in buffer:
-                line, buffer = buffer.split("\n", 1)
-                self._process_message(line.strip(), client_id)
+        try:
+            while True:
+                if not self.clients.get(client_id):  # already removed externally
+                    break
+
+                chunk = sock.recv(1024)
+                if not chunk:
+                    logging.info(f"[SOCKET] Client \"{client_id}\" disconnected")
+                    break
+                
+                buffer += chunk.decode('utf-8')
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    self._process_message(line.strip(), client_id)
+        except ConnectionResetError:
+            logging.info(f"[SOCKET] Client \"{client_id}\" disconnected abruptly (reset)")
+        except Exception as e:
+            logging.warning(f"[SOCKET] Error in _receive_loop for \"{client_id}\": {e}")
+
 
 
     def _process_message(self, message: str, client_id: str):
@@ -145,27 +179,26 @@ class SocketServer(QObject):
         Delegates to control or data handlers based on message type.
         """
         try:
-            message = json.loads(message)
+            message_dict = json.loads(message)
         except json.JSONDecodeError:
-            logging.info(f"[SOCKET] Invalid JSON from {client_id}: {message}")
+            logging.warning(f"[SOCKET] Invalid JSON from {client_id}: {message}")
             return
-
-        if message["type"] == "data":
-            self._forward_data(message)
-        elif message["type"] == "control":
-            logging.info(f"[{client_id}] Control: {message['control_type']} = {message['value']}")
+        if message_dict["type"] == "data":
+            self._forward_data(message_dict)
+        elif message_dict["type"] == "control":
+            logging.info(f"[{client_id}] Control: {message_dict['name']} = {message_dict['value']}")
         else:
-            logging.info(f"[{client_id}] Unknown message type: {message['type']}")
+            logging.warning(f"[{client_id}] Unknown message type: {message_dict['type']}")
     
     def _forward_data(self, data: dict):
         """
         Forwards a simplified (timestamp, voltage) message from ENGR to CS.
         If CS is not connected, logs a warning.
         """
-        cs_conn = self.clients.get("CS")
-        if not cs_conn:
+        cs_sock = self.clients.get("CS")
+        if not cs_sock:
             if (time.perf_counter() - self._current_time) > 1: # only send every 1s
-                logging.info("[SOCKET] CS not connected, can't forward data.")
+                logging.warning("[SOCKET] CS not connected, can't forward data.")
                 self._current_time = time.perf_counter()
             return
 
@@ -174,38 +207,69 @@ class SocketServer(QObject):
             "type": "data",
             "value": (data_list[0], data_list[2])  # (timestamp, voltage)
         }
-        cs_conn.sendall((json.dumps(msg) + "\n").encode("utf-8"))
+        cs_sock.sendall((json.dumps(msg) + "\n").encode("utf-8"))
 
 
-class SocketClient:
+class SocketClient(QObject):
     """
     A client class to connect to the socket and handle sending/receiving data it.
     Incoming messages are pulled from the recieve queue, and outgoing messages are placed in the send queue.
     """
+    connectionChanged = pyqtSignal(bool)        # Whether this client is connected
+    peerConnectionChanged = pyqtSignal(bool)    # Whether the peer client is connected
 
-    def __init__(self, client_id, host="localhost", port=16671):
+    def __init__(self, client_id, host="localhost", port=16671, parent = None):
+        super().__init__()
+        self.client_id: str = client_id         # identifying string for this client (e.g., CS, ENGR) 
         self.host: str = host                   # use "localhost" for interal socket
         self.port: int = port                   # arbitrary port
-        self.client_id: str = client_id         # identifying string for this client (e.g., CS, ENGR) 
+        self.parent = parent                    # the parent Qt object
         self.send_queue: queue = queue.Queue()  # queue to send data to other client
         self.recv_queue: queue = queue.Queue()  # queue to receive data from other client
-        self.running: bool = False              # whether the socket is running
+        self.connected: bool = False            # whether the client is connected to the socket
         self._sock: socket.socket = None        # the socket connection
-
-    def start(self):
+    def connect(self):
         """
         Starts the client and initializes the connection to the socket.
         """
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.connect((self.host, self.port))
+        try:
+            self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._sock.connect((self.host, self.port))
 
-        # send initial message with client ID to socket
-        self._sock.sendall(f"client_id={self.client_id}\n".encode('utf-8'))
-        self.running = True
+            # send initial message with client ID to socket
+            self._sock.sendall(f"client_id={self.client_id}\n".encode('utf-8'))
+            self.connected = True
+            self.connectionChanged.emit(True)
+    
+            threading.Thread(target=self._send_loop, daemon=True).start()
+            threading.Thread(target=self._recv_loop, daemon=True).start()
+        except Exception as e:
+            self.connected = False
+            self.connectionChanged.emit(False)
+            logging.warning(f"[SocketClient] Connection failed: {e}")
 
-        threading.Thread(target=self._send_loop, daemon=True).start()
-        threading.Thread(target=self._recv_loop, daemon=True).start()
 
+
+    def disconnect(self):
+        self.connected = False
+        self.connectionChanged.emit(False)
+
+        if self._sock:
+            try:
+                self._sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                print('err 1')
+                pass  # already closed or not a socket
+
+            try:
+                self._sock.close()
+            except OSError:
+                print('err 2')
+                pass  # already closed
+
+            self._sock = None
+
+        
     def send(self, data: dict):
         """
         Places a JSON-formatted dictionary in the send queue.
@@ -221,11 +285,12 @@ class SocketClient:
         except queue.Empty:
             return None
 
+
     def _send_loop(self):
         """
         Background loop to handle outgoing messages.
         """
-        while self.running:
+        while self.connected:
             try:
                 msg = self.send_queue.get(timeout=0.1)
                 json_str = json.dumps(msg) + "\n"
@@ -234,25 +299,54 @@ class SocketClient:
                 continue
             except Exception as e:
                 logging.info("[SocketClient SEND ERROR]", e)
-                self.running = False
+                self.connected = False
                 break
 
     def _recv_loop(self):
         """
         Background loop to handle incoming messages.
         """
-        while self.running:
+        buffer = ""
+        while self.connected:
             try:
-                message = self._sock.recv(1024)
-                if message:
-                    message = message.decode("utf-8")
-                    if "SERVER SHUTDOWN" in message: # server-ordered shutdown
-                        self.running = False
-                        break
-                    else:
-                        self.recv_queue.put_nowait(message)
+                message = self._sock.recv(1024).decode('utf-8')
                 
-            except Exception as e:
-                logging.info(f"[SocketClient RECV ERROR] {e}")  
-                self.running = False  
+                buffer += message
+                while '\n' in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    if "SERVER SHUTDOWN" in line:
+                        self.disconnect()
+                        break
+
+                    try:
+                        msg = json.loads(line)
+                    except json.JSONDecodeError:
+                        # Fallback: non-JSON line, treat as plain message
+                        self.recv_queue.put_nowait(line)
+                        continue
+                        
+                    if msg.get("type") == "status":
+                        peer_id = msg.get("peer_id")
+                        status = msg.get("status")
+                        is_connected = (status == "connected")
+                        self.connectionChanged.emit(is_connected)
+                        if peer_id != self.client_id:  # only care about the *other* client
+                            self.peerConnectionChanged.emit(is_connected)
+                    else:
+                        self.recv_queue.put_nowait(line)
+
+            except ConnectionResetError:
+                if self.connected:
+                    logging.info(f"[SOCKET] Socket remotely closed")
                 break
+            except Exception as e:
+                if self.connected:
+                    logging.info(f"[SocketClient RECV ERROR] {e}")
+                break
+
+        self.connected = False
+        self.connectionChanged.emit(False)

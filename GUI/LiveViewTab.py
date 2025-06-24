@@ -19,16 +19,19 @@ from EPGSocket import SocketClient, SocketServer
 class LiveViewTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-
         self.connection_indicator = ConnectionIndicator()
 
+        # === Socket ===
         self.socket_server = SocketServer()
-        self.socket_server.engrConnected.connect(self.connection_indicator.set_connected)
         self.socket_server.start()
 
-        self.socket_client = SocketClient(client_id='CS')
-        self.socket_client.start()
+        self.socket_client = SocketClient(client_id='CS', parent=self)
+        self.socket_client.peerConnectionChanged.connect(self.connection_indicator.set_connected)
+        self.socket_client.peerConnectionChanged.connect(self.update_slider_button_state)
+        self.socket_client.connect()
 
+        self.recieve_loop = threading.Thread(target=self._socket_recv_loop, daemon=True)
+        self.recieve_loop.start()
 
         self.datawindow = LiveDataWindow()
         self.datawindow.getPlotItem().hideButtons()
@@ -71,6 +74,11 @@ class LiveViewTab(QWidget):
         """)
         self.add_comment_button.clicked.connect(self.add_comment)
         
+        self.pause_button.setCheckable(True)
+        self.pause_button.setChecked(True)
+        self.pause_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.pause_button.clicked.connect(self.toggleLive)
+
 
         self.slider_panel = SliderPanel(parent=self)
         self.slider_button = QToolButton(parent=self)
@@ -84,17 +92,15 @@ class LiveViewTab(QWidget):
         self.slider_button.clicked.connect(self.toggleSliders)
         self.slider_button.setStyleSheet("""
             QToolButton {
-                border: none;
-                border-radius: 3px;
                 outline: none;
             }
             QToolButton:focus {
-                border: 3px solid #4aa8ff;
-                padding: 2px;
+                outline 3px solid #4aa8ff;
             }
         """)
         self.slider_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.slider_panel.hide()
+        self.update_slider_button_state(False)
+        
 
         top_controls = QHBoxLayout()
         top_controls.addWidget(self.pause_button)
@@ -114,10 +120,11 @@ class LiveViewTab(QWidget):
         self.setLayout(main_layout)
 
 
-        self.recieve_loop = threading.Thread(target=self._socket_recv_loop, daemon=True)
-        self.recieve_loop.start()
+        
 
     def toggleSliders(self):
+        if not self.slider_button.isEnabled():
+            return
         is_visible = self.slider_panel.isVisible()
         self.slider_panel.setVisible(not is_visible)
 
@@ -125,6 +132,19 @@ class LiveViewTab(QWidget):
             self.slider_button.setToolTip("Open control sliders")
         else:
             self.slider_button.setToolTip("Hide control sliders")
+
+    def update_slider_button_state(self, is_connected: bool):
+        """
+        Handles disabling the slider button when the EPG is not connected.
+        """      
+        self.slider_button.setEnabled(is_connected)
+
+        if is_connected:
+            self.slider_button.setToolTip("Open control sliders")
+        else:
+            self.slider_button.setToolTip("Connect to EPG to enable controls")
+
+        self.slider_panel.hide()
 
 
     def toggle_live(self):
@@ -165,7 +185,7 @@ class LiveViewTab(QWidget):
         self.datawindow.add_comment_at_current()
 
     def _socket_recv_loop(self):
-        while self.socket_client.running:
+        while self.socket_client.connected:
 
             try:
                 # NOTE: message can include multiple commands/data, i.e. "{<command1>}\n{<command2>}\n"
