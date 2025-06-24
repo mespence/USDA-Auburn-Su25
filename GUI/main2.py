@@ -7,13 +7,14 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QWidget,
     QHBoxLayout,
+    QMessageBox,
     QMenuBar,
     QMenu,
     QTabWidget,
     QTabBar
 )
 from PyQt6.QtCore import QRunnable, pyqtSignal, QThreadPool, QObject, QEvent, Qt, QSize, QTimer
-from PyQt6.QtGui import QIcon, QFont, QFontDatabase
+from PyQt6.QtGui import QIcon, QFont, QFontDatabase, QAction
 
 from LoadingScreen import LoadingScreen
 from DataWindow2 import DataWindow
@@ -64,6 +65,10 @@ class MainWindow(QMainWindow):
         menubar = QMenuBar(self)
         file_menu = QMenu("File", self)
         file_menu.addAction("Open")
+        export_comment_csv = file_menu.addAction("Export Comments")
+        export_comment_csv.triggered.connect(self.export_comments_from_current_tab)
+        export_data = file_menu.addAction("Export Data")
+        export_data.triggered.connect(self.export_data)
         file_menu.addAction("Save")
         file_menu.addSeparator()
         file_menu.addAction("Exit", self.close)
@@ -123,6 +128,28 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.live_view_tab.socket_server.stop()
         super().closeEvent(event)
+
+    def export_comments_from_current_tab(self):
+        current_widget = self.tabs.currentWidget()
+        if isinstance(current_widget, LiveViewTab) or isinstance(current_widget, LabelTab):
+            current_widget.datawindow.export_comments()
+        else:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Cannot Export Comments")
+            msg.setText("Current tab does not support exporting comments.")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.exec()
+    
+    def export_data(self):
+        current_widget = self.tabs.currentWidget()
+        if isinstance(current_widget, LiveViewTab):
+            current_widget.datawindow.export_df()
+        else:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Cannot Export Data")
+            msg.setText("Current tab does not support exporting comments.")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.exec()
 
     def set_initial_focus(self):
         current_widget = self.tabs.currentWidget()

@@ -5,12 +5,13 @@ import pandas as pd
 from pandas import DataFrame
 import sys
 import json
+import csv
 
 from pyqtgraph import PlotWidget, PlotItem, ScatterPlotItem, PlotDataItem, mkPen, InfiniteLine
 
 from PyQt6.QtCore import QTimer, Qt, QPointF
 from PyQt6.QtGui import QWheelEvent, QMouseEvent, QCursor, QKeyEvent
-from PyQt6.QtWidgets import QApplication, QPushButton, QDialog, QVBoxLayout, QLabel, QDialogButtonBox
+from PyQt6.QtWidgets import QApplication, QPushButton, QDialog, QVBoxLayout, QLabel, QDialogButtonBox, QMessageBox, QFileDialog
 
 from PanZoomViewBox import PanZoomViewBox
 from CommentMarker import CommentMarker
@@ -73,6 +74,22 @@ class LiveDataWindow(PlotWidget):
         # for live view, follow only 10 seconds of visible data
         self.default_scroll_window = 10
         self.auto_scroll_window = 10
+
+        # BASELINE
+        self.baseline: InfiniteLine = InfiniteLine(
+            angle = 0, movable=True, pen=mkPen("gray", width = 3)
+        )
+        self.plot_item.addItem(self.baseline)
+        self.baseline.setVisible(False)
+        
+        self.baseline_preview: InfiniteLine = InfiniteLine(
+            angle = 0, movable = False,
+            pen=mkPen("gray", style = Qt.PenStyle.DashLine, width = 3),
+        )
+
+        self.addItem(self.baseline_preview)
+        self.baseline_preview.setVisible(False)
+        self.baseline_preview_enabled: bool = False
 
         # COMMENTS
         self.comments: dict[float, CommentMarker] = {} # the dict of Comments
@@ -410,13 +427,37 @@ class LiveDataWindow(PlotWidget):
 
         nearest_time = x[nearest_idx]
         return float(nearest_time)
+
+    def set_baseline(self, event: QMouseEvent):
+        """
+        Sets a baseline at the clicked y-position and shows the baseline.
+
+        Parameters:
+            event (QMouseEvent): The click event triggering baseline placement.
+        """
+        # TODO: edit for when have edit mode functionality
+        point = self.window_to_viewbox(event.position())
+        x, y = point.x(), point.y()
+
+        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
+
+        if not (x_min <= x <= x_max and y_min <= y <= y_max):
+            return
+
+        
+        self.baseline.setPos(y)
+        self.baseline.setVisible(True)
+
+        self.baseline_preview_enabled = False
+        self.baseline_preview.setVisible(False)
+
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """ only move commment and add past comment func for now"""
         super().mousePressEvent(event)
 
         point = self.window_to_viewbox(event.position())
-        x, _ = point.x(), point.y()
+        x, y = point.x(), point.y()
 
         # any press event outside of graph box shouldn't register
         if not self.getViewBox().sceneBoundingRect().contains(event.scenePosition()):
@@ -425,22 +466,38 @@ class LiveDataWindow(PlotWidget):
 
         if event.button() == Qt.MouseButton.LeftButton:
             # for moving comment
-            if self.comment_preview_enabled and self.moving_comment is not None:
+            if self.baseline_preview_enabled:
+                self.set_baseline(event)
+            elif self.comment_preview_enabled and self.moving_comment is not None and placing_in_view:
                 self.move_comment(self.moving_comment, x)
                 self.moving_comment = None
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        """T
+        """
+        Handles key shortcuts for setting baseline ("B")
         Handles key shortcuts for adding comment at current time ("Shift+Space").
 
         Parameters:
             event (QKeyEvent): The key press event.
         """
         if event.key() == Qt.Key.Key_Space and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-            self.add_comment_at_current() 
-            return
+            self.add_comment_at_current()
+        if event.key() == Qt.Key.Key_B:
+            if self.baseline_preview_enabled:
+                # Turn it off
+                self.baseline_preview_enabled = False
+                self.baseline_preview.setVisible(False)
+            else:
+                # prepare to set baseline
+                self.baseline.setVisible(False)
+                self.baseline_preview_enabled = True
+                self.baseline_preview.setVisible(True)
+                y_pos = self.viewbox.mapSceneToView(self.mapToScene(self.mapFromGlobal(QCursor.pos()))).y()
+                self.baseline_preview.setPos(y_pos)
         else:
             super().keyPressEvent(event)
+        
+        self.viewbox.update()
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         super().keyReleaseEvent(event)
@@ -455,11 +512,17 @@ class LiveDataWindow(PlotWidget):
         super().mouseMoveEvent(event)
 
         point = self.window_to_viewbox(event.position())
-        x, _ = point.x(), point.y()
+        x, y = point.x(), point.y()
 
         (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
 
-        if self.comment_preview_enabled:
+        if self.baseline_preview_enabled:
+            if y_min <= y <= y_max:
+                self.baseline_preview.setPos(y)
+                self.baseline_preview.setVisible(True)
+            else:
+                self.baseline_preview.setVisible(False)
+        elif self.comment_preview_enabled:
             if x_min <= x <= x_max:
                 self.comment_preview.setPos(x)
                 self.comment_preview.setVisible(True)
@@ -471,21 +534,45 @@ class LiveDataWindow(PlotWidget):
         return
 
     def export_comments(self):
-        """ what form should the comments be in """
-        # have this as a menu option 
-        pass
+        """ export comments in csv format """
+        
+        if not self.comments:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("No Comments")
+            msg_box.setText("There are no comments to export from this live viewing.")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.exec()
+            return
 
-    def export_df(self) -> pd.DataFrame:
+        filename, _ = QFileDialog.getSaveFileName(
+            parent=self,
+            caption="Export Comments As",
+            filter="CSV Files (*.csv);;All Files (*)"
+        )
+
+        if filename:
+            with open(filename, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(['comment_time', 'comment_text'])
+                for time, marker in self.comments.items():
+                    writer.writerow([time, marker.text])
+        
+        return
+        
+    def export_df(self):
         """
         Exports the most recent data as a new df
-        Returns a dataframe with time, voltage, and comments column
         """
         times = self.xy_data[0]
         volts = self.xy_data[1]
 
         if len(times) == 0:
-            # no data, return empty df
-            return DataFrame()
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("No Data")
+            msg_box.setText("There is no data to export from this live viewing.")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.exec()
+            return
         
         df = DataFrame({
             "time": times,
@@ -494,10 +581,19 @@ class LiveDataWindow(PlotWidget):
         })
 
         # add current comments to df
-        for comment_time, comment_text in self.comment.items():
-            df.loc[df['time'] == comment_time, 'comments'] = comment_text
+        for comment_time, comment in self.comments.items():
+            df.loc[df['time'] == comment_time, 'comments'] = comment.text
 
-        return df
+        filename, _ = QFileDialog.getSaveFileName(
+            parent=self,
+            caption="Export Data As",
+            filter="CSV Files (*.csv);;All Files (*)"
+        )
+
+        if filename:
+            df.to_csv(filename)
+
+        return
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         """

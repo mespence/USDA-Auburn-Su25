@@ -1,6 +1,7 @@
 import numpy as np
 from numpy.typing import NDArray
 import os
+import csv
 
 from pyqtgraph import (
     PlotWidget, ViewBox, PlotItem, setConfigOptions,
@@ -15,7 +16,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtCore import Qt, QPointF, QTimer, QObject, QEvent
 
 from PyQt6.QtWidgets import (
-    QPushButton, QVBoxLayout, QLabel, QDialog, QMessageBox, QMenu, QDialogButtonBox
+    QPushButton, QVBoxLayout, QLabel, QDialog, QMessageBox, QMenu, QDialogButtonBox, QFileDialog
 )
 
 from EPGData import EPGData
@@ -691,6 +692,32 @@ class DataWindow(PlotWidget):
         nearest_idx = (self.df['time'] - time).abs().idxmin()
         comment_time = float(self.df.at[nearest_idx, 'time'])
         return (nearest_idx, comment_time)
+
+    def export_comments(self):
+        """ export comments in csv format """
+        
+        if not self.comments:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("No Comments")
+            msg_box.setText("There are no comments to export from this live viewing.")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.exec()
+            return
+
+        filename, _ = QFileDialog.getSaveFileName(
+            parent=self,
+            caption="Export Comments As",
+            filter="CSV Files (*.csv);;All Files (*)"
+        )
+
+        if filename:
+            with open(filename, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(['comment_time', 'comment_text'])
+                for time, marker in self.comments.items():
+                    writer.writerow([time, marker.text])
+        
+        return
         
     def downsample_visible(
         self, x_range: tuple[float, float] = None, max_points=4000, method = 'peak'
