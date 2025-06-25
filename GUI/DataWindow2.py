@@ -658,7 +658,6 @@ class DataWindow(PlotWidget):
 
         self.comment_preview_enabled = False
         self.comment_preview.setVisible(False)
-
         return
 
     def edit_comment(self, marker: CommentMarker, new_text: str) -> None:
@@ -1062,18 +1061,19 @@ class DataWindow(PlotWidget):
         """
         super().mousePressEvent(event)
 
-        placing_in_view = self.getViewBox().sceneBoundingRect().contains(event.scenePosition())
-
-
         point = self.window_to_viewbox(event.position())
-        x, _ = point.x(), point.y()
+        x, y = point.x(), point.y()
+
+        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
+
 
         if event.button() == Qt.MouseButton.LeftButton:
             if self.baseline_preview_enabled:
                 self.set_baseline(event)
-            elif self.comment_preview_enabled and self.moving_comment is not None and placing_in_view:
-                self.move_comment(self.moving_comment, x)
-                self.moving_comment = None
+            elif self.comment_preview_enabled and self.moving_comment is not None:
+                if x_min <= x <= x_max:
+                    self.move_comment(self.moving_comment, x)
+                    self.moving_comment = None
             else:
                 self.selection.mouse_press_event(event)
 

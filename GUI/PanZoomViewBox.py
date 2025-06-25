@@ -92,6 +92,7 @@ class PanZoomViewBox(ViewBox):
                     else:
                         self.translateBy(x=dx)
 
+        
         event.accept()
 
     def contextMenuEvent(self, event):

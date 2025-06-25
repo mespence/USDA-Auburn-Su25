@@ -173,9 +173,10 @@ class LiveDataWindow(PlotWidget):
         if self.live_mode:
             end = self.current_time
             start = end - self.auto_scroll_window
+            offset = 0.1 # when zoom great, ometimes leading line lags and is visible without offset
             self.viewbox.setXRange(start, end, padding=0)
             self.downsample_visible(x_range=(start, end))
-            self.leading_line.setPos(end)
+            self.leading_line.setPos(end+offset)
 
         else:
             (x_min, x_max), _ = self.viewbox.viewRange()
