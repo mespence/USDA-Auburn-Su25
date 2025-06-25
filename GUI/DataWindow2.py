@@ -276,11 +276,11 @@ class DataWindow(PlotWidget):
         self.plot_item.enableAutoRange(False)
 
         # placeholder sine wave
-        self.xy_data.append(np.linspace(0, 1, 10000))
-        self.xy_data.append(np.sin(2 * np.pi * self.xy_data[0]))
-        self.curve.setData(
-            self.xy_data[0], self.xy_data[1], pen=mkPen(color="b", width=2)
-        )
+        # self.xy_data.append(np.linspace(0, 1, 10000))
+        # self.xy_data.append(np.sin(2 * np.pi * self.xy_data[0]))
+        # self.curve.setData(
+        #     self.xy_data[0], self.xy_data[1], pen=mkPen(color="b", width=2)
+        # )
 
         self.curve.setClipToView(False)  # already done in manual downsampling
         self.scatter.setVisible(False)
@@ -312,6 +312,8 @@ class DataWindow(PlotWidget):
         )
         self.zoom_text.setPos(QPointF(80, 30))
         self.scene().addItem(self.zoom_text)
+
+        self.viewbox.setXRange(0,10)
         
         # further defer update until the window is actually rendered to the screen
         #QApplication.processEvents()
@@ -685,7 +687,7 @@ class DataWindow(PlotWidget):
 
         return
 
-    def find_nearest_idx_time(self, time: float) -> (int, float):
+    def find_nearest_idx_time(self, time: float) -> tuple[int, float]:
         """ EDIT 
         returns tuple of int for idx and float for time 
         """ 

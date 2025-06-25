@@ -32,9 +32,9 @@ class LabelTab(QWidget):
         self.epgdata.load_data(file)
 
         self.datawindow = DataWindow(self.epgdata)
-        self.datawindow.plot_recording(file, "pre")
-        self.datawindow.plot_transitions(file)
-        self.datawindow.plot_comments(file)
+        #self.datawindow.plot_recording(file, "pre")
+        #self.datawindow.plot_transitions(file)
+        #self.datawindow.plot_comments(file)
 
         openDataButton = QPushButton("Open Data")
         openDataButton.clicked.connect(lambda: FileSelector.load_new_data(self.epgdata, self.datawindow))

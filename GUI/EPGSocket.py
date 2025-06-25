@@ -28,6 +28,9 @@ class SocketServer:
         self.port: int = port                                                   # arbitrary port
         self.clients: dict[str, socket.socket] = {"CS": None, "ENGR": None}     # map of client IDs to their connection objects
         self.running = False                                                    # whether the server is running
+
+        self.control_state: dict = {}                                           # the dictionary containing the current state of the controls
+        
         self.ready_event = threading.Event()                                    # event to signal that the server is ready to receive connections
         self._server_socket: socket.socket = None                               # the socket connection
         self._current_time:float = time.perf_counter()                          # time tracker used in logging
@@ -101,22 +104,28 @@ class SocketServer:
             if self.clients.get(client_id) is not None:  # duplicate connection
                 sock.close()
                 logging.info(f"[SOCKET] Ignoring duplicate client connection request from \"{client_id}\"")
+                return
 
             self.clients[client_id] = sock
 
-            # Notify new client of current peer statuses
+            # Get status of already-connected clients
             for peer_id, peer_sock in self.clients.items():
                 if peer_id != client_id and peer_sock:
-                    msg = json.dumps({
-                        "type": "peer_status",
-                        "peer_id": peer_id,
-                        "status": "connected"
-                    }) + "\n"
-                    try:
-                        sock.sendall(msg.encode('utf-8'))
-                    except:
-                        pass
+                    self.broadcast_peer_status(peer_id, "connected", target=client_id)
+            # for peer_id, peer_sock in self.clients.items():
+            #     if peer_id != client_id and peer_sock:
+            #         msg = json.dumps({
+            #             "source": "socket",
+            #             "type": "peer_status",
+            #             "peer_id": peer_id,
+            #             "status": "connected"
+            #         }) + "\n"
+            #         try:
+            #             sock.sendall(msg.encode('utf-8'))
+            #         except:
+            #             pass
 
+            # Notify other cilents of succesful connection
             self.broadcast_peer_status(client_id, "connected")
             logging.info(f"[SOCKET] Client \"{client_id}\" connected from {addr}")
             self._receive_loop(sock, client_id)
@@ -131,21 +140,36 @@ class SocketServer:
             except:
                 pass
 
-
-    def broadcast_peer_status(self, changed_id: str, status: str):
+    def broadcast_peer_status(self, changed_id: str, status: str, target: str = None):
+        """
+        Broadcasts a peer's status to all other clients or to a specific target client.
+        - `changed_id`: ID of the client whose status changed.
+        - `status`: "connected" or "disconnected"
+        - `target`: if given, only send to this client (used when a new client joins).
+        """
         message = json.dumps({
+            "source": "socket",
             "type": "status",
             "peer_id": changed_id,
             "status": status
-        }).encode('utf-8')
+        }) + "\n"
 
         for client_id, client_sock in self.clients.items():
-            if client_id != changed_id and client_sock:  # don’t echo to sender
-                try:
-                    client_sock.sendall(message + b"\n")
-                except:
-                    pass  # handle closed socket case if needed
-        
+            if client_sock is None:
+                continue
+            if target is not None:
+                if client_id == target:
+                    try:
+                        client_sock.sendall(message.encode('utf-8'))
+                    except:
+                        pass
+            else:
+                if client_id != changed_id:
+                    try:
+                        client_sock.sendall(message.encode('utf-8'))
+                    except:
+                        pass
+    
     def _receive_loop(self, sock: socket.socket, client_id: str):
         """
         Backgroung loop to read newline-delimited JSON messages from the given client connection
@@ -183,10 +207,27 @@ class SocketServer:
         except json.JSONDecodeError:
             logging.warning(f"[SOCKET] Invalid JSON from {client_id}: {message}")
             return
-        if message_dict["type"] == "data":
+        
+        message_type = message_dict["type"] 
+        if message_type == "data": # time-voltage data
             self._forward_data(message_dict)
-        elif message_dict["type"] == "control":
-            logging.info(f"[{client_id}] Control: {message_dict['name']} = {message_dict['value']}")
+
+        elif message_type  == "control": # control value        
+            if message_dict.get("source") == client_id:
+                logging.info(f"[{client_id}] Control: {message_dict['name']} = {message_dict['value']}")        
+                self.control_state[message_dict["name"]] = message_dict["value"]
+                self._broadcast(message_dict, exclude=client_id)
+
+        elif message_type == "state_sync":
+            incoming_state = message_dict.get("value")
+            logging.info(f"[{client_id}] Full state sync received with {len(incoming_state)} controls")
+
+            # Update full state
+            self.control_state.update(incoming_state)
+
+            # Broadcast to CS
+            self._broadcast(message_dict, exclude=client_id)
+
         else:
             logging.warning(f"[{client_id}] Unknown message type: {message_dict['type']}")
     
@@ -208,6 +249,20 @@ class SocketServer:
             "value": (data_list[0], data_list[2])  # (timestamp, voltage)
         }
         cs_sock.sendall((json.dumps(msg) + "\n").encode("utf-8"))
+
+
+    def _broadcast(self, message: dict, exclude: str = None):
+        """
+        Sends a JSON message to all connected clients, optionally excluding one.
+        """
+        serialized = json.dumps(message) + "\n"
+        for client_id, sock in self.clients.items():
+            if sock and client_id != exclude:
+                try:
+                    print(f"Sending to [{client_id}]")
+                    sock.sendall(serialized.encode("utf-8"))
+                except Exception as e:
+                    logging.warning(f"[SOCKET] Failed to send to {client_id}: {e}")
 
 
 class SocketClient(QObject):
@@ -258,13 +313,11 @@ class SocketClient(QObject):
             try:
                 self._sock.shutdown(socket.SHUT_RDWR)
             except OSError:
-                print('err 1')
                 pass  # already closed or not a socket
 
             try:
                 self._sock.close()
             except OSError:
-                print('err 2')
                 pass  # already closed
 
             self._sock = None
@@ -326,18 +379,19 @@ class SocketClient(QObject):
                         msg = json.loads(line)
                     except json.JSONDecodeError:
                         # Fallback: non-JSON line, treat as plain message
+                        print("JSON Decode Error: placing raw in to queue")
                         self.recv_queue.put_nowait(line)
                         continue
-                        
+                    if msg.get("source") == self.client_id:
+                        continue  # don't process message from this client
                     if msg.get("type") == "status":
                         peer_id = msg.get("peer_id")
                         status = msg.get("status")
                         is_connected = (status == "connected")
-                        self.connectionChanged.emit(is_connected)
                         if peer_id != self.client_id:  # only care about the *other* client
                             self.peerConnectionChanged.emit(is_connected)
                     else:
-                        self.recv_queue.put_nowait(line)
+                        self.recv_queue.put_nowait(msg)
 
             except ConnectionResetError:
                 if self.connected:

@@ -3,9 +3,9 @@ from PyQt6.QtWidgets import (
     QSlider, QLineEdit, QPushButton, QVBoxLayout, 
     QGridLayout, QFrame
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer, pyqtSlot
 
-import sys, json
+import sys
 
 
 
@@ -15,6 +15,9 @@ class SliderPanel(QWidget):
         self.setWindowTitle("Control Panel")
 
         self.socket_client = self.parent().socket_client
+        self._suppress = False  # whether slider signals are suppressed
+
+        # self.suppress_signal: bool = False # whether slider change signals are hidden from the socket
         
         layout = QVBoxLayout()
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -91,7 +94,7 @@ class SliderPanel(QWidget):
         self.dds_slider.setRange(-33,33)
 
         self.ddsa_slider = add_slider_row(6, "DDSA Amplitude", "V")
-        self.ddsa_slider.setRange(-500,0)
+        self.ddsa_slider.setRange(-500,-1)
 
         for i in range(4):
             label = f"Digipot Channel {i}"
@@ -109,25 +112,25 @@ class SliderPanel(QWidget):
 
 
         self.controls = {
-            "Input Resistance": self.input_resistance,
-            "PGA 1": self.pga1_slider,
-            "PGA 2": self.pga2_slider,
-            "SCA": self.sca_slider,
-            "SCO": self.sco_slider,
-            "DDS": self.dds_slider,
-            "DDSA": self.ddsa_slider,
-            "D0": self.d0_slider,
-            "D1": self.d1_slider,
-            "D2": self.d2_slider,
-            "D3": self.d3_slider,
-            "Excitation Frequency": self.excitation_freq,
+            "inputResistance": self.input_resistance,
+            "pga1": self.pga1_slider,
+            "pga2": self.pga2_slider,
+            "sca": self.sca_slider,
+            "sco": self.sco_slider,
+            "ddso": self.dds_slider,
+            "ddsa": self.ddsa_slider,
+            "d0": self.d0_slider,
+            "d1": self.d1_slider,
+            "d2": self.d2_slider,
+            "d3": self.d3_slider,
+            "excitationFrequency": self.excitation_freq,
         }
 
         for label, item in self.controls.items():
             if isinstance(item, QSlider):
-                item.valueChanged.connect(lambda val, l=label: self.on_control_change(l, val))
+                item.valueChanged.connect(lambda val, l=label: self.send_control_update(l, val))
             elif isinstance(item, QComboBox):
-                item.currentTextChanged.connect(lambda text, l=label: self.on_control_change(l, text))
+                item.currentTextChanged.connect(lambda text, l=label: self.send_control_update(l, text))
 
 
         layout.addLayout(grid)
@@ -147,44 +150,48 @@ class SliderPanel(QWidget):
         layout.addLayout(button_grid)
         layout.addStretch(1)
         self.setLayout(layout)
-        
 
-    def get_values(self):
-        print("-------------------------")
-        for label, item in self.controls.items():
-            if isinstance(item, QSlider):
-                print(f"{label}: {item.value()}")
-            elif isinstance(item, QComboBox):
-                 print(f"{label}: {item.currentText()}")
+    def send_control_update(self, name, value):
+        if self._suppress:
+            return
 
-    def get_items(self):
-        return self.controls.items()
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_P:
-            self.get_values()
-        # if event.key() == Qt.Key.Key_R:
-        #     print(len(self.socket_client.recv_queue.queue))
-        super().keyPressEvent(event)
-
-    def on_control_change(self, name, value):
-        #print(f"{label} changed to {value}")
-        data_dict = {"type": "control", "name": name, "value": value}
-        self.socket_client.send(data_dict)
-
-
-    def recv_loop(self):
-        while self.socket_client._running:
-            if not self.socket_client.recv_queue.empty():
-                raw_str = self.socket_client.receive()
-
-                message_list = raw_str.split("\n")
-                message_list.remove('')
+        self.socket_client.send({
+            "source": self.socket_client.client_id,
+            "type": "control",
+            "name": name,
+            "value": value
+        })
             
-                messages = [json.loads(s) for s in message_list]
-                for message in messages:
-                    if message['type'] == 'data':
-                        print('data received')
+    @pyqtSlot(str, object, str)
+    def set_control_value(self, name, value, source = None):
+        if source == self.socket_client.client_id:
+            return
+        
+        widget = self.controls.get(name)
+        if widget is None:
+            print(f"[CS] Unknown control name: {name}")
+            return
+        
+        self._suppress = True
+    
+        if isinstance(widget, QSlider):
+            value = int(value)
+            if widget.value() != value:
+                widget.setValue(value)
+        if isinstance(widget, QComboBox):
+            index = widget.findText(value)
+            if index != -1 and widget.currentIndex() != index:
+                widget.setCurrentIndex(index)
+
+        QTimer.singleShot(0, lambda: setattr(self, "_suppress", False))
+
+    @pyqtSlot(dict)        
+    def set_all_controls(self, full_state: dict):
+        """
+        Sets all controls to the values given by a full control state dictionary.
+        """
+        for name, value in full_state.items():
+            self.set_control_value(name, value)
 
 
 if __name__ == "__main__":

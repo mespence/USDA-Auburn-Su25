@@ -4,7 +4,7 @@ import threading
 from queue import Empty
 
 
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QMetaObject, Q_ARG
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QWidget, QPushButton, QToolButton, QHBoxLayout, QVBoxLayout, QLabel
@@ -30,8 +30,8 @@ class LiveViewTab(QWidget):
         self.socket_client.peerConnectionChanged.connect(self.update_slider_button_state)
         self.socket_client.connect()
 
-        self.recieve_loop = threading.Thread(target=self._socket_recv_loop, daemon=True)
-        self.recieve_loop.start()
+        self.receive_loop = threading.Thread(target=self._socket_recv_loop, daemon=True)
+        self.receive_loop.start()
 
         self.datawindow = LiveDataWindow()
         self.datawindow.getPlotItem().hideButtons()
@@ -189,7 +189,6 @@ class LiveViewTab(QWidget):
 
     def _socket_recv_loop(self):
         while self.socket_client.connected:
-
             try:
                 # NOTE: message can include multiple commands/data, i.e. "{<command1>}\n{<command2>}\n"
                 raw_message = self.socket_client.recv_queue.get(timeout=1.0)
@@ -198,31 +197,61 @@ class LiveViewTab(QWidget):
 
             try:
                 # parse message into individual commands
-                message_list = raw_message.split("\n")
-                messages = [json.loads(s) for s in message_list if s.strip()]
-
-                if '' in message_list:
-                    message_list.remove('')
-
+                if isinstance(raw_message, dict):
+                    messages = [raw_message]
+                else:
+                    # Multiple newline-separated JSON strings
+                    message_list = raw_message.strip().split("\n")
+                    messages = [
+                        json.loads(s) for s in message_list if s.strip()
+                    ]
+                
                 for message in messages:
-                    if message['type'] != 'data':
-                        # message is for sliders
+                    if message["source"] == self.socket_client.client_id:
                         continue
+                    
+                    message_type = message['type']
 
-                    time = float(message['value'][0])
-                    volt = float(message['value'][1])
+                    if message_type == 'data':
+                        time = float(message['value'][0])
+                        volt = float(message['value'][1])
 
-                    # this copies the np array each time to append so O(n)
-                    xy_data = self.datawindow.xy_data
-                    xy_data[0] = np.append(xy_data[0], time)
-                    xy_data[1] = np.append(xy_data[1], volt)   
+                        # this copies the np array each time to append so O(n)
+                        xy_data = self.datawindow.xy_data
+                        xy_data[0] = np.append(xy_data[0], time)
+                        xy_data[1] = np.append(xy_data[1], volt)   
 
-                    # update latest time input
-                    self.datawindow.current_time = time
-                self.datawindow.update_plot()
+                        # update latest time input
+                        self.datawindow.current_time = time
+                        self.datawindow.update_plot()
+
+                    elif message_type == "control":
+                        name = message["name"]
+                        value = message["value"]
+                        source = message.get("source")
+
+                        # Workaround to get set_control_value to run in the GUI thread
+                        QMetaObject.invokeMethod(
+                            self.slider_panel,
+                            "set_control_value",
+                            Qt.ConnectionType.QueuedConnection,
+                            Q_ARG(str, name),
+                            Q_ARG(object, value),
+                            Q_ARG(str, source)
+                        )
+
+                    elif message_type == "state_sync":
+                        value = message["value"]
+
+                        QMetaObject.invokeMethod(
+                            self.slider_panel,
+                            "set_all_controls",
+                            Qt.ConnectionType.QueuedConnection,
+                            Q_ARG(dict, value),
+                        )
 
             except Exception as e:
-                print("[RECIEVE LOOP ERROR]", e)
+                print("[CS RECIEVE LOOP ERROR]", e)
 
    
 
