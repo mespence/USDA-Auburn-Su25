@@ -130,10 +130,10 @@ class PanZoomViewBox(ViewBox):
         #menu.addAction(action3)
 
         selected_action = menu.exec(event.screenPos())           
-        if action == label_type_dropdown:
+        if selected_action == label_type_dropdown:
             print("Option 1 selected")
-        elif action == add_comment:
-            self.datawindow.add_comment_to_past(x)
+        elif selected_action == add_comment:
+            self.datawindow.add_comment(x)
             print("Option 2 selected")
         else:
             pass

@@ -378,7 +378,7 @@ class LiveDataWindow(PlotWidget):
         text = text.toPlainText().strip()
         return text if text else None
 
-    def add_comment_to_past(self, click_time: float) -> None:
+    def add_comment(self, click_time: float) -> None:
         """
         Adds a comment at the nearest valid past time to the clicked time.
         Opens a dialog for text input, then creates a CommentMarker on
@@ -398,7 +398,7 @@ class LiveDataWindow(PlotWidget):
         self.comments[comment_time] = new_marker
         self.update_plot()
     
-    def add_comment_at_current(self) -> None:
+    def add_comment_live(self) -> None:
         """
         Adds a comment at the current live time position. Opens a dialog
         to enter comment text and creates a CommentMarker if accepted.
@@ -576,7 +576,7 @@ class LiveDataWindow(PlotWidget):
             event (QKeyEvent): The key press event.
         """
         if event.key() == Qt.Key.Key_Space and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-            self.add_comment_at_current()
+            self.add_comment_live()
         if event.key() == Qt.Key.Key_B:
             if self.baseline_preview_enabled:
                 # Turn it off

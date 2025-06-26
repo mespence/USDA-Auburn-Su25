@@ -70,7 +70,7 @@ class LiveViewTab(QWidget):
                 padding: 2px;
             }
         """)
-        self.add_comment_button.clicked.connect(self.add_comment)
+        self.add_comment_button.clicked.connect(self.call_add_comment)
         
         self.pause_button.setCheckable(True)
         self.pause_button.setChecked(True)
@@ -184,8 +184,8 @@ class LiveViewTab(QWidget):
         
         self.datawindow.set_live_mode(live_mode)
 
-    def add_comment(self):
-        self.datawindow.add_comment_at_current()
+    def call_add_comment(self):
+        self.datawindow.add_comment_live()
 
     def _socket_recv_loop(self):
 
