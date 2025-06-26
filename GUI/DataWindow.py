@@ -1,958 +1,1037 @@
-from PyQt6.QtCharts import * 
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-from PyQt6.QtGui import *
-from math import sin
+import numpy as np
+from numpy.typing import NDArray
+import os
+import csv
+
+from pyqtgraph import (
+    PlotWidget, ViewBox, PlotItem, setConfigOptions,
+    TextItem, PlotDataItem, ScatterPlotItem, InfiniteLine,
+    mkPen, mkBrush
+)
+
+from PyQt6.QtGui import (
+    QKeyEvent, QWheelEvent, QMouseEvent, QColor, 
+    QGuiApplication, QCursor, QAction
+)
+from PyQt6.QtCore import Qt, QPointF, QTimer, QObject, QEvent
+
+from PyQt6.QtWidgets import (
+    QPushButton, QVBoxLayout, QLabel, QDialog, QMessageBox, QMenu, QDialogButtonBox, QFileDialog
+)
+
+from EPGData import EPGData
+from PanZoomViewBox import PanZoomViewBox
 from Settings import Settings
+from LabelArea import LabelArea
+from CommentMarker import CommentMarker
+from SelectionManager import Selection
+from TextEdit import TextEdit
 
-class DataWindow(QChartView):
-    def __init__(self, epgdata):
-        super().__init__()
-        self.epgdata = epgdata
-        self.transition_lines = []
-        # We can probably update these to be more aesthetic.
-        self.area_upper_lines = []
-        self.area_lower_lines = []
-        self.areas = []
-        self.labels = []
-        self.durations = []
-        self.transition_lines = []
-        self.track = False
-        self.tracked_transition = -1
-        self.transition_buffer = 0.1 # sec
-        self.vertical_mode = False
-        self.zoom_mode = False
-        # self.h_scrollbar = QScrollBar()
-        self.last_h_scroll_value = 0
-        self.transition_mode = 'labels'
-        self.file = None
-        self.prepost = 'pre'
-        self.critica_areas = []
-        self.critical_state = False
-        self.cursor_state = 0
-        self.baseline = None
+class DataWindow(PlotWidget):
+    """
+    Main widget for visualizing waveform recordings.
+
+    Includes:
+    - Zooming and panning (via `PanZoomViewBox`)
+    - Interactive label areas
+    - Transition lines
+    - Baseline editing
+    - Comment markers
+    - Compression and zoom indicators
+
+    Also handles data loading, rendering, and downsampling for performance.
+    """
+    def __init__(self, epgdata: EPGData) -> None:
+        """
+        Initializes the DataWindow with plotting elements, UI overlays, and input handling.
+
+        Parameters:
+            epgdata (EPGData): The waveform and label data source.
+        """
+        # UI ITEMS
+        super().__init__(viewBox=PanZoomViewBox())
+        self.plot_item: PlotItem = self.getPlotItem() # the plotting canvas (axes, grid, data, etc.)
+        self.plot_item.hideButtons()
+        self.viewbox: PanZoomViewBox = self.plot_item.getViewBox() # the plotting area (no axes, etc.)
+        self.viewbox.datawindow = self
+        self.viewbox.menu = None  # disable default menu
+        self.viewbox.sigRangeChanged.connect(self.update_plot)  # update plot on viewbox change
+
+        # DATA
+        self.epgdata: EPGData = epgdata
+        self.file: str = None
+        self.prepost: str = "pre"
+        self.df = None
+        
+        self.xy_data: list[NDArray] = [None, None]  # x and y data actually rendered to the screen
+        self.curve: PlotDataItem = PlotDataItem(antialias=False, pen = Settings.line_color) 
+        self.scatter: ScatterPlotItem = ScatterPlotItem(
+            symbol="o", size=4, brush="blue"
+        )  # the discrete points shown at high zooms
+        self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
+
+        # CURSOR
+        self.last_cursor_pos: QPointF = None # last cursor pos rel. to top left of application
+        # self.cursor_mode: str = "normal"  # cursor state, e.g. normal, baseline selection
+
+        # INDICATORS & LABELS
+        self.compression: float = 0
+        self.compression_text: TextItem = TextItem()
+        self.zoom_level: float = 1
+        self.zoom_text: TextItem = TextItem()
+        #self.transitions: list[tuple[float, str]] = []   # the x-values of each label transition
+        self.transition_mode: str = 'labels'
+        self.labels: list[LabelArea] = []  # the list of LabelAreas
+
+        # SELECTION
+        self.selection: Selection = Selection(self)
+        self.moving_mode: bool = False  # whether an interactive item is being moved
+        self.edit_mode_enabled: bool = True  # whether the labels can be interacted with
+
+        # BASELINE
+        self.baseline: InfiniteLine = InfiniteLine(
+            angle = 0, movable=False, pen=mkPen("gray", width = 3)
+        )
+        self.plot_item.addItem(self.baseline)
+        self.baseline.setVisible(False)
+        
+        self.baseline_preview: InfiniteLine = InfiniteLine(
+            angle = 0, movable = False,
+            pen=mkPen("gray", style = Qt.PenStyle.DashLine, width = 3),
+        )
+
+        self.addItem(self.baseline_preview)
+        self.baseline_preview.setVisible(False)
+        self.baseline_preview_enabled: bool = False
+
+        # COMMENTS
+        self.comments: dict[float, CommentMarker] = {} # the dict of CommentMarkers
+        self.comment_editing = False
+
+        self.comment_preview: InfiniteLine = InfiniteLine(
+            angle = 90, movable = False,
+            pen=mkPen("gray", style = Qt.PenStyle.DashLine, width = 3),
+        )
+
+        self.addItem(self.comment_preview)
+        self.comment_preview.setVisible(False)
+
+        self.comment_preview_enabled: bool = False
+        self.moving_comment: CommentMarker = None
+
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.initUI()
-    
-    def initUI(self):
-        self.width = 400
-        self.height = 400
-        self.setGeometry(0, 0, self.width, self.height)
 
-        # Create a series to hold our data
-        self.series = QLineSeries()
-        # Placeholder sine wave
-        for i in range(10000):
-            self.series.append(QPointF(i, sin(2*3.14 * i/ 10000)))
+    def initUI(self) -> None:
+        """
+        Initializes plot appearance, UI layout, axes labels, and placeholder data.
+        Called once during setup.
+        """
+        self.chart_width: int = 400
+        self.chart_height: int = 400
+        self.setGeometry(0, 0, self.chart_width, self.chart_height)
 
-        # Create a chart to put our data in, put it on the chart
-        self.chart = QChart()
-        self.chart.setPlotAreaBackgroundVisible(True)
-        self.chart.setPlotAreaBackgroundBrush(QBrush(Qt.GlobalColor.white))
-        self.chart.setPlotAreaBackgroundPen(QPen(Qt.GlobalColor.black, 3))
-        self.chart.setTitle("<b>SCIDO Waveform Editor</b>")
-        self.chart.legend().hide()
-        self.chart.addSeries(self.series)
+        self.setBackground("white")
+        self.setTitle("<b>SCIDO Waveform Editor</b>", color="black", size="12pt")
 
-        # Axes
-        self.x_axis = QValueAxis()
-        self.x_axis.setTitleText("Time [s]")
-        self.x_axis.setGridLineVisible(Settings.show_grid)
-        self.x_axis.setTickInterval(Settings.h_maj_gridline_spacing)
-        self.x_axis.setTickAnchor(0)
-        #self.x_axis.setLabelFormat("%.1f")  # Format the labels
-        self.x_axis.setMinorTickCount(5) # Number of ticks between major ticks
-        self.x_axis.setTickType(QValueAxis.TickType.TicksDynamic)
-        self.chart.addAxis(self.x_axis, Qt.AlignmentFlag.AlignBottom)
-        self.series.attachAxis(self.x_axis)
-        #self.cursor.attachAxis(self.x_axis)
-        
-        self.y_axis = QValueAxis()
-        self.y_axis.setTitleText("Volts")
-        self.y_axis.setGridLineVisible(Settings.show_grid)
-        self.y_axis.setTickInterval(Settings.v_maj_gridline_spacing)
-        self.y_axis.setTickAnchor(0)
-        #self.y_axis.setLabelFormat("%.1f")  # Format the labels
-        self.y_axis.setMinorTickCount(5)  # Remove minor ticks if needed
-        self.y_axis.setTickType(QValueAxis.TickType.TicksDynamic)
-        self.chart.addAxis(self.y_axis, Qt.AlignmentFlag.AlignLeft)
-        self.series.attachAxis(self.y_axis)
-        
-        # Set the chart of this QChartView to be our chart
-        self.setChart(self.chart)
-        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.viewbox.setBorder(mkPen("black", width=3))
 
-        # Add a readout of the compression level
+        self.plot_item.addItem(self.curve)
+        self.plot_item.addItem(self.scatter)
+        self.plot_item.setLabel("bottom", "<b>Time [s]</b>", color="black")
+        self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color="black")
+        self.plot_item.showGrid(x=Settings.show_grid, y=Settings.show_grid)
+        self.plot_item.layout.setContentsMargins(30, 30, 30, 20)
+        self.plot_item.enableAutoRange(False)
+
+        self.curve.setClipToView(False)  # already done in manual downsampling
+        self.scatter.setVisible(False)
+        self.curve.setZValue(-5)
+        self.scatter.setZValue(-4)
+
+        QTimer.singleShot(0, self.deferred_init)
+
+        ## DEBUG/DEV TOOLS
+        self.enable_debug = False
+        self.debug_boxes = []
+
+
+
+    def deferred_init(self) -> None:
+        """
+        Defers adding compression/zoom overlays until the scene is ready.
+        """
         self.compression = 0
-        self.compression_text = QGraphicsTextItem()
-        self.compression_text.setDefaultTextColor(QColor(0, 0, 0))
-        self.compression_text.setPos(100, 10)
+        self.compression_text = TextItem(
+            text=f"Compression: {self.compression: .1f}", color="black", anchor=(0, 0)
+        )
+        self.compression_text.setPos(QPointF(80, 15))
         self.scene().addItem(self.compression_text)
+
+        self.zoom_level = 1
+        self.zoom_text = TextItem(
+            text=f"Zoom: {self.zoom_level * 100}%", color="black", anchor=(0, 0)
+        )
+        self.zoom_text.setPos(QPointF(80, 30))
+        self.scene().addItem(self.zoom_text)
+
+        self.viewbox.setXRange(0,10)
+
+
+    def resizeEvent(self, event) -> None:
+        """
+        Handles window resizing and updates compression indicator.
+        """
+        super().resizeEvent(event)
+        if self.isVisible():
+            self.update_plot()
         self.update_compression()
 
-        # self.h_scrollbar = QScrollBar(Qt.Orientation.Horizontal)
-        # self.h_scrollbar.valueChanged.connect(lambda value: self.scroll_horizontal(value))
-        # self.update_scrollbar()
-        
-    def resizeEvent(self, event):
-        # resizeEvent is called automatically when the window is
-        # resized and handles rescaling everything. We just also
-        # want to update compression so we do that and then
-        # let everything get handled normally.
-        QChartView.resizeEvent(self, event) 
-        self.update_compression()
-        # self.update_scrollbar()
-
-    def window_to_chart(self, x, y):
+    def window_to_viewbox(self, point: QPointF) -> QPointF:
         """
-        window_to_chart converts from window coordinates, like
-        those from a mouse click event, to chart coordinates.
-        Inputs:
-            x, y: x and y coordinate of the window coordinate
+        Converts between window (screen) coordinates and data (viewbox) coordinates.
+
+        Parameters:
+            point (QPointF): Point in global coordinates.
+
         Returns:
-            (chart_x, chart_y): chart coordinates equivalent to 
-            the window coordinates.
-        """
-        scene_coords = self.chart.mapToScene(x, y)
-        chart_coords = self.chart.mapFromScene(scene_coords)
-        val_coords = self.chart.mapToValue(chart_coords)
-        return (val_coords.x(), val_coords.y())
+            QPointF: The corresponding point in data coordinates.
+        """      
+        scene_pos = self.mapToScene(point.toPoint())
+        data_pos = self.viewbox.mapSceneToView(scene_pos)
+        return data_pos
 
-    def chart_to_window(self, x, y):
+    def viewbox_to_window(self, point: QPointF) -> QPointF:
         """
-        chart_to_window converts from chart coordinates to window
-        coordinates, like those of a mouse click even.
-        Inputs:
-            x, y: x and y coordinates in chart coordinates
+        Converts between data (viewbox) coordinates and widget (screen) coordinates.
+
+        Parameters:
+            point (QPointF): Point in data coordinates.
+
         Returns:
-            (window_x, window_y): window coordinates equivalent
-            to the chart coordinates.
+            QPointF: The corresponding point in window coordinates.
         """
-        chart_coords = self.chart.mapToPosition(QPointF(x, y))
-        scene_coords = self.chart.mapToScene(chart_coords)
-        window_coords = self.mapFromScene(scene_coords)
-        return (window_coords.x(), window_coords.y())
-        
-    def updateCursor(self, event):
-        return
-        # Update the cursor line
-        if not self.track:
-            return
-        x = event.pos().x()
-        y = event.pos().y()
-        scene_coords = self.mapToScene(x, y)
-        chart_coords = self.chart.mapFromScene(scene_coords)
-        val_coords = self.chart.mapToValue(chart_coords)
-        self.cursor_x = val_coords.x()
-        self.cursor.clear()
-        self.cursor.append(QPointF(self.cursor_x, 0))
-        self.cursor.append(QPointF(self.cursor_x, 1))
+        return self.viewbox.mapViewToScene(point)
+        # scene_pos = self.viewbox.mapViewToScene(QPointF(x, y))
+        # return scene_pos.x(), scene_pos.y()
+        # widget_pos = self.mapFromScene(scene_pos)
+        # return widget_pos.x(), widget_pos.y()
 
-        # Update the cursor text
-        hours = self.cursor_x // 3600
-        minutes = (self.cursor_x - hours * 3600) // 60
-        seconds = self.cursor_x - (hours * 3600) - (minutes * 60)
-        self.cursortext.setPlainText(f"{hours :0>2.0f}:{minutes :0>2.0f}:{seconds :.2f}")
-        self.cursortext.setPos(QPointF(x, 10))
+    def reset_view(self) -> None:
+        """
+        Resets the plot to the full initial view, undoing all zoom/pan changes.
+        """
+        QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
+
+        self.xy_data = [
+            self.initial_downsampled_data[0].copy(), 
+            self.initial_downsampled_data[1].copy()
+        ]
+
+        self.curve.setData(self.xy_data[0], self.xy_data[1])
+
     
-    def update_compression(self):
+        x_min, x_max = self.xy_data[0][0], self.xy_data[0][-1]
+        y_min, y_max = np.min(self.xy_data[1]), np.max(self.xy_data[1])
+
+        self.viewbox.setRange(
+            xRange=(x_min, x_max), 
+            yRange=(y_min, y_max), 
+            padding=0
+        )
+
+        QGuiApplication.restoreOverrideCursor()
+
+    def update_plot(self) -> None:
         """
-        update_compression updates the compression readout
-        based on the zoom level according to the formula
-        COMPRESSION = (SECONDS/PIXEL) * 125
-        obtained by experimentation with WINDAQ. Note that 
-        WINDAQ also has 'negative' compression levels for
-        high levels of zooming out. We do not implement those here.
-        Inputs:
-            None
-        Outputs:
-            None
+        Redraws the waveform curve and label overlays after zoom/pan/data change.
+        Also updates compression and zoom indicators.
         """
-        # Update the compression readout.
-        # Get the pixel distance of one second, we use a wide range to avoid rounding issues.
-        width = 1000
-        pix_per_second = (self.chart_to_window(width, 0)[0] - \
-                  self.chart_to_window(0, 0)[0]) / width
+        if self.file is None or self.file not in self.epgdata.dfs:
+            return  # no file displayed yet
+
+        (x_min, x_max), _ = self.viewbox.viewRange()
+
+        self.viewbox.setLimits(xMin=None, xMax=None, yMin=None, yMax=None) # clear stale data (avoids warning)
+
+        self.downsample_visible(x_range=(x_min, x_max))
+
+        x_data = self.xy_data[0]
+        y_data = self.xy_data[1]
+        self.curve.setData(x_data, y_data)
+        if len(x_data) <= 500:
+            self.scatter.setVisible(True)
+            self.scatter.setData(x_data, y_data)
+        else:
+            self.scatter.setVisible(False)
+
+        self.update_compression()
+        self.update_zoom()
+        for label_area in self.labels:
+            # Cull to visible labels
+            if label_area.start_time + label_area.duration < x_min:
+                continue
+            if label_area.start_time > x_max:
+                continue
+
+            # Don't render label areas <1 px wide
+            # NOTE: this can lead to multiple sequential short labels all being
+            # hidden, which can cause visible white regions, esp. when zoomed out.
+            # Not sure if there is a good fix for this, but it's pretty minor
+            left_px_loc = self.viewbox_to_window(QPointF(label_area.start_time,0)).x()
+            right_px_loc = self.viewbox_to_window(QPointF(label_area.start_time + label_area.duration, 0)).x()
+            label_width_px = right_px_loc - left_px_loc
+
+            if label_width_px < 1:
+                label_area.setVisible(False)
+                continue
+
+            label_area.setVisible(True)
+            label_area.update_label_area()
+
+        self.viewbox.update()  # or anything that redraws
+
+        if self.last_cursor_pos is not None:
+            view_pos = self.window_to_viewbox(self.last_cursor_pos)
+            self.selection.hover(view_pos.x(), view_pos.y())
+
+            
+        
+
+    def update_compression(self) -> None:
+        """
+        Calculates the compression level based on the current zoom level.
+        Uses a WinDAQ-derived formula.
+        """
+        # """
+        # update_compression updates the compression readout
+        # based on the zoom level according to the formula
+        # COMPRESSION = (SECONDS/PIXEL) * 125
+        # obtained by experimentation with WINDAQ. Note that
+        # WINDAQ also has 'negative' compression levels for
+        # high levels of zooming out. We do not implement those here.
+
+        # TODO: Verify this formula
+        # """
+
+        if not self.isVisible():
+            return  # don't run prior to initialization
+
+        # Get the pixel distance of one second
+        plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
+
+        (x_min, x_max), _ = self.viewbox.viewRange()
+        time_span = x_max - x_min
+
+        if time_span == 0:
+            return float("inf")  # Avoid division by zero
+
+        pix_per_second = plot_width / time_span
         second_per_pix = 1 / (pix_per_second)
+
         # Convert to compression based on WinDaq
         self.compression = second_per_pix * 125
-        self.compression_text.setPlainText(f"Compression Level: {self.compression :.1f}")
+        self.compression_text.setText(f"Compression Level: {self.compression :.1f}")
 
-        
-    def get_closest_transition(self, event):
-        """
-        get_closest_transition takes in a click event from Qt 
-        and returns the index of the transition that is closest
-        to it along with the distance between the two in window
-        coordinates (pixels)
-        Inputs:
-            event: a click event from Qt
-        Returns:
-            transition_index: the index of the nearest transition
-            window_distance: the distance between x and the 
-                     nearest transition in window units
-        """
-        click_x, _ = self.window_to_chart(event.pos().x(), event.pos().y())
-        # This can be done faster but the lists are
-        # short enough here it doesn't matter
-        closest = float('inf')
-        transition_index = None
-        for i in range(len(self.transitions)):
-            time = self.transitions[i][0]
-            label = self.transitions[i][1]
-            if abs(click_x - time) <= abs(click_x - closest):
-                closest = time
-                transition_index = i
+        # ----- CLINIC CODE -----------------
+        # Update the compression readout.
+        # Get the pixel distance of one second, we use a wide range to avoid rounding issues.
+        # width = 1000
+        # pix_per_second = (self.chart_to_window(width, 0)[0] - \
+        #           self.chart_to_window(0, 0)[0]) / width
+        # second_per_pix = 1 / (pix_per_second)
+        # # Convert to compression based on WinDaq
+        # self.compression = second_per_pix * 125
+        # self.compression_text.setPlainText(f'Compression Level: {self.compression :.1f}')
 
-        transition_x, _ = self.chart_to_window(closest, 0)
-        window_distance = abs(transition_x - event.pos().x())
-        
-        return transition_index, window_distance
-
-    
-    def handle_labels(self, event):
+    def update_zoom(self) -> None:
         """
-        handle_labels takes in a mouse event and then handles 
-        updating labels with a dialog.
-        Inputs:
-            event: a mouse event generated by Qt.
-        Returns:
-            Nothing
+        Updates the displayed zoom percentage based on current vs full-scale width.
         """
-        # Check if click occurred in region with data
-        click_x, _ = self.window_to_chart(event.pos().x(), event.pos().y())
-        max_time = max(self.epgdata.get_recording(self.file, self.prepost)[0])
-        if click_x < 0 or click_x > max_time:
-            return # outside of labeled region
+        plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
 
-        items = list(Settings.label_to_color.keys())
-        item, ok = QInputDialog.getItem(self, "Change Waveform Type", "Waveform Type:", items, 0, False)
-        if ok: # The user hit OK and wants to update the label
-            # Find what region the user clicked in
-            # This could be done faster with binary search
-            # But it isn't necessary as of right now.
-            transition_index = None
-            for i in range(len(self.transitions)):
-                if click_x < self.transitions[i][0]:
-                    transition_index = i - 1
-                    break
-            if not transition_index:
-                transition_index = len(self.transitions) - 1
-            # Update transitions list and save
-            self.transitions[transition_index] = (self.transitions[transition_index][0], item)
-            print(f"transition mode: {self.transition_mode}")
-            self.epgdata.set_transitions(self.file, self.transitions, self.transition_mode)
-            # Change color and text label of rectangle accordingly
-            self.areas[transition_index].setColor(Settings.label_to_color[item])
-            self.labels[transition_index].setPointLabelsFormat(item)
-    
-    def add_drop_transitions(self, event):
-        """
-        add_drop_transitions takes in a mouse event and then handles
-        either adding or dropping a transition with a dialog
-        Inputs:
-            event: a mouse event generated by Qt
-        Returns:
-            Nothing
-        """
-        # Check if click occurred in region with data
-        click_x, _ = self.window_to_chart(event.pos().x(), event.pos().y())
-        max_time = max(self.epgdata.get_recording(self.file, self.prepost)[0])
-        if click_x < 0 or click_x > max_time:
-            return # outside of labeled region
-        
-        click_x = round(click_x, 2) # we only work in 100ths
-        # Find the nearest transition. If it is close enough,
-        # generate a dialog to confirm that we want to delete it
-        transition_index, window_distance = self.get_closest_transition(event)
-        items = list(Settings.label_to_color.keys())
-        if window_distance < 10: # pixels
-            if transition_index != 0: # don't allow deleting first transition
-                delete = QMessageBox.question(self, "Modify Transition", "Delete Transition?")
-                if delete == QMessageBox.StandardButton.Yes:
-                    del self.transitions[transition_index]
-                    # Remove the shaded area for this transition
-                    self.chart.removeSeries(self.areas[transition_index])
-                    del self.areas[transition_index]
-                    del self.area_upper_lines[transition_index]
-                    del self.area_lower_lines[transition_index]
-                    # Remove the text label for this transition
-                    self.chart.removeSeries(self.labels[transition_index])
-                    del self.labels[transition_index]
-                    del self.durations[transition_index]
-                    # Make the transition before the one we deleted longer 
-                    times, volts = self.epgdata.get_recording(self.file, self.prepost)
-                    next_transition = None
-                    # Handle the case where we delete the
-                    # last transition
-                    if transition_index >= len(self.transitions):
-                        next_transition = max(times)
-                    else:
-                        next_transition = self.transitions[transition_index][0]
-                    b_upper = self.area_upper_lines[transition_index - 1]
-                    b_lower = self.area_lower_lines[transition_index - 1]
-                    for line in [b_upper, b_lower]:
-                        line_points = line.points()
-                        line_points[-1].setX(next_transition)
-                        line.replace(line_points)
-                    # Recenter the label before this one
-                    label_point = self.labels[transition_index - 1].points()
-                    duration_point = self.durations[transition_index - 1].points()
-                    midpoint = (self.transitions[transition_index - 1][0] + next_transition) / 2
-                    label_point[-1].setX(midpoint)
-                    duration_point[-1].setX(midpoint)
-                    self.labels[transition_index - 1].replace(label_point)
-                    self.durations[transition_index - 1].replace(duration_point)
+        (x_min, x_max), _ = self.viewbox.viewRange()
+        time_span = x_max - x_min
 
-                    # Remove the transition line for this transition
-                    self.chart.removeSeries(self.transition_lines[transition_index])
-                    del self.transition_lines[transition_index]
+        pix_per_second = plot_width / time_span
 
-        # If there was no transition close enough, generate a dialog
-        # to create a new one with a given label
+        if time_span == 0:
+            return float("inf")  # Avoid division by zero
+
+        file_length_sec = self.df["time"].iloc[-1]
+        default_pix_per_second = plot_width / file_length_sec
+
+        self.zoom_level = pix_per_second / default_pix_per_second
+
+        # leave off decimal if zoom level is int
+        if abs(self.zoom_level - round(self.zoom_level)) < 1e-9:
+            self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .0f}%")
         else:
-            last_transition_index = len(self.transitions) - 1
-            for i in range(len(self.transitions)):
-                if click_x < self.transitions[i][0]:
-                    last_transition_index = i - 1
-                    break
+            self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .1f}%")
 
-            label, ok = QInputDialog.getItem(self, "Create New Transition", "Waveform type:", items, 0, False)
-            if ok: # user clicked ok
-                new_transition = (click_x, label)
-                self.transitions.insert(last_transition_index + 1, new_transition)
-                # Move the shaded area for the previous transition back
-                b_upper = self.area_upper_lines[last_transition_index]
-                b_lower = self.area_lower_lines[last_transition_index]
-                for line in [b_upper, b_lower]:
-                    line_points = line.points()
-                    line_points[-1].setX(self.transitions[last_transition_index + 1][0])
-                    line.replace(line_points)
+    def plot_recording(self, file: str, prepost: str = "post") -> None:
+        """
+        Loads the time series and comments from a file and displays it.
 
-                label_point = self.labels[last_transition_index].points()
-                duration_point = self.durations[last_transition_index].points()
-                midpoint = (self.transitions[last_transition_index + 1][0] + self.transitions[last_transition_index][0]) / 2
-                label_point[-1].setX(midpoint)
-                duration_point[-1].setX(midpoint)
-                self.labels[last_transition_index].replace(label_point)
-                self.durations[last_transition_index].replace(duration_point)
+        Parameters:
+            file (str): File identifier.
+            prepost (str): Either "pre" or "post" to select pre/post rectifier data.
+        """
+        QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
 
-                # Add in a shaded area and text label for this transition
-                times, volts = self.epgdata.get_recording(self.file, self.prepost)
-                #volts = df[self.prepost + self.epgdata.prepost_suffix].values
-                max_volts = max(volts)
-                min_volts = min(volts)
-                next_transition_time = None
-                if last_transition_index + 2 >= len(self.transitions):
-                    next_transition_time = max(times)
-                else:
-                    next_transition_time = self.transitions[last_transition_index + 2][0]
-                duration = next_transition_time - click_x
-                upper_line = QLineSeries()
-                upper_line.replace(
-                    [QPointF(click_x, max_volts),
-                     QPointF(click_x + duration, max_volts)]
-                )
-                lower_line = QLineSeries()
-                lower_line.replace(
-                    [QPointF(click_x, min_volts),
-                     QPointF(click_x + duration, min_volts)]
-                )
-                area = QAreaSeries()
-                area.setUpperSeries(upper_line)
-                area.setLowerSeries(lower_line)
-                self.chart.addSeries(area)
-                area.attachAxis(self.x_axis)
-                area.attachAxis(self.y_axis)
-                area.setColor(Settings.label_to_color[label])
-                area.setBorderColor(QColor(255, 255, 255, 0))
-                
-                self.area_upper_lines.insert(last_transition_index + 1, upper_line)
-                self.area_lower_lines.insert(last_transition_index + 1, lower_line)
-                self.areas.insert(last_transition_index + 1, area)
+        if self.labels: # clear previous labels, if any
+            self.selection.deselect_all()
+            for label_area in self.labels[::-1]:
+                self.selection.delete_label_area(label_area, multi_delete=False)
 
+        self.file = file
+        self.prepost = prepost
+        times, volts = self.epgdata.get_recording(self.file, self.prepost)
 
-                label_series = QScatterSeries()
-                label_series.setMarkerSize(1)
-                label_series.setPointLabelsFont(QFont("Sans, 12, QFont.Bold"))
-                label_series.setPointLabelsVisible(True)
-                label_series.setPointLabelsFormat(label)
-                self.chart.addSeries(label_series)
-                label_y = (max_volts - min_volts) * 0.05 + min_volts
-                label_series.append((next_transition_time - duration) + duration/2, label_y)
-                label_series.attachAxis(self.x_axis)
-                label_series.attachAxis(self.y_axis)
-                self.labels.insert(last_transition_index + 1, label_series)
+        self.xy_data[0] = times
+        self.xy_data[1] = volts
+        self.downsample_visible()
+        self.curve.setData(self.xy_data[0], self.xy_data[1])
+        init_x, init_y = self.xy_data[0].copy(), self.xy_data[1].copy()
+        self.initial_downsampled_data = [init_x, init_y]
+        self.df = self.epgdata.dfs[file]  
 
-                duration_series = QScatterSeries()
-                duration_series.setMarkerSize(1)
-                duration_series.setPointLabelsFont(QFont("Sans, 12, QFont.Bold"))
-                duration_series.setPointLabelsVisible(True)
-                duration_series.setPointLabelsFormat(str(round(duration, 2)))
-                self.chart.addSeries(duration_series)
-                duration_y = (max_volts - min_volts) * 0.05 + min_volts - 10
-                duration_series.append((next_transition_time - duration) + duration/2, duration_y)
-                duration_series.attachAxis(self.x_axis)
-                duration_series.attachAxis(self.y_axis)
-                self.durations.insert(last_transition_index + 1, duration_series)
+        self.viewbox.setRange(
+            xRange=(np.min(self.xy_data[0]), np.max(self.xy_data[0])), 
+            yRange=(np.min(self.xy_data[1]), np.max(self.xy_data[1])), 
+            padding=0
+        )
 
-                # Add in a transition line for this transition
-                vline = QLineSeries()
-                vline.setColor(QColor(0, 0, 1))
-                vline.append(QPointF(click_x, max_volts))
-                vline.append(QPointF(click_x, min_volts))
-                self.chart.addSeries(vline)
-                vline.attachAxis(self.x_axis)
-                vline.attachAxis(self.y_axis)
-                self.transition_lines.insert(last_transition_index + 1, vline)
-
-                # Remove and readd the transition line for 
-                # the next transition, if it exists
-                # self.chart.removeSeries(
+        # create a comments column if doesn't yet exist in df
+        if 'comments' not in self.df.columns:
+            self.df['comments'] = None
         
+        self.update_plot()
+        self.plot_comments(file)
+        QGuiApplication.processEvents()
+        QGuiApplication.restoreOverrideCursor()
 
-        # Save transitions
-        print(f"transition mode: {self.transition_mode}")
-        self.epgdata.set_transitions(self.file, self.transitions, self.transition_mode)
-
-    def handle_transitions(self, event, event_type):
+    def plot_comments(self, file: str) -> None:
         """
-        handle_transitions takes in a click event and the event type
-        and then handles interactive transition moving accordingly.
-        Inputs:
-            event: a mouse event generated by Qt.
-            event_type: a string containing what type of mouse
-                    event generated the event. This is probably
-                    not needed but it makes implementation easy.
-        Returns:
-            Nothing
+        Adds existing comment markers from the data file to the viewbox.
+
+        Parameters:
+            file (str): File identifier.
         """
-        if event_type == "press":
-            # Find nearest transition
-            transition_index, window_distance = self.get_closest_transition(event)
-            if transition_index == 0:
-                return # Don't allow moving first transition
-            elif window_distance < 10: #pixels
-                self.tracked_transition = transition_index
-            else:
-                self.tracked_transition = -1
-        elif event_type == "move" and self.tracked_transition >= 0:
-            # Figure out where to move everything
-            move_x, _  = self.window_to_chart(
-                        event.pos().x(), 
-                        event.pos().y())
-            # Only allow movement between other transitions,
-            # keep a buffer between them.
-            prev_transition = self.transitions[self.tracked_transition - 1][0] + self.transition_buffer
-            max_time = max(self.epgdata.get_recording(self.file, self.prepost)[0])
-            next_transition = None
-            if self.tracked_transition == len(self.transitions) - 1:
-                next_transition = max_time
-            else:
-                next_transition = self.transitions[self.tracked_transition + 1][0] - self.transition_buffer
-            if move_x > prev_transition and move_x < next_transition: 
-                # Redraw the areas before and after the transition
-                b_upper = self.area_upper_lines[self.tracked_transition - 1]
-                b_lower = self.area_lower_lines[self.tracked_transition - 1]
-                for line in [b_upper, b_lower]:
-                    line_points = line.points()
-                    line_points[-1].setX(move_x)
-                    line.replace(line_points)
-                a_upper = self.area_upper_lines[self.tracked_transition]
-                a_lower = self.area_lower_lines[self.tracked_transition]
-                for line in [a_upper, a_lower]:
-                    line_points = line.points()
-                    line_points[0].setX(move_x)
-                    line.replace(line_points)   
-                # Redraw the transition line to be under the cursor
-                transition_line = self.transition_lines[self.tracked_transition]
-                line_points = transition_line.points()
-                for point in line_points:
-                    point.setX(move_x)
-                transition_line.replace(line_points)
-                # Update the entry in transitions
-                self.transitions[self.tracked_transition] = (move_x, self.transitions[self.tracked_transition][1])
+        if file is not None:
+            self.file = file
 
-                # Update labels accordingly
-                # Label after transition
-                label_point = self.labels[self.tracked_transition].points()
-                midpoint = (self.transitions[self.tracked_transition][0] + next_transition) / 2
-                label_point[-1].setX(midpoint)
-                self.labels[self.tracked_transition].replace(label_point)
-                # Label before transition
-                label_point = self.labels[self.tracked_transition - 1].points()
-                midpoint = (self.transitions[self.tracked_transition - 1][0] + self.transitions[self.tracked_transition][0]) / 2
-                label_point[-1].setX(midpoint)
-                self.labels[self.tracked_transition - 1].replace(label_point)
+        for marker in self.comments:
+            marker.remove()
+        self.comments.clear()
+        
+        comments_df = self.df[~self.df["comments"].isnull()]
+        for time, text in zip(comments_df["time"], comments_df["comments"]):
+            marker = CommentMarker(time, text, self, icon_path=r"message.svg")
+            self.comments[time] = marker
+        
+        return
 
-                # TODO(MA): refactor by setting variables & look out 
-                # for similarly repetitive/long reference sections VVV
+    def add_comment(self, click_time: float) -> None:
+        """
+        Adds via a dialog popup.
 
-                # update durations
-                duration_point = self.durations[self.tracked_transition].points()
-                midpoint = (self.transitions[self.tracked_transition][0] + next_transition) / 2
-                duration_point[-1].setX(midpoint)
-                self.durations[self.tracked_transition].replace(duration_point)
-                self.durations[self.tracked_transition].setPointLabelsFormat(str(round(next_transition - self.transitions[self.tracked_transition][0], 2)))
-                # duration before transition
-                duration_point = self.durations[self.tracked_transition - 1].points()
-                midpoint = (self.transitions[self.tracked_transition - 1][0] + self.transitions[self.tracked_transition][0]) / 2
-                duration_point[-1].setX(midpoint)
-                self.durations[self.tracked_transition - 1].replace(duration_point)
-                self.durations[self.tracked_transition - 1].setPointLabelsFormat(str(round(self.transitions[self.tracked_transition][0] - self.transitions[self.tracked_transition - 1][0], 2)))
-                
+        Parameters:
+            event (QMouseEvent): The click event triggering comment placement.
+        """
 
-        elif event_type == "release" and self.tracked_transition >= 0:
-            # Push transitions to EPGData
-            print(f"transition mode: {self.transition_mode}")
-            self.epgdata.set_transitions(self.file, self.transitions, self.transition_mode)
-            # Reset tracking variables
-            self.tracked_transition = -1
+        # find nearest time clicked
+        nearest_idx, comment_time = self.find_nearest_idx_time(click_time)
+        existing = self.df.at[nearest_idx, 'comments']
+        
+        # if there's already a comment at the time clicked, give an option to replace
+        if existing and str(existing).strip():
+            confirm = QMessageBox.question(
+                self,
+                "Overwrite Comment?",
+                f"A comment already exists at {self.df.at[nearest_idx, 'time']:.2f}s:\n\n\"{existing}\"\n\nReplace it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+            if confirm == QMessageBox.StandardButton.No:
+                return
 
-    def set_baseline(self, event: QMouseEvent):
-        _, y = self.window_to_chart(event.pos().x(), event.pos().y())
-        if self.baseline == None:
-            self.baseline = QLineSeries()
-            self.baseline.setColor(Qt.GlobalColor.gray)
-            self.chart.addSeries(self.baseline)
-            pen = self.baseline.pen()
-            pen.setWidth(1)
-            self.baseline.setPen(pen)
-            self.baseline.attachAxis(self.x_axis)
-            self.baseline.attachAxis(self.y_axis)
-            # Generate the line
-            pass
-        self.baseline.clear()
-        self.baseline.append(QPointF(self.x_axis.min(), y))
-        self.baseline.append(QPointF(self.x_axis.max(), y))
+        # Create the dialog popup
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Add Comment @ {comment_time:.2f}s")
+        dialog.setModal(True)
+
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Add Comment:"))
+        text = TextEdit()
+        layout.addWidget(text)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        layout.addWidget(buttons)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+
+        # enter pressed, dialog accepts
+        text.returnPressed.connect(dialog.accept)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+
+        text = text.toPlainText().strip()
+    
+        # create a new comment
+        self.df.at[nearest_idx, 'comments'] = text
+        marker = self.comments.get(comment_time)
+        if marker:
+            # if overwriting, edit text
+            marker.set_text(text)
+        else:
+            # new comment
+            new_marker = CommentMarker(comment_time, text, self)
+            self.comments[comment_time] = new_marker
+
+        return
+
+    def move_comment_helper(self, marker: CommentMarker):
+        self.moving_comment = marker
+        self.comment_preview_enabled = True
+        self.comment_preview.setVisible(True)
+
+        x_pos = self.viewbox.mapSceneToView(self.mapToScene(self.mapFromGlobal(QCursor.pos()))).x()
+        self.comment_preview.setPos(x_pos)
+        
+        self.selection.deselect_all()
+        self.selection.unhighlight_item(self.selection.hovered_item)
+        self.viewbox.update()
         return
     
-    def delete_baseline(self):
-        if self.baseline == None:
+    def move_comment(self, marker: CommentMarker, click_time: float) -> None:
+        new_idx, new_time = self.find_nearest_idx_time(click_time)
+        old_time = marker.time
+        text = self.comments[old_time].text
+
+        # update df
+        self.df.loc[self.df['time'] == old_time, 'comments'] = None
+        self.df.at[new_idx, 'comments'] = text
+
+        # update comments dict
+        old_marker = self.comments.pop(old_time)
+        old_marker.remove()
+        new_marker = CommentMarker(new_time, text, self)
+        self.comments[new_time] = new_marker
+
+        marker.moving = False
+        
+        self.comment_preview_enabled = False
+        self.comment_preview.setVisible(False)
+
+        return
+
+    def edit_comment(self, marker: CommentMarker, new_text: str) -> None:
+        # chck func
+        nearest_idx = self.find_nearest_idx_time(marker.time)[0]
+
+        # update df
+        self.df.at[nearest_idx, 'comments'] = new_text
+
+        # update comments dict
+        time = marker.time
+        marker = self.comments[time]
+        marker.text = new_text
+
+        return
+
+    def delete_comment(self, time: float) -> None:
+        # update df
+        self.df.loc[self.df["time"] == time, "comments"] = None
+
+        # update dict
+        marker = self.comments.pop(time)
+        marker.remove()
+
+        return
+
+    def find_nearest_idx_time(self, time: float) -> tuple[int, float]:
+        """ EDIT 
+        returns tuple of int for idx and float for time 
+        """ 
+        nearest_idx = (self.df['time'] - time).abs().idxmin()
+        comment_time = float(self.df.at[nearest_idx, 'time'])
+        return (nearest_idx, comment_time)
+
+    def export_comments(self):
+        """ export comments in csv format """
+        
+        if not self.comments:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("No Comments")
+            msg_box.setText("There are no comments to export from this live viewing.")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.exec()
             return
-        self.baseline.clear()
-        self.chart.removeSeries(self.baseline)
-        self.baseline = None
 
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Shift: 
-            # holding shift allows for vertical zoom / scroll
-            self.vertical_mode = True
-        elif event.key() == Qt.Key.Key_Control:
-            # holding control allows for zoom, otherwise
-            # scrolling scrolls the plot
-            self.zoom_mode = True
-        elif event.key() == Qt.Key.Key_R:
-            # r resets zoom
-            self.resetView()
+        filename, _ = QFileDialog.getSaveFileName(
+            parent=self,
+            caption="Export Comments As",
+            filter="CSV Files (*.csv);;All Files (*)"
+        )
 
-    def keyReleaseEvent(self, event):
+        if filename:
+            with open(filename, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(['comment_time', 'comment_text'])
+                for time, marker in self.comments.items():
+                    writer.writerow([time, marker.text])
+        
+        return
+        
+    def downsample_visible(
+        self, x_range: tuple[float, float] = None, max_points=4000, method = 'peak'
+    ) -> tuple[NDArray, NDArray]:
+        """
+        Downsamples waveform data in the visible range using the selected method. Modifies self.xy_data in-place.
+
+        Parameters:
+            x_range (tuple[float, float]): Optional x-axis range to downsample.
+            max_points (int): Max number of points to plot.
+            method (str): 'subsample', 'mean', or 'peak' downsampling method.
+        
+        NOTE: 
+            `subsample` samples the first point of each bin (fastest)
+            `mean` averages each bin
+            `peak` returns the min and max point of each bin (slowest, best looking)
+        """
+        x, y = self.epgdata.get_recording(self.file, self.prepost)
+
+        # Filter to x_range if provided
+        if x_range is not None:
+            x_min, x_max = x_range
+
+            left_idx = np.searchsorted(x, x_min, side="left")
+            right_idx = np.searchsorted(x, x_max, side="right")
+
+            if right_idx - left_idx <= 250: 
+                # render additional point on each side at very high zooms
+                left_idx = max(0, left_idx - 1)
+                right_idx = min(len(x), right_idx + 1)
+  
+            x = x[left_idx:right_idx]
+            y = y[left_idx:right_idx]   
+    
+        num_points = len(x)
+
+        if num_points <= max_points or num_points < 2:  # no downsampling needed
+            self.xy_data[0] = x
+            self.xy_data[1] = y
+            return
+
+        if method == 'subsampling': 
+            stride = num_points // max_points
+            x_out = x[::stride]
+            y_out = y[::stride]
+        elif method == 'mean':
+            stride = num_points // max_points
+            num_windows = num_points // stride
+            start_idx = stride // 2
+            x_out = x[start_idx : start_idx + num_windows * stride : stride] 
+            y_out = y[:num_windows * stride].reshape(num_windows,stride).mean(axis=1)
+        elif method == 'peak':
+            stride = max(1, num_points // (max_points // 2))  # each window gives 2 points
+            num_windows = num_points // stride
+
+            start_idx = stride // 2  # Choose a representative x (near center) for each window
+            x_win = x[start_idx : start_idx + num_windows * stride : stride]
+            x_out = np.repeat(x_win, 2)  # repeated for (x, y_min), (x, y_max)
+
+            y_reshaped = y[: num_windows * stride].reshape(num_windows, stride)
+            y_out = np.empty(num_windows * 2)
+            y_out[::2] = y_reshaped.max(axis=1)
+            y_out[1::2] = y_reshaped.min(axis=1)
+        else:
+            raise ValueError(
+                'Invalid "method" arugment. ' \
+                'Please select either "subsampling", "mean", or "peak".'
+            )
+
+        self.xy_data[0] = x_out
+        self.xy_data[1] = y_out
+
+    def plot_transitions(self, file: str) -> None:
+        """
+        Plots labeled regions from label transition data as colored areas on the plot.
+
+        Also inserts a zero-width "END AREA" to add the final transition line.
+
+        Parameters:
+            file (str): File identifier.
+        """
+        # clear old labels if present
+        for label_area in self.labels:
+            self.plot_item.removeItem(label_area.area)
+            self.plot_item.removeItem(label_area.transition_line)
+            self.plot_item.removeItem(label_area.label_text)
+            self.plot_item.removeItem(label_area.label_background)
+            self.plot_item.removeItem(label_area.duration_text)
+            self.plot_item.removeItem(label_area.duration_background)
+            if self.enable_debug:
+                self.plot_item.removeItem(label_area.label_debug_box)
+                self.plot_item.removeItem(label_area.duration_debug_box)
+            
+        self.labels = []
+
+        # load data
+        times, _ = self.epgdata.get_recording(self.file, self.prepost)
+        transitions = self.epgdata.get_transitions(self.file, self.transition_mode)
+
+        # only continue if the label column contains labels
+        if self.epgdata.dfs[file][self.transition_mode].isna().all():
+            return
+        
+        durations = []  # elements of (label_start_time, label_duration, label)
+        for i in range(len(transitions) - 1):
+            time, label = transitions[i]
+            next_time, _ = transitions[i + 1]
+            durations.append((time, next_time - time, label))
+        durations.append((transitions[-1][0], max(times) - transitions[-1][0], transitions[-1][1]))
+
+        for i, (time, dur, label) in enumerate(durations):
+            if label == None:
+                continue
+            label_area = LabelArea(time, dur, label, self) # init. also adds items to viewbox
+            self.labels.append(label_area)
+
+        # NOTE: Each LabelArea has one transition line, but we need an additional ending
+        # line so that the final LabelArea doesn't end without a transition line. We chose
+        # to do this by adding a zero-width, invisible LabelArea, called the "end area", to 
+        # the end of the labels, so that just the transition line appears.
+        time, dur, _ = durations[-1]
+        end_start_time = time + dur
+
+        label_area = LabelArea(end_start_time, 0, 'END AREA', self)
+        label_area.label_text.setVisible(False)
+        label_area.label_background.setVisible(False)
+        label_area.duration_text.setVisible(False)
+        label_area.duration_background.setVisible(False)
+        self.labels.append(label_area)
+        
+        self.update_plot()
+
+    def change_label_color(self, label: str, color: QColor) -> None:
+        """
+        Updates all label regions with the specified label to the new background color.
+
+        Parameters:
+            label (str): Label type to update.
+            color (QColor): Color to set the label areas to.
+        """
+        for label_area in self.labels:
+            if label_area.label == label:
+                label_area.area.setBrush(mkBrush(color))
+                label_area.update_label_area()
+
+    def change_line_color(self, color: QColor) -> None:
+        """
+        Changes the waveform curve and scatter plot line color.
+
+        Parameters:
+            color (QColor): Color to set the curve and scatter plot to.
+        """
+        self.curve.setPen(mkPen(color))
+        self.scatter.setPen(mkPen(color))  
+
+    def set_durations_visible(self, visible: bool):
+        """
+        Sets the visibility of all label area durations.
+
+        Parameters:
+            visible (bool): Whether to show or hide the durations.
+        """
+        for label_area in self.labels:
+            if label_area.is_end_area:
+                continue
+            label_area.set_duration_visible(visible)
+         
+
+    def composite_on_white(self, color: QColor) -> QColor:
+        """
+        Helper function to convert a color with alpha into a RGB (no A) color as if shown on white.
+
+        Parameters:
+            color (QColor): Semi-transparent color to composite with white. 
+        """
+        r, g, b, a = color.getRgb()
+        a = a / 255
+
+        new_r = round(r * a + 255 * (1 - a))
+        new_g = round(g * a + 255 * (1 - a))
+        new_b = round(b * a + 255 * (1- a))
+        return QColor(new_r, new_g, new_b)
+        
+    def get_closest_transition(self, x: float) -> tuple[int, float]:
+        """
+        Finds the transition line closest to the given x-coordinate.
+
+        Parameters:
+            x (float): ViewBox x-coordinate.
+        Returns:
+            (InfiniteLine, float): Closest transition line and pixel distance.
+        """
+        if not self.labels:
+            return None, float('inf')  # no labels present
+        
+        transitions = np.array([label_area.start_time for label_area in self.labels])
+        idx = np.searchsorted(transitions, x)
+
+        zero_point = self.viewbox_to_window(QPointF(0,0)).x()
+        
+        if idx == len(transitions):
+            transition = self.labels[idx-1].transition_line
+            dist = abs(transitions[idx-1] - x)
+            dist_px = self.viewbox_to_window(QPointF(dist, 0)).x() - zero_point
+            return transition, dist_px
+        
+        else:
+            # Check which of the two neighbors is closer
+            dist_to_left = abs(x - transitions[idx-1])
+            dist_to_right = abs(transitions[idx] - x)
+
+            if dist_to_left <= dist_to_right:
+                transition = self.labels[idx-1].transition_line
+                dist_px = self.viewbox_to_window(QPointF(dist_to_left, 0)).x()- zero_point
+                return transition, dist_px
+            else:
+                transition = self.labels[idx].transition_line
+                dist_px = self.viewbox_to_window(QPointF(dist_to_right, 0)).x()- zero_point
+                return transition, dist_px
+            
+    def get_baseline_distance(self, y: float) -> float:
+        """
+        Returns the baseline and the pixel distance to it from a y-coordinate.
+
+        Parameters:
+            y (float): ViewBox y-coordinate.
+        Returns:
+            (InfiniteLine, float): Baseline and pixel distance.
+        """
+        if self.baseline is None:
+            return float('inf')
+        zero_point = self.viewbox_to_window(QPointF(0,0)).y()
+        viewbox_distance = abs(y - self.baseline.value())
+        return self.baseline, zero_point - self.viewbox_to_window(QPointF(0, viewbox_distance)).y()
+    
+    def get_closest_label_area(self, x: float) -> LabelArea:
+        """
+        Returns the LabelArea covering the given x position, or None if out of bounds.
+
+        Parameters:
+            x (float): ViewBox x-coordinate.
+        Returns:
+            LabelArea: Label area the x-coordinate is part of.
+        """
+
+        if not self.labels:
+            return None
+        
+        # don't include the last label
+        visible_labels = [label for label in self.labels if not label == self.labels[-1]]
+
+        if not visible_labels:
+            return None
+
+        if x < visible_labels[0].start_time or x > (visible_labels[-1].start_time + visible_labels[-1].duration):
+            return None  # outside the labels
+        label_ends = np.array([label.start_time + label.duration for label in visible_labels])
+        idx = np.searchsorted(label_ends, x)  # idk why this works
+        if idx >= len(visible_labels):
+            return visible_labels[-1]
+        return visible_labels[idx]
+
+    def delete_all_label_instances(self, label: str) -> None:
+        """
+        TODO: implement
+        """
+
+    def handle_transitions(self):
+        return
+
+    def handle_labels(self):
+        return
+
+    def set_baseline(self, event: QMouseEvent):
+        """
+        Sets a baseline at the clicked y-position and shows the baseline.
+
+        Parameters:
+            event (QMouseEvent): The click event triggering baseline placement.
+        """
+        # TODO: edit for when have edit mode functionality
+        point = self.window_to_viewbox(event.position())
+        x, y = point.x(), point.y()
+
+        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
+
+        if not (x_min <= x <= x_max and y_min <= y <= y_max):
+            return
+
+        
+        self.baseline.setPos(y)
+        self.baseline.setVisible(True)
+
+        self.baseline_preview_enabled = False
+        self.baseline_preview.setVisible(False)
+
+
+    def add_drop_transitions(self):
+        return
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """
+        Handles key shortcuts for setting baseline ("B") or comment ("C").
+        Also forwards key events to the selection manager.
+
+        Parameters:
+            event (QKeyEvent): The key press event.
+        """
+        if event.key() == Qt.Key.Key_R:
+            self.reset_view()  
+        if event.key() == Qt.Key.Key_B:
+            if self.baseline_preview_enabled:
+                # Turn it off
+                self.baseline_preview_enabled = False
+                self.baseline_preview.setVisible(False)
+            else:
+                # prepare to set baseline
+                self.baseline.setVisible(False)
+                self.baseline_preview_enabled = True
+                self.baseline_preview.setVisible(True)
+                y_pos = self.viewbox.mapSceneToView(self.mapToScene(self.mapFromGlobal(QCursor.pos()))).y()
+                self.baseline_preview.setPos(y_pos)
+            self.selection.deselect_all()
+            self.selection.unhighlight_item(self.selection.hovered_item)
+
+        self.selection.key_press_event(event)
+        self.viewbox.update()
+
+    def keyReleaseEvent(self, event: QKeyEvent) -> None:
+        return
         if event.key() == Qt.Key.Key_Shift:
             self.vertical_mode = False
         elif event.key() == Qt.Key.Key_Control:
             self.zoom_mode = False
-    
-    def mousePressEvent(self, event):
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        """
+        Delegates interaction to selection, baseline, and comment handlers based on state.
+
+        Parameters:
+            event (QMouseEvent): The mouse click event.
+        """
+
+        super().mousePressEvent(event)
+
+        point = self.window_to_viewbox(event.position())
+        x, y = point.x(), point.y()
+
+        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
+
         if event.button() == Qt.MouseButton.LeftButton:
-            if self.cursor_state == 0:
-                self.handle_transitions(event, "press")
-            else:
+            if self.baseline_preview_enabled:
                 self.set_baseline(event)
-        elif event.button() == Qt.MouseButton.RightButton:
-            self.add_drop_transitions(event)
-    
-    def mouseDoubleClickEvent(self, event):
+            elif self.comment_preview_enabled and self.moving_comment is not None:
+                if x_min <= x <= x_max:
+                    self.move_comment(self.moving_comment, x)
+                    self.moving_comment = None
+            else:
+                self.selection.mouse_press_event(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        """
+        Delegates interaction to selection, baseline, and comment handlers based on state.
+        Parameters:
+            event (QMouseEvent): The mouse release event.
+        """
+
+        super().mouseReleaseEvent(event)
+
+        self.selection.mouse_release_event(event)
+
+        if self.moving_mode:
+            # if transition line was released, update data transition line
+            if isinstance(self.selected_item, InfiniteLine) and self.selected_item is not self.baseline:
+                transitions = [(label_area.start_time, label_area.label) for label_area in self.labels]
+                self.epgdata.set_transitions(self.file, transitions, self.transition_mode)
+        return
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.handle_transitions(event, "release")
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        return
         if event.button() == Qt.MouseButton.LeftButton:
             self.handle_labels(event)
 
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        """
+        Delegates interaction to selection, baseline, and comment handlers based on state.
+
+        Parameters:
+            event (QMouseEvent): The mouse move event.
+        """
+        super().mouseMoveEvent(event)
+        self.last_cursor_pos
+
+        point = self.window_to_viewbox(event.position())
+        x, y = point.x(), point.y()
+
+        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
+
+        if self.baseline_preview_enabled:
+            if y_min <= y <= y_max:
+                self.baseline_preview.setPos(y)
+                self.baseline_preview.setVisible(True)
+            else:
+                self.baseline_preview.setVisible(False)
+        elif self.comment_preview_enabled:
+            if x_min <= x <= x_max:
+                self.comment_preview.setPos(x)
+                self.comment_preview.setVisible(True)
+            else:
+                self.comment_preview.setVisible(False)
+        else:
+            self.selection.mouse_move_event(event)
+
+        return
+
         self.handle_transitions(event, "move")
 
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.handle_transitions(event, "release")
     
-    def updateBaseline(self):
-        if self.baseline != None:
-            y = self.baseline.at(0).y()
-            self.baseline.clear()
-            self.baseline.append(QPointF(self.x_axis.min(), y))
-            self.baseline.append(QPointF(self.x_axis.max(), y))
 
-    def scroll_horizontal(self, value):
-        self.chart.scroll(value - self.last_h_scroll_value, 0)
-        self.last_h_scroll_value = value
-        self.updateBaseline()
-
-    # def update_scrollbar(self):
-    #     plot_area = self.chart.plotArea()
-
-    #     self.h_scrollbar.setRange(int(-50000 / self.compression), int(50000 / self.compression))
-    #     self.h_scrollbar.setPageStep(int(plot_area.width()) // 10)
-            
-    def zoom_scroll(self, event):
+    def wheelEvent(self, event: QWheelEvent) -> None:
         """
-        zoom_scroll is called every time there is a mouse wheel
-        event and handles zooming and scrolling the plot
-        Inputs:
-            event: a wheel event
-        Returns:
-            Nothing
+        Forwards a scroll event to the custom viewbox.
         """
-        # Everything is mapped to vertical scrolling
-        # to assume that their scroll wheel has a horizontal
-        # scroller
-        if self.zoom_mode:
-            plot_area = self.chart.plotArea()
-            delt = event.angleDelta().y()
-            zoom_amount = delt
-            if self.vertical_mode:
-                self.chart.zoomIn(plot_area.adjusted(0, zoom_amount, 0, -1 * zoom_amount))
-            else:
-                self.chart.zoomIn(plot_area.adjusted(zoom_amount, 0, -1 * zoom_amount, 0))
-                self.update_compression()
-                # self.update_scrollbar()
-                        
-        else:
-            if self.vertical_mode:
-                self.chart.scroll(0, event.angleDelta().y())
-            else:
-                self.chart.scroll(event.angleDelta().y(), 0)
-                self.updateBaseline()
+        self.viewbox.wheelEvent(event)
+        event.ignore()
 
-    def resetView(self):
-        self.chart.zoomReset()
-        self.update_compression()
+# def main():
+#     Settings()
+    
+#     app = QApplication([])
 
-    def wheelEvent(self, event):
-        """
-        wheelEvent is called automatically whenever the scroll
-        wheel is engaged over the chart. We use it to control
-        horizontal and vertical scrolling along with zoom.
-        """
-        self.zoom_scroll(event)
+#     epgdata = EPGData()
+#     epgdata.load_data(r"C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\sharpshooter_label2.csv")
+#     #epgdata.load_data("test_recording.csv")
 
-    def set_comments_visible(self, visible):
-        """
-        Set comment visibility settings, and then plot/clear comments accordingly.
-        Inputs:
-            visible: whether to make comments visisble
-        """
-        Settings.show_comments = visible
-        self.plot_comments()
+#     #epgdata.load_data(r'C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv')
+#     window = DataWindow(epgdata)
+#     window.plot_recording(window.epgdata.current_file, 'post')
+#     window.plot_transitions(window.epgdata.current_file)
 
-    def plot_comments(self, clear_comments=False):
-        """
-        Plot comments ("event markers" in WinDAQ), if present.
-        Inputs:  None
-        Outputs: None
-        """
+#     window.showMaximized()
 
-        if hasattr(self, 'comment_lines'):
-            for vline in self.comment_lines:
-                self.chart.removeSeries(vline)
-                self.comment_lines = []
-        if hasattr(self, 'comment_textitems'):
-            for comment_textitem in self.comment_textitems:
-                self.scene().removeItem(comment_textitem)
-                self.comment_textitems = []
+    
+    
 
-        if not Settings.show_comments:
-            return
+#     sys.exit(app.exec())
 
-        # NOTE: self.epgdata.get_recording only returns time and voltage columns (why?)
-        # This needs the comment column as well, so access dataframe directly
-        df = self.epgdata.dfs[self.file]
 
-        if not 'comments' in df.columns:
-            return
-        comments_df = df[~df['comments'].isnull()]
-
-        voltage   = df[self.prepost + self.epgdata.prepost_suffix].values
-        min_voltage = min(voltage)
-        max_voltage = max(voltage)
-        comment_v = min_voltage + (max_voltage - min_voltage) * 0.1
-
-        self.comments   = comments_df['comments'].values
-        self.comments_t = comments_df['time'].values
-        self.comments_v = [comment_v] * len(comments_df)
-
-        self.comment_lines = []
-        for time in self.comments_t:
-            vline = QLineSeries()
-            vline.setColor(QColor(0, 0, 0))
-            pen = QPen()
-            pen.setStyle(Qt.PenStyle.DashLine)
-            vline.setPen(pen)
-            vline.append(QPointF(time, min_voltage))
-            vline.append(QPointF(time, max_voltage))
-            self.chart.addSeries(vline)
-            vline.attachAxis(self.x_axis)
-            vline.attachAxis(self.y_axis)
-            self.comment_lines.append(vline)
-
-        # Wasn't able to figure out how to parent QGraphicsItem to chart directly,
-        # passing QGraphicsTextItem(parent=self.chart) has no effect.
-        # Ended up modifying code from https://forum.qt.io/post/546479,
-        # but has issue that text appears on top of chart margins instead of going behind.
-
-        self.comment_textitems = []
-        for comment in self.comments:
-            #comment_textitem = QGraphicsTextItem(comment)
-            comment_textitem = QGraphicsTextItem()
-            comment_textitem.setDefaultTextColor(QColor(0, 0, 0))
-            comment_textitem.setHtml(f"<div style='background:rgba(255, 255, 255, 50%);'>{comment}</div>")
-            comment_textitem.setRotation(270);
-            #comment_textitem.setZValue(-1)
-            self.comment_textitems.append(comment_textitem)
-            self.chart.scene().addItem(comment_textitem)
-
-        def update_comment_positions():
-            for t, v, comment_textitem in zip(self.comments_t, self.comments_v, self.comment_textitems):
-                point_data  = QPointF(t, v)
-                point_chart = self.chart.mapToPosition(point_data, self.chart.series()[0])
-                point_scene = self.chart.mapToScene(point_chart)
-                # Alignment: https://stackoverflow.com/q/30037429
-                point_scene.setX(point_scene.x() - comment_textitem.boundingRect().height()/2)
-                comment_textitem.setPos(point_scene)
-
-        self.chart.scene().changed.connect(update_comment_positions)
-
-    def plot_recording(self, file, prepost = 'post'):
-        """
-        plot_recording creates a series for the time series given by file
-        and updates the graph to show it.
-        Inputs:
-            file: a string containing the key of the recording
-            prepost: a string containing either pre or post
-                 to specify which recording is desired.
-        Outputs:
-            None
-        """
-        # Load data
-        self.file = file
-        time, volts = self.epgdata.get_recording(self.file, prepost)
-
-        # Plot data
-        points = [QPointF(t, v)  for t, v in zip(time, volts)]
-        self.series.replace(points)
-        
-        # Update axis
-        self.x_axis.setRange(min(time), max(time))
-        self.y_axis.setRange(min(volts), max(volts))
-
-    def plot_transitions(self, file, prepost = 'post'):
-        """
-        plot_transition creates a vertical line for each transition and
-        then colors the region after it and before the next transition
-        accordingly.
-        Inputs:
-            file: a string containing the key of the recording
-        Outputs:
-            None
-        """
-
-        # Color in areas, but delete old ones first, if there are any
-        for area in self.areas:
-            self.chart.removeSeries(area)
-
-        for transition in self.transition_lines:
-            self.chart.removeSeries(transition)
-
-        for label in self.labels:
-            self.chart.removeSeries(label)
-
-        for duration in self.durations:
-            self.chart.removeSeries(duration)
-
-        #Load data
-        self.file = file
-        self.prepost = prepost
-        times, volts = self.epgdata.get_recording(self.file, prepost)
-        min_volts = min(volts)
-        max_volts = max(volts)
-        self.transitions = self.epgdata.get_transitions(self.file, self.transition_mode)
-        print(f"transition mode: {self.transition_mode}")
-        self.epgdata.set_transitions(self.file, self.transitions, self.transition_mode)
-
-        # Only continue if the label column contains labels
-        if self.epgdata.dfs[file][self.transition_mode].isna().all():
-            return
-        
-        # try:
-        durations = []
-        for i in range(len(self.transitions) - 1):
-            time, label = self.transitions[i]
-            next_time, _ = self.transitions[i + 1]
-            durations.append((time, next_time - time, label))
-        durations.append((self.transitions[-1][0], max(times), self.transitions[-1][1]))
-
-        self.areas = []
-        self.area_upper_lines = []
-        self.area_lower_lines = []
-        self.labels = []
-        self.durations = []
-
-        for (time, dur, label) in durations:
-            area = QAreaSeries()
-            if self.transition_mode == 'labels':
-                 area.setColor(Settings.label_to_color[label])
-            if self.transition_mode == 'probes':
-                area.setColor(Settings.label_to_color[label])
-            # Make borders see-through
-            area.setBorderColor(QColor(255, 255, 255, 255))
-            # We need to save the lines so that they
-            # don't go out of scope at the end of this block.
-            # If we don't then Qt will crash and won't tell
-            # us why :( This is probably because of the c++
-            # bindings...
-            # Define upper line
-            self.area_upper_lines.append(QLineSeries())
-            self.area_upper_lines[-1].replace(
-                [QPointF(time, max_volts),
-                QPointF(time + dur, max_volts)])
-            # Define lower line
-            self.area_lower_lines.append(QLineSeries())
-            self.area_lower_lines[-1].replace(
-                [QPointF(time, min_volts),
-                QPointF(time + dur, min_volts)])
-            prev_transition = time
-            # Define area and draw it
-            area.setUpperSeries(self.area_upper_lines[-1])
-            area.setLowerSeries(self.area_lower_lines[-1])
-            self.chart.addSeries(area)
-            area.attachAxis(self.x_axis)
-            area.attachAxis(self.y_axis)
-            self.areas.append(area)
-
-        #Plot transitions, but delete old ones first
-        for line in self.transition_lines:
-            self.chart.removeSeries(line)
-
-        self.transition_lines = []
-        for time, label in self.transitions:
-            vline = QLineSeries()
-            vline.setColor(QColor(0, 0, 1))
-            vline.append(QPointF(time, max_volts))
-            vline.append(QPointF(time, min_volts))
-            self.chart.addSeries(vline)
-            vline.attachAxis(self.x_axis)
-            vline.attachAxis(self.y_axis)
-            self.transition_lines.append(vline)
-
-        # Adding text labels
-        for (time, dur, label) in durations:
-            label_series = QScatterSeries()
-            label_series.setMarkerSize(1)
-            label_series.setPointLabelsFont(QFont("Sans, 12, QFont.Bold"))
-            label_series.setPointLabelsVisible(True)
-            label_series.setPointLabelsFormat(label)
-            self.chart.addSeries(label_series)
-            label_y = (max_volts - min_volts) * 0.05 + min_volts
-            label_series.append(time + dur/2, label_y)
-            label_series.attachAxis(self.x_axis)
-            label_series.attachAxis(self.y_axis)
-            self.labels.append(label_series)
-
-            duration_series = QScatterSeries()
-            duration_series.setMarkerSize(1)
-            duration_series.setPointLabelsFont(QFont("Sans, 12, QFont.Bold"))
-            duration_series.setPointLabelsVisible(False)
-            duration_series.setPointLabelsFormat(str(round(dur, 2)))
-            self.chart.addSeries(duration_series)
-            duration_y = (max_volts - min_volts) * 0.8 + min_volts
-            duration_series.append(time + dur/2, duration_y)
-            duration_series.attachAxis(self.x_axis)
-            duration_series.attachAxis(self.y_axis)
-            self.durations.append(duration_series)
-
-        # TODO: this try-catch is a **temporary** solution to clearing
-        #       labels when an unlabeled file is loaded
-        # except:
-        #   for line in self.transition_lines:
-        #       self.chart.removeSeries(line)
-        #   raise(Exception("Could not find transitions."))
-
-    # Slots for setting changes
-    def change_label_color(self, label: str, color: QColor):
-        """
-        change_label_color is a slot for the signal emitted by the
-        SettingsWindow on changing a label color.
-        Inputs:
-            label: label for the waveform background to recolor.
-            color: color to change the label to.
-        Returns:
-            Nothing
-        """
-        for i in range(len(self.labels)):
-            _, label_ = self.transitions[i]
-            if label_ == label:
-                self.areas[i].setColor(color)
-
-    def change_line_color(self, color: QColor):
-        """
-        change_line_color is a slot for the signal emitted by the
-        SettingsWindow on changing the line color.
-        Inputs:
-            color: color to which the recording line is to be changed
-        Returns:
-            Nothing
-        """
-        orig_color = self.series.color()
-        self.series.setColor(color)
-
-    def delete_label(self, label: str):
-        """
-        delete_label is a slot for the signal emitted by the
-        SettingsWindow on deleting a label. The label dict is
-        guaranteed updated at this point, so we must just update
-        internal components to the DataWindow accordingly
-        Inputs:
-            label: label deleted
-        Returns:
-            Nothing
-        """
-
-    def set_gridlines(self, enable: bool):
-        self.x_axis.setGridLineVisible(enable)
-        self.x_axis.setMinorGridLineVisible(enable)
-        self.y_axis.setGridLineVisible(enable)
-        self.y_axis.setMinorGridLineVisible(enable)
-        value = "enable" if enable else "disable"
-        #print(f"DataWindow received call to {value} grid")
-
-    def set_text_visible(self, visible: bool):
-        for label in self.labels:
-            label.setPointLabelsVisible(visible)
-
-    def set_durations_visible(self, visible: bool):
-        for duration in self.durations:
-            duration.setPointLabelsVisible(visible)
-
-    def set_h_gridline_spacing(self, value: float):
-        self.x_axis.setTickInterval(value)
-        #print(f"Horizontal gridline spacing set to {value}")
-
-    def set_v_gridline_spacing(self, value: float):
-        self.y_axis.setTickInterval(value)
-        #print(f"Vertical gridline spacing set to {value}")
-
-    def set_h_offset(self, value: float):
-        self.x_axis.setTickAnchor(value)
-        #print(f"Horizontal gridline offset set to {value}")
-
-    def set_v_offset(self, value: float):
-        self.y_axis.setTickAnchor(value)
-        #print(f"Vertical gridline offset set to {value}")
-
-    def hide_label(self, label: str, value: bool):
-        to_show = Settings.labels_to_show[label] # We know a-priori that this function is only called after SettingsWindow has verified the existence of this label
-        set_color = Settings.label_to_color[label]
-        if value == True:
-            set_color.setAlpha(Settings.alpha)
-        else:
-            set_color.setAlpha(0)
-        print(f"Setting label {label} to show {to_show}")
-        for i in range(len(self.transitions)):
-            _, transition_label = self.transitions[i]
-            if transition_label == label:
-                self.areas[i].setColor(set_color)
+# if __name__ == "__main__":
+#     main()

@@ -468,13 +468,15 @@ class Selection:
             label_area.duration_text.setVisible(False)
             label_area.duration_background.setVisible(False)
 
-    def merge_adjacent_labels(self, label_area: LabelArea, deleting = False) -> None:
+    def merge_adjacent_labels(self, label_area: LabelArea, deleting = False) -> bool:
         """
         Merges the given LabelArea with adjacent ones if they share the same label type.
 
         Parameters:
             label_area (LabelArea): The LabelArea to merge from.
             deleting (bool): True if the merge is happening as part of a deletion.
+        Returns:
+            (bool): Whether a merge was performed.
         """
         labels = self.datawindow.labels
         if not labels:
@@ -530,6 +532,7 @@ class Selection:
             view_pos = self.datawindow.window_to_viewbox(self.datawindow.last_cursor_pos)
             self.hover(view_pos.x(), view_pos.y())
 
+        return merging_left or merging_right
 
     def hover(self, x: float, y: float) -> None:
         """
@@ -675,6 +678,9 @@ class Selection:
             label_area (LabelArea): The LabelArea to modify.
             new_label (str): The new label type to assign.
         """
+        dw = self.datawindow
+        merged = False  # whether a merge was performed
+
         if self.is_selected(label_area): # label area is selected
             selected_label_areas = [label for label in self.selected_items if isinstance(label, LabelArea)]
             for label_area in selected_label_areas: # change without merging
@@ -683,15 +689,19 @@ class Selection:
                 label_area.area.setBrush(self.selected_style['area'])
                 label_area.label_background.setBrush(self.selected_style['text background'])
                 label_area.duration_background.setBrush(self.selected_style['text background'])
+
             for label_area in selected_label_areas[:]: # merge all labels if necessary
                 if label_area in self.datawindow.labels:
-                    self.merge_adjacent_labels(label_area)
+                    did_merge = self.merge_adjacent_labels(label_area)
+                    merged = merged or did_merge
         else: # label area is highlighted
             label_area.label = new_label
             label_area.update_label_area()
-            self.merge_adjacent_labels(label_area)
+            merged = self.merge_adjacent_labels(label_area)
 
-        dw = self.datawindow
         dw.viewbox.update()
-        transitions = [(label_area.start_time, label_area.label) for label_area in dw.labels]
-        dw.epgdata.set_transitions(dw.file, transitions, dw.transition_mode)
+
+        if merged:
+            # kind of brute force, can we make this only update the necessary point in the df?
+            transitions = [(label_area.start_time, label_area.label) for label_area in dw.labels]
+            dw.epgdata.set_transitions(dw.file, transitions, dw.transition_mode)

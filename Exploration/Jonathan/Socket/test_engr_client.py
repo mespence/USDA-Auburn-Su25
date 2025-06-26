@@ -30,7 +30,7 @@ def device_simulation():
         # taking into account execution time
         for row in reader:
             data_row = f"{float(row[4]):.4f},DATA,{float(row[5]):.4f},0\n"
-            data_dict = {"type":"data", "value":data_row}
+            data_dict = {"type":"data", "value":data_row, "source": "ENGR"}
             send_queue.put_nowait(data_dict)
             next_time += interval
             sleep_time = max(0, next_time - time.perf_counter())

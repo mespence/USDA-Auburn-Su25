@@ -4,7 +4,7 @@ import re
 
 from PyQt6.QtWidgets import QFileDialog
 
-from DataWindow2 import DataWindow
+from DataWindow import DataWindow
 from EPGData import EPGData
 
 class FileSelector:

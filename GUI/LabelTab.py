@@ -2,12 +2,12 @@
 # LabelTab.py
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
-    QProgressBar, QToolButton, QSizePolicy
+    QProgressBar, QToolButton, QSizePolicy, QApplication
 )
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
 
-from DataWindow2 import DataWindow
+from DataWindow import DataWindow
 from EPGData import EPGData
 from Labeler import Labeler
 from Settings import Settings
@@ -32,6 +32,8 @@ class LabelTab(QWidget):
         self.epgdata.load_data(file)
 
         self.datawindow = DataWindow(self.epgdata)
+
+        QApplication.processEvents()
         self.datawindow.plot_recording(file, "pre")
         self.datawindow.plot_transitions(file)
         self.datawindow.plot_comments(file)
