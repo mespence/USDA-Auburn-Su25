@@ -20,143 +20,12 @@ from PyQt6.QtWidgets import (
 )
 
 from EPGData import EPGData
+from PanZoomViewBox import PanZoomViewBox
 from Settings import Settings
 from LabelArea import LabelArea
 from CommentMarker import CommentMarker
 from SelectionManager import Selection
 from TextEdit import TextEdit
-
-
-# DEBUG ONLY TODO remove imports for testing
-from PyQt6.QtWidgets import QApplication  
-import sys, time
-
-
-if os.name == "nt":
-    print("Windows detected, running with OpenGL")
-    setConfigOptions(useOpenGL = True)
-
-class PanZoomViewBox(ViewBox):
-    """
-    Custom ViewBox that overrides default mouse/scroll behavior to support
-    pan and zoom using wheel + modifiers.
-
-    Pan/Zoom behavior:
-    - Ctrl + Scroll: horizontal/vertical zoom (with Shift)
-    - Scroll only: pan (horizontal or vertical based on Shift)
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.datawindow: DataWindow = None
-
-    def wheelEvent(self, event: QWheelEvent, axis=None) -> None:
-        """
-        Handles wheel input for zooming and panning, based on modifier keys.
-
-        - Ctrl: zoom
-        - Shift: vertical zoom or pan
-        - No modifiers: horizontal pan
-        """
-        if self.datawindow is None:
-            self.datawindow = self.parentItem().getViewWidget()
-        
-        delta = event.angleDelta().y()
-        modifiers = event.modifiers()
-
-        ctrl_held = modifiers & Qt.KeyboardModifier.ControlModifier
-        shift_held = modifiers & Qt.KeyboardModifier.ShiftModifier
-
-        if ctrl_held:
-            zoom_factor = 1.001**delta
-            center = self.mapToView(event.position())
-            if shift_held: 
-                self.scaleBy((1, 1 / zoom_factor), center)
-            else:
-                self.scaleBy((1 / zoom_factor, 1), center)
-        else:
-            (x_min, x_max), (y_min, y_max) = self.viewRange()
-            width, height = x_max - x_min, y_max - y_min
-
-            if shift_held:
-                v_zoom_factor = 5e-4
-                dy = delta * v_zoom_factor * height
-                self.translateBy(y=dy)
-            else:
-                h_zoom_factor = 2e-4
-                dx = delta * h_zoom_factor * width
-
-                new_x_min = x_min + dx
-
-                # don't pan if it moves x=0 more than halfway across the ViewBox
-                if 0 > new_x_min + 0.5 * width:
-                    pass  
-                else:
-                    self.translateBy(x=dx)
-
-        event.accept()
-        self.datawindow.update_plot()
-
-    def mouseDragEvent(self, event, axis=None) -> None:
-        """
-        Disables default drag-to-pan behavior (drag is used for selections).
-        """
-        event.ignore()
-
-
-    def contextMenuEvent(self, event):
-        """
-        Displays a context menu for right-clicking on LabelAreas.
-
-        Currently adds a label type submenu to change the label's classification.
-        """
-        if self.datawindow is None:
-            self.datawindow = self.parentItem().getViewWidget()
-
-        item = self.datawindow.selection.hovered_item
-        if isinstance(item, InfiniteLine):
-            print('Right-clicked InfiniteLine')
-            return  # TODO: infinite line context menu not yet implemented
-
-        scene_pos = event.scenePos()
-        data_pos = self.mapSceneToView(scene_pos)
-        x = data_pos.x()  
-        
-        menu = QMenu()
-        label_type_dropdown = QMenu("Change Label Type", menu)
-
-        label_names = list(Settings.label_to_color.keys())
-        label_names.remove("END AREA")
-        for label in label_names:            
-            action = QAction(label, menu)
-            action.setCheckable(True)
-
-            if item.label == label:
-                action.setChecked(True)
-                
-            action.triggered.connect(
-                lambda checked, label_area=item, label=label:
-                self.datawindow.selection.change_label_type(label_area, label)
-            )
-        
-            label_type_dropdown.addAction(action)
-
-        add_comment = QAction("Add Comment", menu)
-
-        action3 = QAction("Custom Option 3")
-        menu.addMenu(label_type_dropdown)
-        menu.addAction(add_comment)
-        menu.addAction(action3)
-
-        action = menu.exec(event.screenPos())
-        if action == label_type_dropdown:
-            print("Option 1 selected")
-        elif action == add_comment:
-            self.datawindow.add_comment(x)
-            print("Option 2 selected")
-        else:
-            print("Option 2 selected")
-
 
 class DataWindow(PlotWidget):
     """
@@ -194,8 +63,8 @@ class DataWindow(PlotWidget):
         self.prepost: str = "pre"
         self.df = None
         
-        self.xy_data: list[NDArray] = []  # x and y data actually rendered to the screen
-        self.curve: PlotDataItem = PlotDataItem(antialias=False) 
+        self.xy_data: list[NDArray] = [None, None]  # x and y data actually rendered to the screen
+        self.curve: PlotDataItem = PlotDataItem(antialias=False, pen = Settings.line_color) 
         self.scatter: ScatterPlotItem = ScatterPlotItem(
             symbol="o", size=4, brush="blue"
         )  # the discrete points shown at high zooms
@@ -275,13 +144,6 @@ class DataWindow(PlotWidget):
         self.plot_item.layout.setContentsMargins(30, 30, 30, 20)
         self.plot_item.enableAutoRange(False)
 
-        # placeholder sine wave
-        # self.xy_data.append(np.linspace(0, 1, 10000))
-        # self.xy_data.append(np.sin(2 * np.pi * self.xy_data[0]))
-        # self.curve.setData(
-        #     self.xy_data[0], self.xy_data[1], pen=mkPen(color="b", width=2)
-        # )
-
         self.curve.setClipToView(False)  # already done in manual downsampling
         self.scatter.setVisible(False)
         self.curve.setZValue(-5)
@@ -314,10 +176,6 @@ class DataWindow(PlotWidget):
         self.scene().addItem(self.zoom_text)
 
         self.viewbox.setXRange(0,10)
-        
-        # further defer update until the window is actually rendered to the screen
-        #QApplication.processEvents()
-        #QTimer.singleShot(0, self.update_plot)
 
 
     def resizeEvent(self, event) -> None:
@@ -417,6 +275,9 @@ class DataWindow(PlotWidget):
                 continue
 
             # Don't render label areas <1 px wide
+            # NOTE: this can lead to multiple sequential short labels all being
+            # hidden, which can cause visible white regions, esp. when zoomed out.
+            # Not sure if there is a good fix for this, but it's pretty minor
             left_px_loc = self.viewbox_to_window(QPointF(label_area.start_time,0)).x()
             right_px_loc = self.viewbox_to_window(QPointF(label_area.start_time + label_area.duration, 0)).x()
             label_width_px = right_px_loc - left_px_loc
@@ -547,7 +408,7 @@ class DataWindow(PlotWidget):
         
         self.update_plot()
         self.plot_comments(file)
-        QApplication.processEvents()
+        QGuiApplication.processEvents()
         QGuiApplication.restoreOverrideCursor()
 
     def plot_comments(self, file: str) -> None:
@@ -1147,29 +1008,27 @@ class DataWindow(PlotWidget):
         self.viewbox.wheelEvent(event)
         event.ignore()
 
-
-# TODO: remove after feature-complete and integrated with main
-def main():
-    Settings()
+# def main():
+#     Settings()
     
-    app = QApplication([])
+#     app = QApplication([])
 
-    epgdata = EPGData()
-    epgdata.load_data(r"C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\sharpshooter_label2.csv")
-    #epgdata.load_data("test_recording.csv")
+#     epgdata = EPGData()
+#     epgdata.load_data(r"C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\sharpshooter_label2.csv")
+#     #epgdata.load_data("test_recording.csv")
 
-    #epgdata.load_data(r'C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv')
-    window = DataWindow(epgdata)
-    window.plot_recording(window.epgdata.current_file, 'post')
-    window.plot_transitions(window.epgdata.current_file)
+#     #epgdata.load_data(r'C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv')
+#     window = DataWindow(epgdata)
+#     window.plot_recording(window.epgdata.current_file, 'post')
+#     window.plot_transitions(window.epgdata.current_file)
 
-    window.showMaximized()
+#     window.showMaximized()
 
     
     
 
-    sys.exit(app.exec())
+#     sys.exit(app.exec())
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
