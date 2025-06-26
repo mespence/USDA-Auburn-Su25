@@ -11,16 +11,36 @@ from HoverableSvgItem import HoverableSvgItem
 
 class CommentMarker():
     """
-    A class for creating comments with a
-    vertical dashed line and comment icon
+    Represents a comment marker in a PyQtGraph plot.
+
+    Each marker consists of:
+    - A vertical dashed line at the specified timestamp.
+    - An SVG icon that can be hovered to preview the comment.
+    - An interactive dialog for editing, deleting, or moving the comment
+      when selecting the icon.
+
+    This class is designed to integrate with a PlotWidget and respond to 
+    zoom, pan, and user interactions in the waveform editor.
     """
-    def __init__(self, time: float, text: str, datawindow: PlotWidget, icon_path: str = "icons/message.svg"):
+    def __init__(self, time: float, text: str, datawindow: PlotWidget,
+                 icon_path: str = "icons/message.svg"):
+        """
+        Initializes the comment marker with a vertical line and icon.
+
+        Parameters:
+            time (float): The time location on the x-axis for the marker.
+            text (str): The comment text associated with this marker.
+            datawindow (PlotWidget): The parent plot widget this marker belongs to.
+            icon_path (str): Path to the SVG icon for the comment.
+                             Defaults to 'icons/message.svg'.
+        """
         self.time = time
         self.text = text
         self.datawindow = datawindow
         self.scene = self.datawindow.scene()
         self.viewbox = self.datawindow.getPlotItem().getViewBox()
         self.icon_path = icon_path
+        self.moving = False
 
         self.marker = InfiniteLine(
             pos = self.time,
@@ -41,15 +61,27 @@ class CommentMarker():
         self.icon_item.mousePressEvent = self.show_comment_editor
 
     def update_position(self):
+        """
+        Updates the position of the icon to remain anchored to the
+        specified time.
+
+        Automatically hides the marker if it's outside the current 
+        view range. This is called during panning, zooming, or any
+        transform on the ViewBox.
+        """
+        if self.moving:
+            return
+        
+        bottom_offset = 25
         line_scene_x = self.viewbox.mapViewToScene(QPointF(self.time, 0))
         scene_rect = self.viewbox.sceneBoundingRect()
 
         icon_x = line_scene_x.x()
-        icon_y = scene_rect.bottom() - 25
+        icon_y = scene_rect.bottom() - bottom_offset
 
         self.icon_item.setPos(icon_x, icon_y)
         
-        # don't show past viewbox
+        # don't show past viewbox range
         icon_scene_rect = self.icon_item.mapRectToScene(self.icon_item.boundingRect())
         icon_scene_x = icon_scene_rect.right()
         icon_right_x = self.viewbox.mapSceneToView(QPointF(icon_scene_x, 0)).x()
@@ -57,10 +89,15 @@ class CommentMarker():
         self.icon_item.setVisible(x_min <= self.time <= x_max and icon_right_x <= x_max)
         self.marker.setVisible(x_min <= self.time <= x_max)
 
-
     def show_comment_editor(self, event: None):
         """
-        should be able to edit, delete, and move the comment
+        Opens a dialog to edit, move, or delete the comment.
+
+        Options in the dialog:
+        - Save: Update the comment text
+        - Discard: Delete the comment
+        - Move: Initiate moving the marker to a new location
+        - Cancel: Close the dialog with no changes
         """
 
         self.datawindow.comment_editing = True
@@ -103,6 +140,7 @@ class CommentMarker():
 
         def move():
             self.set_visible(False)
+            self.moving = True
             # delay move comment so that it doesn't register the dialog mouse press event
             QTimer.singleShot(0, lambda: self.datawindow.move_comment_helper(self))
             dialog.accept()
@@ -117,16 +155,49 @@ class CommentMarker():
         dialog.exec()
 
     def set_text(self, new_text: str):
+        """
+        Updates the internal comment text and notifies the datawindow.
+
+        Parameters:
+            new_text (str): The updated comment string.
+        """
         self.text = new_text
         self.datawindow.edit_comment(self, new_text)
+        self.icon_item.refresh_text(new_text)
 
     def set_visible(self, visible: bool):
+        """
+        Sets visibility of both the line and icon associated with
+        the marker.
+
+        Parameters:
+            visible (bool): Whether the marker should be shown or hidden.
+        """
         self.marker.setVisible(visible)
         self.icon_item.setVisible(visible)
 
     def remove(self):
+        """
+        Removes all graphical components related to this comment marker from
+        the plot, including:
+        - The vertical InfiniteLine marker from the viewbox
+        - The icon representing the comment from the scene
+        - The preview box associated with hovering the icon
+
+        Also disconnects the viewbox's sigTransformChanged signal handler
+        used for updating the marker's position to prevent calls on a 
+        deleted object.
+        """
         self.viewbox.removeItem(self.marker)
-        self.viewbox.removeItem(self.icon_item)
+        # remove hover preview
+        self.icon_item.remove()
+        self.scene.removeItem(self.icon_item)
+
+        try:
+            self.viewbox.sigTransformChanged.disconnect(self.update_position)
+        except Exception as e:
+            print(f"[ERROR CM] disconnecting viewbox change signal: {e}")
+
 
     # def hoverIconEvent(self, event):
     #     QToolTip.showText(event.screenPos().toPoint(), self.text)

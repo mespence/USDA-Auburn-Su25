@@ -519,6 +519,8 @@ class DataWindow(PlotWidget):
         new_marker = CommentMarker(new_time, text, self)
         self.comments[new_time] = new_marker
 
+        marker.moving = False
+        
         self.comment_preview_enabled = False
         self.comment_preview.setVisible(False)
 

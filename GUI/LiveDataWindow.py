@@ -19,17 +19,23 @@ from TextEdit import TextEdit
 
 class LiveDataWindow(PlotWidget):
     """
-    Widget for visualizing real-time waveforms for incoming data streams
+    Widget for visualizing real-time waveform data streams with live updating.
 
-    Includes:
-    - Displays live waveform data from a queue
-    - Live mode with automatic scrolling
-    - Pause/resume live view to scroll back on data
-    - Zooming and panning (via `PanZoomViewBox`)
-    
-    Also handles rendering and downsampling for performance
+    Features:
+    - Displays incoming waveform data from a data queue.
+    - Supports live auto-scrolling or paused manual scrolling.
+    - Interactive baseline setting and comment annotations.
+    - Zooming and panning via custom PanZoomViewBox.
+    - Data downsampling for performance at different zoom levels.
+    - Export functionality for waveform data and comments.
     """
     def __init__(self):
+        """
+        Initializes the LiveDataWindow widget.
+
+        Sets up plotting area, UI elements, live mode state, baseline lines,
+        comment markers, and connects the custom viewbox.
+        """
         super().__init__(viewBox=PanZoomViewBox(datawindow=self))
 
         self.plot_item: PlotItem = self.getPlotItem()
@@ -111,6 +117,13 @@ class LiveDataWindow(PlotWidget):
         self.update_plot()
 
     def closeEvent(self, event):
+        """
+        Handles the widget close event. Stops the socket server connection
+        cleanly before closing the window.
+
+        Parameters:
+            event (QCloseEvent): The close event.
+        """
         self.socket_server.stop()
         super().closeEvent(event)
 
@@ -129,6 +142,15 @@ class LiveDataWindow(PlotWidget):
         return data_pos
     
     def recv_queue_loop(self):
+        """
+        Continuously receives data messages from the socket client's queue.
+
+        Parses incoming JSON data messages containing time and voltage values,
+        appends them to the internal data arrays, updates the current time,
+        and triggers plot updates.
+
+        Runs in a loop until the socket client stops.
+        """
         while self.socket_client.running:
             try:
                 # can include multiple commands/data in one message
@@ -165,8 +187,13 @@ class LiveDataWindow(PlotWidget):
         
     def update_plot(self):
         """
-        if live mode enabled then only plot visible data across 10 sec
-        else plot visible data of what the user scrolls to view
+        Updates the waveform plot based on the current data and view range.
+
+        If live mode is enabled, automatically scrolls to the latest data. If
+        paused, plots the currently visible range and disables x auto-scrolling.
+
+        Also manages scatter point visibility based on zoom level and calls
+        downsampling of the data for performance.
         """
         self.viewbox.setLimits(xMin=None, xMax=None, yMin=None, yMax=None) # clear stale data (avoids warning)
 
@@ -206,15 +233,23 @@ class LiveDataWindow(PlotWidget):
         self.viewbox.update()
 
     def set_live_mode(self, enabled: bool):
+        """
+        Enables or disables live auto-scrolling mode.
+
+        Parameters:
+            enabled (bool): True to enable live mode; False to pause.
+        """
         self.live_mode = enabled
         self.update_plot()
         return
     
     def downsample_visible(
         self, x_range: tuple[float, float] = None, max_points=4000, method = 'peak'
-    ) -> tuple[NDArray, NDArray]:
+    ) -> None:
         """
-        Downsamples waveform data in the visible range using the selected method. Modifies self.xy_rendered.
+        Downsamples waveform data in the visible x range using the selected method.
+        Modifies self.xy_rendered and sorts it.
+
         Parameters:
             x_range (tuple[float, float]): Optional x-axis range to downsample.
             max_points (int): Max number of points to plot.
@@ -308,9 +343,16 @@ class LiveDataWindow(PlotWidget):
         self.xy_rendered[1] = self.xy_rendered[1][sort_idx]
 
     def add_comment_dialog(self, comment_time: float) -> str | None:
-        """ Opens dialog to enter a comment for given timestamp.
-        Returns the comment text if accepted and non-empty, otherwise
-        returns None """
+        """
+        Opens a modal dialog to input a new comment for the given time.
+
+        Parameters:
+            comment_time (float): Timestamp at which to add the comment.
+
+        Returns:
+            str or None: The entered comment text if non-empty and accepted;
+                         otherwise None if cancelled or empty.
+        """
 
         dialog = QDialog(self)
         dialog.setWindowTitle(f"Add Comment @ {comment_time:.2f}s")
@@ -337,6 +379,14 @@ class LiveDataWindow(PlotWidget):
         return text if text else None
 
     def add_comment_to_past(self, click_time: float) -> None:
+        """
+        Adds a comment at the nearest valid past time to the clicked time.
+        Opens a dialog for text input, then creates a CommentMarker on
+        acceptance.
+
+        Parameters:
+            click_time (float): The clicked timestamp to add comment near.
+        """
         comment_time = self.find_nearest_time(click_time)
 
         text = self.add_comment_dialog(comment_time)
@@ -349,6 +399,10 @@ class LiveDataWindow(PlotWidget):
         self.update_plot()
     
     def add_comment_at_current(self) -> None:
+        """
+        Adds a comment at the current live time position. Opens a dialog
+        to enter comment text and creates a CommentMarker if accepted.
+        """
         # called when click add comment button or shift+Space when in live/paused mode
 
         # have live view paused in background
@@ -365,6 +419,14 @@ class LiveDataWindow(PlotWidget):
         self.update_plot()
 
     def move_comment_helper(self, marker: CommentMarker):
+        """
+        Prepares the interface for moving a comment marker.
+        Displays a preview vertical line at the mouse cursor position
+        and sets internal state to enable moving mode.
+
+        Parameters:
+            marker (CommentMarker): The comment marker to move.
+        """
         self.moving_comment = marker
         self.comment_preview_enabled = True
         self.comment_preview.setVisible(True)
@@ -376,6 +438,15 @@ class LiveDataWindow(PlotWidget):
         return
     
     def move_comment(self, marker: CommentMarker, click_time: float) -> None:
+        """
+        Moves an existing comment marker to a new time near the clicked
+        position. Removes the old marker and creates a new one at the
+        updated timestamp.
+
+        Parameters:
+            marker (CommentMarker): The comment marker to move.
+            click_time (float): The new timestamp to move the comment to.
+        """
         old_time = marker.time
         text = self.comments[old_time].text
 
@@ -390,16 +461,31 @@ class LiveDataWindow(PlotWidget):
         self.comment_preview_enabled = False
         self.comment_preview.setVisible(False)
 
+        marker.moving = False
         self.update_plot()
         return
     
     def edit_comment(self, marker: CommentMarker, new_text: str) -> None:
+        """
+        Updates the text of an existing comment marker.
+
+        Parameters:
+            marker (CommentMarker): The marker to update.
+            new_text (str): The new comment text.
+        """
         time = marker.time
         marker = self.comments[time]
         marker.text = new_text
         return
     
     def delete_comment(self, time: float) -> None:
+        """
+        Deletes the comment marker at the specified time.
+        Removes the marker from internal storage and the plot.
+
+        Parameters:
+            time (float): The timestamp of the comment to delete.
+        """
         # update dict
         marker = self.comments.pop(time)
         # remove marker from viewbox
@@ -407,7 +493,16 @@ class LiveDataWindow(PlotWidget):
         return
     
     def find_nearest_time(self, time: float) -> float:
-        """ for add comment in past and move comment need to find nearest valid time index"""
+        """
+        Finds the nearest valid time point to the specified time in the data.
+        Used for snapping comments to existing data points.
+
+        Parameters:
+            time (float): The target timestamp.
+
+        Returns:
+            float: The nearest timestamp available in the data.
+        """
         # xy rendered sorted in downsampling
         # find insertion point
         x = self.xy_rendered[0]
@@ -429,24 +524,15 @@ class LiveDataWindow(PlotWidget):
         nearest_time = x[nearest_idx]
         return float(nearest_time)
 
-    def set_baseline(self, event: QMouseEvent):
+    def set_baseline(self, y_pos: float):
         """
-        Sets a baseline at the clicked y-position and shows the baseline.
+        Sets the baseline at the y-position clicked by the user.
+        Displays the baseline line and disables baseline preview.
 
         Parameters:
-            event (QMouseEvent): The click event triggering baseline placement.
+            event (QMouseEvent): The mouse click event used to set baseline.
         """
-        # TODO: edit for when have edit mode functionality
-        point = self.window_to_viewbox(event.position())
-        x, y = point.x(), point.y()
-
-        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
-
-        if not (x_min <= x <= x_max and y_min <= y <= y_max):
-            return
-
-        
-        self.baseline.setPos(y)
+        self.baseline.setPos(y_pos)
         self.baseline.setVisible(True)
 
         self.baseline_preview_enabled = False
@@ -454,7 +540,13 @@ class LiveDataWindow(PlotWidget):
 
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        """ only move commment and add past comment func for now"""
+        """
+        Handles mouse press events for interactions such as moving comments
+        and setting baselines.
+
+        Parameters:
+            event (QMouseEvent): The mouse press event.
+        """
         super().mousePressEvent(event)
 
         point = self.window_to_viewbox(event.position())
@@ -468,15 +560,17 @@ class LiveDataWindow(PlotWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             # for moving comment
             if self.baseline_preview_enabled:
-                self.set_baseline(event)
-            elif self.comment_preview_enabled and self.moving_comment is not None and placing_in_view:
+                self.set_baseline(y)
+            elif self.comment_preview_enabled and self.moving_comment is not None:
                 self.move_comment(self.moving_comment, x)
                 self.moving_comment = None
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """
-        Handles key shortcuts for setting baseline ("B")
-        Handles key shortcuts for adding comment at current time ("Shift+Space").
+        Handles key press events for shortcuts.
+
+        - Shift+Space to add a comment at the current time.
+        - "B" key to toggle baseline preview mode.
 
         Parameters:
             event (QKeyEvent): The key press event.
@@ -500,12 +594,10 @@ class LiveDataWindow(PlotWidget):
         
         self.viewbox.update()
 
-    def keyReleaseEvent(self, event: QKeyEvent) -> None:
-        super().keyReleaseEvent(event)
-
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """
-        Delegates interaction to comment handlers.
+        Handles mouse move events to update baseline and comment previews.
+        Shows preview lines if enabled and updates plot accordingly.
 
         Parameters:
             event (QMouseEvent): The mouse move event.
@@ -531,11 +623,14 @@ class LiveDataWindow(PlotWidget):
                 self.comment_preview.setVisible(False)
 
         self.update_plot()
-        
         return
 
     def export_comments(self):
-        """ export comments in csv format """
+        """
+        Exports all current comments to a CSV file. Prompts user to select
+        a file location and writes comment times and texts to the file.
+        Shows a message box if no comments exist.
+        """
         
         if not self.comments:
             msg_box = QMessageBox(self)
@@ -562,7 +657,9 @@ class LiveDataWindow(PlotWidget):
         
     def export_df(self):
         """
-        Exports the most recent data as a new df
+        Exports the current waveform data and associated comments to a
+        CSV file. Prompts the user to select a file location. If no
+        data is available, shows a message box informing the user.
         """
         times = self.xy_data[0]
         volts = self.xy_data[1]
@@ -598,7 +695,11 @@ class LiveDataWindow(PlotWidget):
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         """
-        Forwards a scroll event to the custom viewbox.
+        Forwards mouse wheel scroll events to the custom PanZoomViewBox for
+        zooming behavior.
+
+        Parameters:
+            event (QWheelEvent): The wheel scroll event.
         """
         self.viewbox.wheelEvent(event)
         
