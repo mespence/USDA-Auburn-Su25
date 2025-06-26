@@ -232,8 +232,9 @@ class SocketServer:
 
         data_list = data["value"].split(",")
         msg = {
+            "source": "ENGR",
             "type": "data",
-            "value": (data_list[0], data_list[2])  # (timestamp, voltage)
+            "value": (data_list[0], data_list[2]),  # (timestamp, voltage)
         }
         cs_sock.sendall((json.dumps(msg) + "\n").encode("utf-8"))
 
@@ -407,7 +408,6 @@ class SocketClient(QObject):
                         peer_id = msg.get("peer_id")
                         status = msg.get("status")
                         is_connected = (status == "connected")
-                        #self.connectionChanged.emit(is_connected)
                         if peer_id != self.client_id:  # only care about the *other* client
                             self.peerConnectionChanged.emit(is_connected)
                     else:

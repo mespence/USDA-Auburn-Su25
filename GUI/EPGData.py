@@ -175,20 +175,40 @@ class EPGData:
         """
         if not file in self.dfs:
             raise Exception(f"{file} is not a key in self.dfs")
+        
 
-        df = self.dfs[file].copy()
-        df["time"] = df["time"].apply(lambda x: round(x, 2))
-        df = df.set_index("time")
-
+        df = self.dfs[file]
         section_to_column = {"labels": self.label_column, "probes": self.probe_column}
         col = section_to_column[section_type]
-        df[col] = df[col].astype(str)
-        df[col] = pd.NA
-        for time, label in transitions:
-            rounded_time = round(time, 2)
-            df.loc[rounded_time, col] = label
-        new_labels = df.reset_index()[col].ffill()
-        self.dfs[file][col] = new_labels
+
+        cleaned_transitions = [(round(t, 2), label) for t, label in transitions]
+
+        if not cleaned_transitions:
+            return
+        
+        # Build Series of transitions indexed by time
+        times, labels = zip(*cleaned_transitions)
+        transition_series = pd.Series(labels, index=times)
+
+        # Align with the time column (assumed to already match transition rounding)
+        aligned = transition_series.reindex(df["time"], method="ffill")
+
+        # Update label column
+        self.dfs[file][col] = aligned.reset_index(drop=True)
+
+        # df = self.dfs[file].copy()
+        # df["time"] = df["time"].round(2)
+        # df = df.set_index("time")
+
+        # section_to_column = {"labels": self.label_column, "probes": self.probe_column}
+        # col = section_to_column[section_type]
+        # df[col] = df[col].astype(str)
+        # df[col] = pd.NA
+        # for time, label in transitions:
+        #     rounded_time = round(time, 2)
+        #     df.loc[rounded_time, col] = label
+        # new_labels = df.reset_index()[col].ffill()
+        # self.dfs[file][col] = new_labels
 
     def get_transitions(self, file: str, section_type: str) -> list[tuple[float, str]]:
         """

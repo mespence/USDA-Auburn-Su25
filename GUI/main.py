@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QRunnable, pyqtSignal, QThreadPool, QObject, QEvent, Qt, QSize, QTimer
 from PyQt6.QtGui import QIcon, QFont, QFontDatabase, QAction
+from pyqtgraph import setConfigOptions
 
 from LoadingScreen import LoadingScreen
 from DataWindow import DataWindow
@@ -29,6 +30,11 @@ from LiveViewTab import LiveViewTab
 from LabelTab import LabelTab
 
 # from ModelSelector import ModelSelector
+
+
+if os.name == "nt":
+    print("Windows detected, running with OpenGL")
+    setConfigOptions(useOpenGL = True)
 
 
 class LabelingTask(QRunnable):

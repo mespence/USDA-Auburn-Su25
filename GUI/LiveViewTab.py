@@ -200,7 +200,6 @@ class LiveViewTab(QWidget):
                         acknowledged = True
                     continue
                 
-        
                 # parse message into individual commands
                 if isinstance(raw_message, dict):
                     messages = [raw_message]

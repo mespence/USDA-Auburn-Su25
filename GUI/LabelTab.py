@@ -2,9 +2,9 @@
 # LabelTab.py
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
-    QProgressBar, QToolButton, QSizePolicy
+    QProgressBar, QToolButton, QSizePolicy, QApplication
 )
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
 
 from DataWindow import DataWindow
@@ -32,9 +32,11 @@ class LabelTab(QWidget):
         self.epgdata.load_data(file)
 
         self.datawindow = DataWindow(self.epgdata)
-        #self.datawindow.plot_recording(file, "pre")
-        #self.datawindow.plot_transitions(file)
-        #self.datawindow.plot_comments(file)
+
+        QApplication.processEvents()
+        self.datawindow.plot_recording(file, "pre")
+        self.datawindow.plot_transitions(file)
+        self.datawindow.plot_comments(file)
 
         openDataButton = QPushButton("Open Data")
         openDataButton.clicked.connect(lambda: FileSelector.load_new_data(self.epgdata, self.datawindow))

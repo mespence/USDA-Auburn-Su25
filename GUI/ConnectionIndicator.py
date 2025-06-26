@@ -33,13 +33,13 @@ class ConnectionIndicator(QWidget):
                 border: 0px solid #AAAAAA;
                 border-radius: 7px;
             """)
-            self.text_label.setText("EPG Connected")
+            self.text_label.setText("ENGR Connected")
         else:
             self.indicator.setStyleSheet("""
                 background-color: #CC0044;  /* red */
                 border: 0px solid #AAAAAA;
                 border-radius: 7px;
             """)
-            self.text_label.setText("EPG Disconnected")
+            self.text_label.setText("ENGR Disconnected")
 
 
