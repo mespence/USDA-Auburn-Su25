@@ -389,12 +389,16 @@ class SocketClient(QObject):
                     if "SERVER SHUTDOWN" in line:
                         self.disconnect()
                         break
+                    elif line.strip() == "ack": # server acknowledgement
+                        self.recv_queue.put_nowait(line)
+                        continue
 
                     try:
                         msg = json.loads(line)
                     except json.JSONDecodeError:
+                       
                         # Fallback: non-JSON line, treat as plain message
-                        print("JSON Decode Error: placing raw in to queue")
+                        print(f"JSON Decode Error: placing raw message in to queue: {line}")
                         self.recv_queue.put_nowait(line)
                         continue
                     if msg.get("source") == self.client_id:

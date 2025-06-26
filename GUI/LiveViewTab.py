@@ -188,14 +188,19 @@ class LiveViewTab(QWidget):
         self.datawindow.add_comment_at_current()
 
     def _socket_recv_loop(self):
+
+        acknowledged = False # whether the client has been acknowledged by the server
         while self.socket_client.connected:
             try:
                 # NOTE: message can include multiple commands/data, i.e. "{<command1>}\n{<command2>}\n"
                 raw_message = self.socket_client.recv_queue.get(timeout=1.0)
-            except Empty:
-                continue  # restart the loop
 
-            try:
+                if not acknowledged:
+                    if raw_message.strip() == "ack":
+                        acknowledged = True
+                    continue
+                
+        
                 # parse message into individual commands
                 if isinstance(raw_message, dict):
                     messages = [raw_message]
@@ -250,6 +255,8 @@ class LiveViewTab(QWidget):
                             Qt.ConnectionType.QueuedConnection,
                             Q_ARG(dict, value),
                         )
+            except Empty:
+                continue  # restart the loop
 
             except Exception as e:
                 print("[CS RECIEVE LOOP ERROR]", e)
