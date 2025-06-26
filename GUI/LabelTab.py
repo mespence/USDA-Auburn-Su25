@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QIcon
 
-from DataWindow2 import DataWindow
+from DataWindow import DataWindow
 from EPGData import EPGData
 from Labeler import Labeler
 from Settings import Settings
