@@ -520,7 +520,6 @@ class DataWindow(PlotWidget):
         self.comments[new_time] = new_marker
 
         marker.moving = False
-        
         self.comment_preview_enabled = False
         self.comment_preview.setVisible(False)
 
@@ -856,29 +855,18 @@ class DataWindow(PlotWidget):
     def handle_labels(self):
         return
 
-    def set_baseline(self, event: QMouseEvent):
+    def set_baseline(self, y_pos: float):
         """
         Sets a baseline at the clicked y-position and shows the baseline.
 
         Parameters:
             event (QMouseEvent): The click event triggering baseline placement.
         """
-        # TODO: edit for when have edit mode functionality
-        point = self.window_to_viewbox(event.position())
-        x, y = point.x(), point.y()
-
-        (x_min, x_max), (y_min, y_max) = self.viewbox.viewRange()
-
-        if not (x_min <= x <= x_max and y_min <= y <= y_max):
-            return
-
-        
-        self.baseline.setPos(y)
+        self.baseline.setPos(y_pos)
         self.baseline.setVisible(True)
 
         self.baseline_preview_enabled = False
         self.baseline_preview.setVisible(False)
-
 
     def add_drop_transitions(self):
         return
@@ -935,9 +923,10 @@ class DataWindow(PlotWidget):
 
         if event.button() == Qt.MouseButton.LeftButton:
             if self.baseline_preview_enabled:
-                self.set_baseline(event)
+                if x_min <= x <= x_max and y_min <= y <= y_max:
+                    self.set_baseline(y)
             elif self.comment_preview_enabled and self.moving_comment is not None:
-                if x_min <= x <= x_max:
+                if x_min <= x <= x_max and y_min <= y <= y_max:
                     self.move_comment(self.moving_comment, x)
                     self.moving_comment = None
             else:
