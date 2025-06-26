@@ -658,6 +658,9 @@ class DataWindow(PlotWidget):
 
         self.comment_preview_enabled = False
         self.comment_preview.setVisible(False)
+
+        marker.moving = False
+
         return
 
     def edit_comment(self, marker: CommentMarker, new_text: str) -> None:
