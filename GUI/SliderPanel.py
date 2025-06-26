@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel, QComboBox, 
     QSlider, QLineEdit, QPushButton, QVBoxLayout, 
-    QGridLayout, QFrame
+    QHBoxLayout, QGridLayout, QFrame
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot
 
@@ -110,7 +110,36 @@ class SliderPanel(QWidget):
         grid.addWidget(self.excitation_freq, row, 1)
         grid.addWidget(QLabel("Hz"), row, 2)
 
+        layout.addLayout(grid)
 
+        # Buttons
+        self.on_button = QPushButton("ON", self)
+        self.start_button = QPushButton("START", self)
+        self.off_button  = QPushButton("OFF", self)
+        self.cancel_button  = QPushButton("Cancel", self)
+        self.revert_default_button  = QPushButton("Revert to Defaults", self)
+        self.apply_button  = QPushButton("Apply", self)
+        self.apply_close_button  = QPushButton("Apply & Close", self)
+
+        button_layout1 = QHBoxLayout()
+        button_layout1.addWidget(self.on_button)
+        button_layout1.addWidget(self.start_button)
+        button_layout1.addWidget(self.off_button)
+        layout.addLayout(button_layout1)
+
+        button_layout2 = QGridLayout()
+        button_layout2.addWidget(self.cancel_button, 0, 0)
+        button_layout2.addWidget(self.revert_default_button, 0, 1)
+        button_layout2.addWidget(self.apply_button, 1, 0)
+        button_layout2.addWidget(self.apply_close_button, 1, 1)
+
+        layout.addLayout(button_layout2)
+
+        layout.addStretch(1)
+        self.setLayout(layout)
+
+
+        
         self.controls = {
             "inputResistance": self.input_resistance,
             "pga1": self.pga1_slider,
@@ -124,6 +153,13 @@ class SliderPanel(QWidget):
             "d2": self.d2_slider,
             "d3": self.d3_slider,
             "excitationFrequency": self.excitation_freq,
+            "on": self.on_button,
+            "start": self.start_button,
+            "off": self.off_button,
+            "cancel": self.cancel_button,
+            "revert": self.revert_default_button,
+            "apply": self.apply_button,
+            "applyClose": self.apply_close_button
         }
 
         for label, item in self.controls.items():
@@ -131,25 +167,9 @@ class SliderPanel(QWidget):
                 item.valueChanged.connect(lambda val, l=label: self.send_control_update(l, val))
             elif isinstance(item, QComboBox):
                 item.currentTextChanged.connect(lambda text, l=label: self.send_control_update(l, text))
+            elif isinstance(item, QPushButton):
+                item.clicked.connect(lambda _, l=label: self.send_control_update(l, "clicked"))
 
-
-        layout.addLayout(grid)
-
-        # Buttons
-        button_grid = QGridLayout()
-        button_grid.addWidget(QPushButton("ON"), 0, 0)
-        button_grid.addWidget(QPushButton("START"), 0, 1)
-        button_grid.addWidget(QPushButton("OFF"), 0, 2)
-
-        button_grid.addWidget(QPushButton("Cancel"), 1, 0)
-        button_grid.addWidget(QPushButton("Revert to Defaults"), 1, 1)
-
-        button_grid.addWidget(QPushButton("Apply"), 2, 0)
-        button_grid.addWidget(QPushButton("Apply and Close"), 2, 1)
-
-        layout.addLayout(button_grid)
-        layout.addStretch(1)
-        self.setLayout(layout)
 
     def send_control_update(self, name, value):
         if self._suppress:

@@ -23,17 +23,15 @@ class SocketServer:
     Forwards EPG data and slider control events beteween the clients. 
     """
     def __init__(self, host = "localhost", port=16671):
-        super().__init__()
         self.host: str = host                                                   # use "localhost" for interal socket
         self.port: int = port                                                   # arbitrary port
         self.clients: dict[str, socket.socket] = {"CS": None, "ENGR": None}     # map of client IDs to their connection objects
         self.running = False                                                    # whether the server is running
-
-        self.control_state: dict = {}                                           # the dictionary containing the current state of the controls
-        
         self.ready_event = threading.Event()                                    # event to signal that the server is ready to receive connections
         self._server_socket: socket.socket = None                               # the socket connection
         self._current_time:float = time.perf_counter()                          # time tracker used in logging
+
+        self.control_state: dict = {}                                           # the dictionary containing the current state of the controls
 
     def start(self):
         """
@@ -100,7 +98,8 @@ class SocketServer:
         """
         client_id = None
         try:
-            client_id = sock.recv(1024).decode().strip().split("=")[1]  
+            client_id = sock.recv(1024).decode().strip().split("=")[1]
+            sock.sendall(b"ack\n")  # client acknowledged 
             if self.clients.get(client_id) is not None:  # duplicate connection
                 sock.close()
                 logging.info(f"[SOCKET] Ignoring duplicate client connection request from \"{client_id}\"")
@@ -112,18 +111,6 @@ class SocketServer:
             for peer_id, peer_sock in self.clients.items():
                 if peer_id != client_id and peer_sock:
                     self.broadcast_peer_status(peer_id, "connected", target=client_id)
-            # for peer_id, peer_sock in self.clients.items():
-            #     if peer_id != client_id and peer_sock:
-            #         msg = json.dumps({
-            #             "source": "socket",
-            #             "type": "peer_status",
-            #             "peer_id": peer_id,
-            #             "status": "connected"
-            #         }) + "\n"
-            #         try:
-            #             sock.sendall(msg.encode('utf-8'))
-            #         except:
-            #             pass
 
             # Notify other cilents of succesful connection
             self.broadcast_peer_status(client_id, "connected")
@@ -264,16 +251,25 @@ class SocketServer:
                 except Exception as e:
                     logging.warning(f"[SOCKET] Failed to send to {client_id}: {e}")
 
-
+  
 class SocketClient(QObject):
     """
     A client class to connect to the socket and handle sending/receiving data it.
     Incoming messages are pulled from the recieve queue, and outgoing messages are placed in the send queue.
     """
-    connectionChanged = pyqtSignal(bool)        # Whether this client is connected
-    peerConnectionChanged = pyqtSignal(bool)    # Whether the peer client is connected
+    connectionChanged = pyqtSignal(bool)        # emitted when this client's connection changes
+    peerConnectionChanged = pyqtSignal(bool)    # emitted when the other client's connection changes
 
-    def __init__(self, client_id, host="localhost", port=16671, parent = None):
+    def __init__(self, client_id, host="localhost", port=16671, parent: QObject = None):
+        """
+        Initializes a new SocketClient instance.
+
+        Parameters:
+            client_id (str): A unique identifier for this client (e.g., "CS" or "ENGR").
+            host (str): The server hostname or IP address to connect to.
+            port (int): The server port to connect to.
+            parent (QObject, optional): The parent QObject in the Qt hierarchy.
+        """
         super().__init__()
         self.client_id: str = client_id         # identifying string for this client (e.g., CS, ENGR) 
         self.host: str = host                   # use "localhost" for interal socket
@@ -285,7 +281,10 @@ class SocketClient(QObject):
         self._sock: socket.socket = None        # the socket connection
     def connect(self):
         """
-        Starts the client and initializes the connection to the socket.
+        Attempts to connect to the server and begin communication.
+        Starts background threads for sending and receiving data.
+        Sends the client ID immediately upon connection.
+        Emits `connectionChanged(True)` on success or `connectionChanged(False)` on failure.
         """
         try:
             self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -306,6 +305,11 @@ class SocketClient(QObject):
 
 
     def disconnect(self):
+        """
+        Gracefully disconnects from the server and closes the socket.
+        Stops background communication threads.
+        Emits `connectionChanged(False)` upon completion.
+        """
         self.connected = False
         self.connectionChanged.emit(False)
 
@@ -325,13 +329,19 @@ class SocketClient(QObject):
         
     def send(self, data: dict):
         """
-        Places a JSON-formatted dictionary in the send queue.
+        Queues a dictionary for sending to the server as a JSON-formatted message.
+
+        Parameters:
+            data (dict): The data to send.
         """
         self.send_queue.put_nowait(data)
 
     def receive(self):
         """
-        Gets a JSON-formatted dictionary from the receive queue if it's non-empty.
+        Attempts to retrieve a received message from the receive queue.
+
+        Returns:
+            (str or dict or None): The next message if available, or None if the queue is empty.
         """
         try:
             return self.recv_queue.get_nowait()
@@ -341,7 +351,9 @@ class SocketClient(QObject):
 
     def _send_loop(self):
         """
-        Background loop to handle outgoing messages.
+        Internal method: runs in a background thread.
+        Continuously reads from the send queue and transmits messages to the server.
+        Terminates if the socket is closed or an error occurs.
         """
         while self.connected:
             try:
@@ -357,7 +369,10 @@ class SocketClient(QObject):
 
     def _recv_loop(self):
         """
-        Background loop to handle incoming messages.
+        Internal method: runs in a background thread.
+        Continuously reads from the socket and places incoming messages into the receive queue.
+        Also handles peer connection status updates and filters self-originating messages.
+        Terminates if the socket is closed or an error occurs.
         """
         buffer = ""
         while self.connected:
@@ -388,6 +403,7 @@ class SocketClient(QObject):
                         peer_id = msg.get("peer_id")
                         status = msg.get("status")
                         is_connected = (status == "connected")
+                        #self.connectionChanged.emit(is_connected)
                         if peer_id != self.client_id:  # only care about the *other* client
                             self.peerConnectionChanged.emit(is_connected)
                     else:

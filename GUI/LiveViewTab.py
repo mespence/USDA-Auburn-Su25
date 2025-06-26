@@ -231,6 +231,7 @@ class LiveViewTab(QWidget):
                         source = message.get("source")
 
                         # Workaround to get set_control_value to run in the GUI thread
+                        # Might be cleaner to use signals, but this works for now
                         QMetaObject.invokeMethod(
                             self.slider_panel,
                             "set_control_value",
