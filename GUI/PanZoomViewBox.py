@@ -1,13 +1,10 @@
-from pyqtgraph import ViewBox
+from pyqtgraph import ViewBox, InfiniteLine
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QWheelEvent, QAction, QKeyEvent
 from PyQt6.QtWidgets import QMenu
 
-from pyqtgraph import InfiniteLine
-
 from Settings import Settings
-
 
 class PanZoomViewBox(ViewBox):
     """
@@ -49,7 +46,6 @@ class PanZoomViewBox(ViewBox):
             axis: Not used, kept for compatibility.
         """
 
-
         if self.datawindow is None:
             self.datawindow = self.parentItem().getViewWidget()
         
@@ -84,7 +80,6 @@ class PanZoomViewBox(ViewBox):
             else:
                 # x pan (disabled during live mode)
                 if not live:
-                    print("not live")
                     h_zoom_factor = 2e-4
                     dx = delta * h_zoom_factor * width
 
@@ -114,12 +109,9 @@ class PanZoomViewBox(ViewBox):
         (x_min, x_max), _ = self.viewRange()
         current_span = x_max - x_min
         if live:
-            print("live")
             new_span = current_span / zoom_factor
             self.datawindow.auto_scroll_window = new_span
-            print(new_span)
         else:
-            print("not live")
             center_x = center.x()
 
             # ensure 0 stays within 80% of viewbox limit
@@ -179,7 +171,6 @@ class PanZoomViewBox(ViewBox):
         """
         event.ignore()
 
-
     def contextMenuEvent(self, event):
         """
         Custom context menu for label editing and comment creation.
@@ -229,16 +220,14 @@ class PanZoomViewBox(ViewBox):
 
         add_comment = QAction("Add Comment", menu)
 
-        #action3 = QAction("Custom Option 3")
         menu.addMenu(label_type_dropdown)
         menu.addAction(add_comment)
-        #menu.addAction(action3)
 
         selected_action = menu.exec(event.screenPos())           
         if selected_action == label_type_dropdown:
-            print("Option 1 selected")
+            print("label drop")
         elif selected_action == add_comment:
             self.datawindow.add_comment_at_click(x)
-            print("Option 2 selected")
+            print("add comment")
         else:
             pass
