@@ -12,26 +12,43 @@ from Settings import Settings
 class PanZoomViewBox(ViewBox):
     """
     Custom ViewBox that overrides default mouse/scroll behavior to support
-    pan and zoom using wheel + modifiers.
+    pan and zoom using wheel + modifiers. Supports live mode locking
+    and boundary-limited zooming.
 
     Pan/Zoom behavior:
     - Ctrl + Scroll: horizontal/vertical zoom (with Shift)
     - Scroll only: pan (horizontal or vertical based on Shift)
+    - Arrow keys: zoom (left/right: x, up/down : y)
+    - Right-click: custom label/comment context menu
+    - Drag: disabled (reserved for selection tools)
     """
 
     def __init__(self, datawindow = None) -> None:
+        """
+        Initialize the custom ViewBox.
+
+        Parameters:
+            datawindow: Reference to the parent DataWindow.
+        """
         super().__init__()
         self.datawindow = None
         self.zoom_viewbox_limit: float = 0.8
 
     def wheelEvent(self, event: QWheelEvent, axis=None) -> None:
         """
-        Handles wheel input for zooming and panning, based on modifier keys.
+        Handle mouse wheel scroll events for zooming and panning based
+        on modifier keys.
 
-        - Ctrl: zoom
-        - Shift: vertical zoom or pan
+        - Ctrl + Shift: vertical zoom
+        - Ctrl: horizontal zoom
+        - Shift: vertical pan
         - No modifiers: horizontal pan
+
+        Parameters:
+            event (QWheelEvent): The wheel event object.
+            axis: Not used, kept for compatibility.
         """
+
 
         if self.datawindow is None:
             self.datawindow = self.parentItem().getViewWidget()
@@ -55,6 +72,7 @@ class PanZoomViewBox(ViewBox):
                 # x zoom
                 self.x_zoom(live, zoom_factor, center)
         else:
+            # pan
             (x_min, x_max), (y_min, y_max) = self.viewRange()
             width, height = x_max - x_min, y_max - y_min
 
@@ -64,8 +82,7 @@ class PanZoomViewBox(ViewBox):
                 dy = delta * v_zoom_factor * height
                 self.translateBy(y=dy)
             else:
-                # x pan
-                print("x")
+                # x pan (disabled during live mode)
                 if not live:
                     print("not live")
                     h_zoom_factor = 2e-4
@@ -74,21 +91,26 @@ class PanZoomViewBox(ViewBox):
                     new_x_min = x_min + dx
                     zero_ratio = - new_x_min / width
 
-                    # don't pan if it moves x=0 more than 80% across the ViewBox
+                    # prevent panning if x=0 moves past 80% from left edge
                     if zero_ratio > self.zoom_viewbox_limit:
-                        self.snap_within_viewbox(new_x_min, width) 
+                        self.snap_within_viewbox(width) 
                     else:
                         self.translateBy(x=dx)
 
         self.datawindow.update_plot()
         event.accept()
 
-    def snap_within_viewbox(self, x_min, width):
-        new_x_min = 0 - self.zoom_viewbox_limit * width
-        new_x_max = x_min + width
-        self.setXRange(new_x_min, new_x_max, padding=0)
+    def x_zoom(self, live, zoom_factor, center) -> None:
+        """
+        Perform horizontal zoom. Behavior differs between live
+        and paused modes.
 
-    def x_zoom(self, live, zoom_factor, center):
+        Parameters:
+            live (bool): Whether live mode is enabled.
+            zoom_factor (float): The zoom multiplier.
+            center (QPointF): The point (in data coordinates)
+                              around which to zoom.
+        """
         (x_min, x_max), _ = self.viewRange()
         current_span = x_max - x_min
         if live:
@@ -106,15 +128,33 @@ class PanZoomViewBox(ViewBox):
             zero_ratio = - new_x_min / new_width
 
             if zero_ratio > self.zoom_viewbox_limit:
-                self.snap_within_viewbox(new_x_min, new_width)
+                self.snap_within_viewbox(new_width)
             else:
                 self.scaleBy((1 / zoom_factor, 1), center)
         pass
 
+    def snap_within_viewbox(self, width):
+        """
+        Restrict panning or zooming to keep x=0 within 80% of the left edge.
+
+        Parameters:
+            width (float): Width of the visible view range.
+        """
+        new_x_min = 0 - self.zoom_viewbox_limit * width
+        new_x_max = new_x_min + width
+        self.setXRange(new_x_min, new_x_max, padding=0)
+
     def keyPressEvent(self, event: QKeyEvent) -> None:
+        """
+        Handle keyboard input for zooming with arrow keys.
+
+        Parameters:
+            event (QKeyEvent): The key press event.
+        """
+
         live = getattr(self.datawindow, "live_mode", False)
-        viewbox_rect = self.viewRect()
-        center = viewbox_rect.center()
+        center = self.viewRect().center()
+
         zoom_factor_in = 1.1
         zoom_factor_out = 0.9
 
@@ -142,9 +182,13 @@ class PanZoomViewBox(ViewBox):
 
     def contextMenuEvent(self, event):
         """
-        Displays a context menu for right-clicking on LabelAreas.
+        Custom context menu for label editing and comment creation.
 
-        Currently adds a label type submenu to change the label's classification.
+        Features:
+        - Change label type submenu
+        - Add comment option
+
+        Disabled in live mode.
         """
         if self.datawindow is None:
             self.datawindow = self.parentItem().getViewWidget()

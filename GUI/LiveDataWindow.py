@@ -196,6 +196,7 @@ class LiveDataWindow(PlotWidget):
         downsampling of the data for performance.
         """
         self.viewbox.setLimits(xMin=None, xMax=None, yMin=None, yMax=None) # clear stale data (avoids warning)
+        (x_min, x_max), _ = self.viewbox.viewRange()
 
         if self.live_mode:
             end = self.current_time
@@ -206,18 +207,16 @@ class LiveDataWindow(PlotWidget):
             self.leading_line.setPos(end+offset)
 
         else:
-            (x_min, x_max), _ = self.viewbox.viewRange()
             self.downsample_visible(x_range=(x_min, x_max))
             self.leading_line.setPos(self.current_time)
 
         # SCATTER
-        (x_min, x_max), _ = self.viewbox.viewRange()
-        plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
         time_span = x_max - x_min
 
         if time_span == 0:
             return float("inf")  # avoid division by zero
         
+        plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
         pix_per_second = plot_width / time_span
         default_pix_per_second = plot_width / self.default_scroll_window
         self.zoom_level = pix_per_second / default_pix_per_second
