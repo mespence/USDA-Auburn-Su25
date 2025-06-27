@@ -27,7 +27,7 @@ class LiveViewTab(QWidget):
 
         self.socket_client = SocketClient(client_id='CS', parent=self)
         self.socket_client.peerConnectionChanged.connect(self.connection_indicator.set_connected)
-        self.socket_client.peerConnectionChanged.connect(self.update_slider_button_state)
+        self.socket_client.peerConnectionChanged.connect(self.update_button_state)
         self.socket_client.connect()
 
         self.receive_loop = threading.Thread(target=self._socket_recv_loop, daemon=True)
@@ -40,15 +40,27 @@ class LiveViewTab(QWidget):
         self.pause_button.setCheckable(True)
         self.pause_button.setChecked(True)
         self.pause_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        # TODO: CHANGE COLOR OF BUTTONS
         self.pause_button.setStyleSheet("""
             QPushButton {
+                background-color: #379acc;
+                color: white;
+                border-radius: 3px;
+                padding: 5px;
+                outline: none;
+            } QPushButton:checked {
                 background-color: gray;
                 color: white;
                 border-radius: 3px;
                 padding: 5px;
                 outline: none;
-            }
-            QPushButton:focus {
+            } QPushButton:disabled {
+                background-color: gray;
+                color: white;
+                border-radius: 3px;
+                padding: 5px;
+                outline: none;
+            } QPushButton:focus {
                 border: 3px solid #4aa8ff;
                 padding: 2px;
             }
@@ -57,6 +69,8 @@ class LiveViewTab(QWidget):
 
         self.add_comment_button = QPushButton("Add Comment", self)
         self.add_comment_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.add_comment_button.setToolTip("Add Comment at Current Time")
+        # TODO: CHANGE COLOR OF BUTTONS
         self.add_comment_button.setStyleSheet("""
             QPushButton {
                 background-color: gray;
@@ -64,8 +78,13 @@ class LiveViewTab(QWidget):
                 border-radius: 3px;
                 padding: 5px;
                 outline: none;
-            }
-            QPushButton:focus {
+            } QPushButton:disabled {
+                background-color: gray;
+                color: white;
+                border-radius: 3px;
+                padding: 5px;
+                outline: none;
+            } QPushButton:focus {
                 border: 3px solid #4aa8ff;
                 padding: 2px;
             }
@@ -74,11 +93,13 @@ class LiveViewTab(QWidget):
         
         self.pause_button.setCheckable(True)
         self.pause_button.setChecked(True)
+        self.pause_button.setToolTip("Pause Live View")
         self.pause_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.pause_button.clicked.connect(self.toggle_live)
 
 
         self.slider_panel = SliderPanel(parent=self)
+        self.slider_panel.off_button.clicked.connect(self.end_recording)
         self.slider_button = QToolButton(parent=self)
         self.slider_button.setText("EPG Controls")
         self.slider_button.setIcon(QIcon("icons/sliders.svg"))
@@ -88,16 +109,18 @@ class LiveViewTab(QWidget):
         self.slider_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.slider_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.slider_button.clicked.connect(self.toggleSliders)
+        # TODO: CHANGE COLOR OF BUTTONS
         self.slider_button.setStyleSheet("""
             QToolButton {
                 outline: none;
-            }
+            } QToolButton:disabled {
+                background-color: gray
             QToolButton:focus {
                 outline 3px solid #4aa8ff;
             }
         """)
         self.slider_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.update_slider_button_state(False)
+        self.update_button_state(False)
         
 
         top_controls = QHBoxLayout()
@@ -122,9 +145,6 @@ class LiveViewTab(QWidget):
 
         self.setLayout(main_layout)
 
-
-        
-
     def toggleSliders(self):
         if not self.slider_button.isEnabled():
             return
@@ -136,56 +156,43 @@ class LiveViewTab(QWidget):
         else:
             self.slider_button.setToolTip("Hide control sliders")
 
-    def update_slider_button_state(self, is_connected: bool):
+    def update_button_state(self, is_connected: bool):
         """
-        Handles disabling the slider button when the EPG is not connected.
+        Handles disabling the slider, live view, and add comment button
+        when the EPG is not connected.
         """      
+        self.pause_button.setEnabled(is_connected)
+        self.add_comment_button.setEnabled(is_connected)
         self.slider_button.setEnabled(is_connected)
 
         if is_connected:
+            self.pause_button.setToolTip("Pause Live View")
+            self.add_comment_button.setToolTip("Add Comment at Current Time")
             self.slider_button.setToolTip("Open control sliders")
         else:
+            self.pause_button.setToolTip("Connect to EPG to enable live mode")
+            self.add_comment_button.setToolTip("Connect to EPG to enable commenting")
             self.slider_button.setToolTip("Connect to EPG to enable controls")
 
         self.slider_panel.hide()
-
 
     def toggle_live(self):
         live_mode = self.pause_button.isChecked()
 
         self.pause_button.setText("Pause Live View" if live_mode else "Live View")
-
-        if live_mode:
-            self.pause_button.setStyleSheet("""
-                                    QPushButton {
-                                        background-color: gray;
-                                        color: white;
-                                        border-radius: 3px;
-                                        padding: 5px;
-                                        outline: none;
-                                    }
-                                    QPushButton:focus {
-                                        border: 3px solid #4aa8ff;
-                                        padding: 2px;
-                                    }""")
-        else:
-            self.pause_button.setStyleSheet("""
-                                    QPushButton {
-                                        background-color: #379acc;
-                                        color: white;
-                                        border-radius: 3px;
-                                        padding: 5px;
-                                        outline: none;
-                                    }
-                                    QPushButton:focus {
-                                        border: 3px solid #4aa8ff;
-                                        padding: 2px;
-                                    }""")
-        
         self.datawindow.set_live_mode(live_mode)
 
     def call_add_comment(self):
         self.datawindow.add_comment_live()
+
+    def end_recording(self):
+        self.datawindow.live_mode = False
+        self.pause_button.setToolTip("Recording has ended")
+        self.pause_button.setChecked(False)
+        self.pause_button.setEnabled(False)
+
+        self.add_comment_button.setToolTip("Recording has ended")
+        self.add_comment_button.setEnabled(False)
 
     def _socket_recv_loop(self):
 

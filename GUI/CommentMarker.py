@@ -196,7 +196,7 @@ class CommentMarker():
         try:
             self.viewbox.sigTransformChanged.disconnect(self.update_position)
         except Exception as e:
-            print(f"[ERROR CM] disconnecting viewbox change signal: {e}")
+            print(f"[ERROR CommentMarker] disconnecting viewbox change signal: {e}")
 
 
     # def hoverIconEvent(self, event):

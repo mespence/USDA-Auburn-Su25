@@ -432,7 +432,7 @@ class DataWindow(PlotWidget):
         
         return
 
-    def add_comment(self, click_time: float) -> None:
+    def add_comment_at_click(self, click_time: float) -> None:
         """
         Adds via a dialog popup.
 
@@ -881,7 +881,7 @@ class DataWindow(PlotWidget):
         """
         if event.key() == Qt.Key.Key_R:
             self.reset_view()  
-        if event.key() == Qt.Key.Key_B:
+        elif event.key() == Qt.Key.Key_B:
             if self.baseline_preview_enabled:
                 # Turn it off
                 self.baseline_preview_enabled = False
@@ -895,6 +895,8 @@ class DataWindow(PlotWidget):
                 self.baseline_preview.setPos(y_pos)
             self.selection.deselect_all()
             self.selection.unhighlight_item(self.selection.hovered_item)
+        elif event.key() == Qt.Key.Key_Up or event.key() == Qt.Key.Key_Down or event.key() == Qt.Key.Key_Left or event.key() == Qt.Key.Key_Right:
+            self.viewbox.keyPressEvent(event)
 
         self.selection.key_press_event(event)
         self.viewbox.update()

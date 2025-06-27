@@ -200,7 +200,7 @@ class LiveDataWindow(PlotWidget):
         if self.live_mode:
             end = self.current_time
             start = end - self.auto_scroll_window
-            offset = 0.1 # when zoom great, ometimes leading line lags and is visible without offset
+            offset = 0.1 # when zoomed in, leading line lags with plotting so need offset to keep hidden
             self.viewbox.setXRange(start, end, padding=0)
             self.downsample_visible(x_range=(start, end))
             self.leading_line.setPos(end+offset)
@@ -378,7 +378,7 @@ class LiveDataWindow(PlotWidget):
         text = text.toPlainText().strip()
         return text if text else None
 
-    def add_comment(self, click_time: float) -> None:
+    def add_comment_at_click(self, click_time: float) -> None:
         """
         Adds a comment at the nearest valid past time to the clicked time.
         Opens a dialog for text input, then creates a CommentMarker on
@@ -537,7 +537,6 @@ class LiveDataWindow(PlotWidget):
 
         self.baseline_preview_enabled = False
         self.baseline_preview.setVisible(False)
-
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """
@@ -577,7 +576,7 @@ class LiveDataWindow(PlotWidget):
         """
         if event.key() == Qt.Key.Key_Space and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             self.add_comment_live()
-        if event.key() == Qt.Key.Key_B:
+        elif event.key() == Qt.Key.Key_B:
             if self.baseline_preview_enabled:
                 # Turn it off
                 self.baseline_preview_enabled = False
@@ -589,8 +588,8 @@ class LiveDataWindow(PlotWidget):
                 self.baseline_preview.setVisible(True)
                 y_pos = self.viewbox.mapSceneToView(self.mapToScene(self.mapFromGlobal(QCursor.pos()))).y()
                 self.baseline_preview.setPos(y_pos)
-        else:
-            super().keyPressEvent(event)
+        elif event.key() == Qt.Key.Key_Up or event.key() == Qt.Key.Key_Down or event.key() == Qt.Key.Key_Left or event.key() == Qt.Key.Key_Right:
+            self.viewbox.keyPressEvent(event)
         
         self.viewbox.update()
 

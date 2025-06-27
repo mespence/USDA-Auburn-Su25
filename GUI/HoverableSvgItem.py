@@ -179,4 +179,4 @@ class HoverableSvgItem(QGraphicsSvgItem):
         try:
             self.marker.viewbox.sigTransformChanged.disconnect(self.viewbox_change)
         except Exception as e:
-            print(f"[ERROR HSVGI] disconnecting viewbox change signal: {e}")
+            print(f"[ERROR HoverableSVGItem] disconnecting viewbox change signal: {e}")
