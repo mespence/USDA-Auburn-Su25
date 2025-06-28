@@ -13,9 +13,9 @@ from PyQt6.QtCore import QTimer, Qt, QPointF
 from PyQt6.QtGui import QWheelEvent, QMouseEvent, QCursor, QKeyEvent
 from PyQt6.QtWidgets import QApplication, QPushButton, QDialog, QVBoxLayout, QLabel, QDialogButtonBox, QMessageBox, QFileDialog
 
-from PanZoomViewBox import PanZoomViewBox
-from CommentMarker import CommentMarker
-from TextEdit import TextEdit
+from utils.PanZoomViewBox import PanZoomViewBox
+from utils.CommentMarker import CommentMarker
+from utils.TextEdit import TextEdit
 
 class LiveDataWindow(PlotWidget):
     """

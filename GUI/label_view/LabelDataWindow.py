@@ -20,9 +20,9 @@ from PyQt6.QtWidgets import (
 )
 
 from EPGData import EPGData
-from PanZoomViewBox import PanZoomViewBox
-from CommentMarker import CommentMarker
-from TextEdit import TextEdit
+from utils.PanZoomViewBox import PanZoomViewBox
+from utils.CommentMarker import CommentMarker
+from utils.TextEdit import TextEdit
 from settings.Settings import Settings
 from label_view.LabelArea import LabelArea
 from label_view.SelectionManager import Selection

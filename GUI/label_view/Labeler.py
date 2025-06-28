@@ -13,8 +13,6 @@ from PyQt6.QtGui import QCursor
 
 from label_view.ProbeSplitter import ProbeSplitter
 
-#from models import rf, tcn, unet, transformer
-
 class Labeler(QObject):
     start_labeling_progress = pyqtSignal(int, int)
     stopped_labeling = pyqtSignal()
