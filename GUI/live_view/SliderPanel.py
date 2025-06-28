@@ -5,9 +5,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot
 
-import sys
-
-
 
 class SliderPanel(QWidget):
     def __init__(self, parent: str = None):
@@ -137,8 +134,6 @@ class SliderPanel(QWidget):
 
         layout.addStretch(1)
         self.setLayout(layout)
-
-
         
         self.controls = {
             "inputResistance": self.input_resistance,
@@ -214,8 +209,3 @@ class SliderPanel(QWidget):
             self.set_control_value(name, value)
 
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = SliderPanel()
-    window.show()
-    sys.exit(app.exec())

@@ -3,11 +3,8 @@ from pyqtgraph import PlotWidget, InfiniteLine, mkPen, mkBrush
 from PyQt6.QtGui import QColor, QMouseEvent, QKeyEvent
 from PyQt6.QtCore import Qt, QPointF
 
-from LabelArea import LabelArea
-from Settings import Settings
-
-
-# werid multi select bugs still, multi delete
+from label_view.LabelArea import LabelArea
+from settings.Settings import Settings
 
 class Selection:
     """
@@ -35,7 +32,7 @@ class Selection:
         self.default_style = {
             'transition line': mkPen(color=Settings.plot_theme["TRANSITION_LINE_COLOR"], width=3),
             'baseline': mkPen(color=Settings.plot_theme["TRANSITION_LINE_COLOR"], width=2),
-            'text color': Settings.theme["FONT_COLOR_1"]
+            'text color': Settings.plot_theme["FONT_COLOR_1"]
         }
 
         self.highlighted_style = {
@@ -646,7 +643,8 @@ class Selection:
             QColor: The modified highlighted color.
         """
         h, s, l, a = color.getHslF()
-        highlighted_color = QColor.fromHslF(h, max(s, 1 - s**2), l * 0.8, a)    
+        saturation_scale = 1 if Settings.plot_theme["NAME"] == "DARK" else 1.5
+        highlighted_color = QColor.fromHslF(h, max(s, 1 - saturation_scale * s**2), l * 0.8, a)    
         return highlighted_color
 
     def unhighlight_item(self, item) -> None:

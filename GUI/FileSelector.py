@@ -4,11 +4,11 @@ import re
 
 from PyQt6.QtWidgets import QFileDialog
 
-from DataWindow import DataWindow
+from label_view.LabelDataWindow import LabelDataWindow
 from EPGData import EPGData
 
 class FileSelector:
-    def load_new_data(epgdata: EPGData, datawindow: DataWindow) -> None:
+    def load_new_data(epgdata: EPGData, datawindow: LabelDataWindow) -> None:
         datawindow.transition_mode = 'labels'
         file_dialog = QFileDialog()
         file_path, _ = file_dialog.getOpenFileUrl()

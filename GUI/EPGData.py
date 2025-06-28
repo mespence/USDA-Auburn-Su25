@@ -17,7 +17,7 @@ class EPGData:
         self.probe_column = "probes"
         self.prepost_suffix = "_rect"
         # self.current_file = 'test_recording.csv'
-        self.current_file = r"C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\sharpshooter_label3.csv"
+        self.current_file = r"D:\USDA-Auburn\CS-Repository\Exploration\Jonathan\Data\sharpshooter_label2.csv"
         self.dir_path = os.path.dirname(os.path.realpath(__file__))
 
     def load_data(self, file):

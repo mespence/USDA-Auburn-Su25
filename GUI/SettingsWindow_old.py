@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QColor
 from PyQt6.QtCore import pyqtSignal, QRandomGenerator, Qt, QSettings
 
-from Settings import Settings
+from settings.Settings import Settings
 
 class SettingsWindow(QWidget):
     # Emit signal from the settings window to objects that need

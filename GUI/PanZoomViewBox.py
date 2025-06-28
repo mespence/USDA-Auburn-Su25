@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QWheelEvent, QAction, QKeyEvent
 from PyQt6.QtWidgets import QMenu
 
-from Settings import Settings
+from settings.Settings import Settings
 
 class PanZoomViewBox(ViewBox):
     """

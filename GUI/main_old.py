@@ -11,7 +11,7 @@ from PyQt6.QtCharts import *
 from DataWindow import DataWindow
 from EPGData import EPGData
 from Labeler import Labeler
-from Settings import Settings
+from settings.Settings import Settings
 from FileSelector import FileSelector
 from SettingsWindow import SettingsWindow
 from ModelSelector import ModelSelector

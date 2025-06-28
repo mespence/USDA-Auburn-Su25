@@ -1,10 +1,14 @@
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QRadioButton, QCheckBox, QComboBox, QStackedWidget, QListWidget,
-    QListWidgetItem, QSpinBox, QFrame, QSizePolicy, QToolButton
+    QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
+    QFrame, QLabel, QToolButton, QSizePolicy
+)
+from PyQt6.QtGui import (
+    QColor, QBrush, QPen, QPainter,
+    QIcon, QMouseEvent, 
 )
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QColor, QIcon, QFont, QMouseEvent
+
+from settings.window.AppearanceTab import AppearanceTab
 
 class SidebarButton(QToolButton):
     def __init__(self, text: str, icon_path: str, index: int, parent=None):
@@ -47,6 +51,31 @@ class SidebarButton(QToolButton):
             self.clicked.emit()
         super().mouseReleaseEvent(event)
 
+class ColorDot(QToolButton):
+    def __init__(self, color: QColor, selected=False, parent=None):
+        super().__init__(parent)
+        self.color = color
+        self.selected = selected
+        self.setFixedSize(32, 32)
+        self.setCheckable(True)
+        self.setStyleSheet("border: none;")
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Draw outer ring if selected
+        if self.selected or self.isChecked():
+            pen = QPen(QColor("white"), 3)
+            painter.setPen(pen)
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        # Draw colored circle
+        brush = QBrush(self.color)
+        painter.setBrush(brush)
+        rect = self.rect().adjusted(4, 4, -4, -4)
+        painter.drawEllipse(rect)
 
 class SettingsWindow(QWidget):
     def __init__(self):
@@ -84,7 +113,7 @@ class SettingsWindow(QWidget):
 
         # === Right Panel ===
         self.stack = QStackedWidget()
-        self.stack.addWidget(self._create_appearance_tab())
+        self.stack.addWidget(AppearanceTab(self.stack))
         self.stack.addWidget(self._create_test_tab())
 
         main_layout.addWidget(self.sidebar_frame)
@@ -95,14 +124,6 @@ class SettingsWindow(QWidget):
         for i, btn in enumerate(self.buttons):
             btn.setChecked(i == index)
 
-    def _create_appearance_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        label = QLabel("Appearance Settings")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(label)
-        return tab
-
     def _create_test_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -110,12 +131,3 @@ class SettingsWindow(QWidget):
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(label)
         return tab
-    
-import sys
-from PyQt6.QtWidgets import QApplication
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = SettingsWindow()
-    window.show()
-    sys.exit(app.exec())

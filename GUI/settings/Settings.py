@@ -1,74 +1,74 @@
 from PyQt6.QtGui import QColor
 from PyQt6.QtCore import QRandomGenerator
 
-
-# === Theme Definitions ===
-LIGHT = {
-    "NAME":                     "LIGHT",
-    "BACKGROUND_COLOR_1":     "#F5F5F6",
-    "BACKGROUND_COLOR_2":     "#E6E9ED",
-    "POPUP_BACKGROUND_COLOR": "#F5F5F6",
-    "ACCENT_COLOR":           "#70AFEA",
-    "FONT_COLOR_1":           "#111132",
-    "FONT_COLOR_2":           "#B1B1BD",
-    "TEXT_FIELD_COLOR":       "#0A0808",
-    "BUTTON_COLOR":           "#E1E4E9",
-    "HYPERLINK COLOR":        "#6EB9FF", 
-    "WHITE_COLOR":            "#FFFFFF",
-    "BLACK_COLOR":            "#000000",
-}
-
-DARK = {
-    "NAME":                     "DARK",
-    "BACKGROUND_COLOR_1":     "#2D2D30",
-    "BACKGROUND_COLOR_2":     "#363638",
-    "POPUP_BACKGROUND_COLOR": "#39393c",
-    "ACCENT_COLOR":           "#2093FE",
-    "FONT_COLOR_1":           "#EBEBEB",
-    "FONT_COLOR_2":           "#BDBDBD",
-    "TEXT_FIELD_COLOR":       "#242428",
-    "BUTTON_COLOR":           "#424244",
-    "HYPERLINK COLOR":        "#8CC9FF", 
-    "WHITE_COLOR":            "#FFFFFF",
-    "BLACK_COLOR":            "#000000",
-}
-
-PLOT_LIGHT = {
-    "NAME":                     "LIGHT",
-    "BACKGROUND":             "#F5F5F6",
-    "FOREGROUND":             "#111132",
-    "AXIS_COLOR":             "#111132",
-    "FONT_COLOR_1":           "#111132",
-    "TRANSITION_LINE_COLOR":  "#464650",
-}
-
-PLOT_DARK = {
-    "NAME":                     "DARK",
-    "BACKGROUND":             "#1E1E1E",
-    "FOREGROUND":             "#888888",
-    "AXIS_COLOR":             "#EBEBEB",
-    "FONT_COLOR_1":           "#EBEBEB",
-    "TRANSITION_LINE_COLOR":  "#909092",
-}
-
-ACCENT_MAP = {
-    "RED":    {"LIGHT": "#F28585", "DARK": "#F25555"},
-    "ORANGE": {"LIGHT": "#EDB17A", "DARK": "#E1720B"},
-    "YELLOW": {"LIGHT": "#E0CC87", "DARK": "#AC8C1A"},
-    "GREEN":  {"LIGHT": "#8BC9C5", "DARK": "#27A341"},
-    "BLUE":   {"LIGHT": "#70AFEA", "DARK": "#2093FE"},
-    "PURPLE": {"LIGHT": "#A09EEF", "DARK": "#926BFF"},
-    "PINK":   {"LIGHT": "#DBA0C7", "DARK": "#E454C4"},
-}
-
-
-
 class Settings:
     """
     Global settings container for theme, label color mappings, and display options. \n
     Includes persistent theme selection, dynamic label color generation,
     and runtime-configurable display toggles.
     """
+    
+    # === Theme Definitions ===
+    LIGHT = {
+        "NAME":                     "LIGHT",
+        "BACKGROUND_COLOR_1":     "#F5F5F6",
+        "BACKGROUND_COLOR_2":     "#E6E9ED",
+        "POPUP_BACKGROUND_COLOR": "#F5F5F6",
+        "BORDER_COLOR":           "#CED1D4",
+        "ACCENT_COLOR":           "#70AFEA",
+        "FONT_COLOR_1":           "#111132",
+        "FONT_COLOR_2":           "#B1B1BD",
+        "TEXT_FIELD_COLOR":       "#0A0808",
+        "BUTTON_COLOR":           "#D6DBE3",
+        "HYPERLINK COLOR":        "#6EB9FF", 
+        "WHITE_COLOR":            "#FFFFFF",
+        "BLACK_COLOR":            "#000000",
+    }
+
+    DARK = {
+        "NAME":                     "DARK",
+        "BACKGROUND_COLOR_1":     "#2D2D30",
+        "BACKGROUND_COLOR_2":     "#363638",
+        "POPUP_BACKGROUND_COLOR": "#39393C",
+        "BORDER_COLOR":           "#1E1E1E",
+        "ACCENT_COLOR":           "#2093FE",
+        "FONT_COLOR_1":           "#EBEBEB",
+        "FONT_COLOR_2":           "#BDBDBD",
+        "TEXT_FIELD_COLOR":       "#242428",
+        "BUTTON_COLOR":           "#424244",
+        "HYPERLINK COLOR":        "#8CC9FF", 
+        "WHITE_COLOR":            "#FFFFFF",
+        "BLACK_COLOR":            "#000000",
+    }
+
+    PLOT_LIGHT = {
+        "NAME":                     "LIGHT",
+        "BACKGROUND":             "#F5F5F6",
+        "FOREGROUND":             "#111132",
+        "AXIS_COLOR":             "#111132",
+        "FONT_COLOR_1":           "#111132",
+        "TRANSITION_LINE_COLOR":  "#464650",
+    }
+
+    PLOT_DARK = {
+        "NAME":                     "DARK",
+        "BACKGROUND":             "#1E1E1E",
+        "FOREGROUND":             "#888888",
+        "AXIS_COLOR":             "#EBEBEB",
+        "FONT_COLOR_1":           "#EBEBEB",
+        "TRANSITION_LINE_COLOR":  "#909092",
+    }
+
+    ACCENT_MAP = {
+        "RED":    {"LIGHT": "#F28585", "DARK": "#F25555"},
+        "ORANGE": {"LIGHT": "#EDB17A", "DARK": "#E1720B"},
+        "YELLOW": {"LIGHT": "#E0CC87", "DARK": "#AC8C1A"},
+        "GREEN":  {"LIGHT": "#8BC9C5", "DARK": "#27A341"},
+        "BLUE":   {"LIGHT": "#70AFEA", "DARK": "#2093FE"},
+        "PURPLE": {"LIGHT": "#A09EEF", "DARK": "#926BFF"},
+        "PINK":   {"LIGHT": "#DBA0C7", "DARK": "#E454C4"},
+    }
+
     # === Static Variables ===
     theme: dict = DARK             # the main theme for the UI
     plot_theme: dict = PLOT_LIGHT  # the theme for the PlotWidgets
@@ -95,7 +95,7 @@ class Settings:
         if name_upper not in ["LIGHT", "DARK"]:
             raise KeyError(f"Invalid color '{name}'. Expected one of ['LIGHT', 'DARK]")
         #Settings.theme_name = name.lower()
-        Settings.theme = LIGHT if name_upper == "LIGHT" else DARK
+        Settings.theme = Settings.LIGHT if name_upper == "LIGHT" else Settings.DARK
         #change_accent_color(Settings.accent_color_name)
 
     @staticmethod
@@ -153,11 +153,11 @@ def change_accent_color(color: str) -> None:
     updating both LIGHT and DARK theme palettes accordingly.
     """
     color_upper = color.upper()
-    if color_upper not in ACCENT_MAP:
-        raise KeyError(f"Invalid color '{color}'. Expected one of {list(ACCENT_MAP.keys())}")
+    if color_upper not in Settings.ACCENT_MAP:
+        raise KeyError(f"Invalid color '{color}'. Expected one of {list(Settings.ACCENT_MAP.keys())}")
     Settings.accent_color_name = color_upper
-    LIGHT["ACCENT_COLOR"] = ACCENT_MAP[color_upper]['LIGHT']
-    DARK["ACCENT_COLOR"] = ACCENT_MAP[color_upper]['DARK']
+    Settings.LIGHT["ACCENT_COLOR"] = Settings.ACCENT_MAP[color_upper]['LIGHT']
+    Settings.DARK["ACCENT_COLOR"] = Settings.ACCENT_MAP[color_upper]['DARK']
 
 
 

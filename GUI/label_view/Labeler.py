@@ -7,10 +7,11 @@ sys.path.insert(1, '../ML/')
 """
 #from postprocessing import PostProcessor
 #from itertools import groupby
-from ProbeSplitter import ProbeSplitter
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QCursor
+
+from label_view.ProbeSplitter import ProbeSplitter
 
 #from models import rf, tcn, unet, transformer
 

@@ -7,12 +7,13 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
 
-from DataWindow import DataWindow
+
 from EPGData import EPGData
-from Labeler import Labeler
-from Settings import Settings
 from FileSelector import FileSelector
-from SettingsWindow import SettingsWindow
+from SettingsWindow_old import SettingsWindow
+from settings.Settings import Settings
+from label_view.LabelDataWindow import LabelDataWindow
+from label_view.Labeler import Labeler
 
 
 
@@ -31,7 +32,7 @@ class LabelTab(QWidget):
         file = self.epgdata.current_file
         self.epgdata.load_data(file)
 
-        self.datawindow = DataWindow(self.epgdata)
+        self.datawindow = LabelDataWindow(self.epgdata)
 
         QApplication.processEvents()
         self.datawindow.plot_recording(file, "pre")

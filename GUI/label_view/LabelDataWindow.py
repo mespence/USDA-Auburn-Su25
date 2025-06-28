@@ -21,13 +21,13 @@ from PyQt6.QtWidgets import (
 
 from EPGData import EPGData
 from PanZoomViewBox import PanZoomViewBox
-from Settings import Settings
-from LabelArea import LabelArea
 from CommentMarker import CommentMarker
-from SelectionManager import Selection
 from TextEdit import TextEdit
+from settings.Settings import Settings
+from label_view.LabelArea import LabelArea
+from label_view.SelectionManager import Selection
 
-class DataWindow(PlotWidget):
+class LabelDataWindow(PlotWidget):
     """
     Main widget for visualizing waveform recordings.
 
@@ -64,7 +64,7 @@ class DataWindow(PlotWidget):
         self.df = None
         
         self.xy_data: list[NDArray] = [None, None]  # x and y data actually rendered to the screen
-        self.curve: PlotDataItem = PlotDataItem(antialias=False, pen = Settings.data_line_color) 
+        self.curve: PlotDataItem = PlotDataItem(antialias=False, pen = mkPen(Settings.data_line_color, width=2)) 
         self.scatter: ScatterPlotItem = ScatterPlotItem(
             symbol="o", size=4, brush=Settings.data_line_color
         )  # the discrete points shown at high zooms

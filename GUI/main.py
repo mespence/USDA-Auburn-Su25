@@ -18,16 +18,16 @@ from PyQt6.QtGui import QIcon, QFont, QFontDatabase, QAction, QKeySequence
 from pyqtgraph import setConfigOptions
 
 from LoadingScreen import LoadingScreen
-from DataWindow import DataWindow
 from EPGData import EPGData
-from Labeler import Labeler
-from Settings import Settings
-
 from FileSelector import FileSelector
-from SettingsWindow import SettingsWindow
 
-from LiveViewTab import LiveViewTab
-from LabelTab import LabelTab
+from settings.Settings import Settings
+from SettingsWindow_old import SettingsWindow
+
+from live_view.LiveViewTab import LiveViewTab
+from label_view.LabelTab import LabelTab
+from label_view.LabelDataWindow import LabelDataWindow # TODO: remove this from main (import through LabelTab)
+from label_view.Labeler import Labeler
 
 # from ModelSelector import ModelSelector
 
@@ -39,12 +39,12 @@ if os.name == "nt":
 
 class LabelingTask(QRunnable):
     def __init__(
-        self, labeler: Labeler, epgdata: EPGData, datawindow: DataWindow
+        self, labeler: Labeler, epgdata: EPGData, datawindow: LabelDataWindow
     ) -> None:
         super().__init__()
         self.labeler: Labeler = labeler
         self.epgdata: EPGData = epgdata
-        self.datawindow: DataWindow = datawindow
+        self.datawindow: LabelDataWindow = datawindow
 
     def run(self) -> None:
         self.labeler.start_labeling(self.epgdata, self.datawindow)
@@ -215,7 +215,7 @@ class GlobalMouseTracker(QObject):
     def __init__(self, mainwindow: MainWindow):
         super().__init__()
         self.mainwindow: MainWindow = mainwindow
-        self.datawindow: DataWindow = mainwindow.label_tab.datawindow
+        self.datawindow: LabelDataWindow = mainwindow.label_tab.datawindow
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.MouseMove:

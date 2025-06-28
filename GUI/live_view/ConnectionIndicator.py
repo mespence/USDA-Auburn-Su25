@@ -1,6 +1,5 @@
 from PyQt6.QtWidgets import QWidget, QLabel, QHBoxLayout, QSizePolicy
 from PyQt6.QtCore import Qt
-import socket
 
 
 class ConnectionIndicator(QWidget):
