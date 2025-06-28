@@ -202,7 +202,7 @@ class PanZoomViewBox(ViewBox):
         menu = QMenu()
         label_type_dropdown = QMenu("Change Label Type", menu)
 
-        label_names = list(Settings.label_to_color.keys())
+        label_names = list(Settings.label_colors.keys())
         label_names.remove("END AREA")
         for label in label_names:            
             action = QAction(label, menu)

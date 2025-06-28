@@ -33,9 +33,9 @@ class Selection:
         self.datawindow: PlotWidget = plot_widget  # the parent PlotWidget (i.e. the DataWindow)
 
         self.default_style = {
-            'transition line': mkPen(color='#000000', width=2),
-            'baseline': mkPen(color='#808080', width=2),
-            'text color': '#000000'
+            'transition line': mkPen(color=Settings.plot_theme["TRANSITION_LINE_COLOR"], width=3),
+            'baseline': mkPen(color=Settings.plot_theme["TRANSITION_LINE_COLOR"], width=2),
+            'text color': Settings.theme["FONT_COLOR_1"]
         }
 
         self.highlighted_style = {
@@ -48,7 +48,7 @@ class Selection:
             'baseline': mkPen(color="#031A3B", width=6),
             'area': mkBrush(color='#0D6EFD80'),  # label area LinearRegionItems
             'text background': mkBrush(color='#0D6EFD90'),  # label area text backgrounds
-            'text color': "#FFFFFF"
+            'text color': Settings.theme["WHITE_COLOR"]
         }
 
         self.moving_mode: bool = False
@@ -151,7 +151,7 @@ class Selection:
             labels = self.datawindow.labels
             idx = labels.index(item)
 
-            item.area.setBrush(mkBrush(color=Settings.label_to_color[item.label]))
+            item.area.setBrush(mkBrush(color=Settings.get_label_color(item.label)))
             item.label_background.setBrush(mkBrush(item.get_background_color()))
             item.duration_background.setBrush(mkBrush(item.get_background_color()))
 
@@ -624,7 +624,7 @@ class Selection:
                     item.setPen(self.highlighted_style['transition line'])
 
             elif isinstance(item, LabelArea):
-                label_area_color = self.datawindow.composite_on_white(Settings.label_to_color[item.label])
+                label_area_color = self.datawindow.composite_on_white(Settings.get_label_color(item.label))
                 text_background_color = item.label_background.brush().color()
 
                 highlighted_area_color = self.get_highlighted_color(label_area_color)
@@ -646,9 +646,7 @@ class Selection:
             QColor: The modified highlighted color.
         """
         h, s, l, a = color.getHslF()
-        #highlighted_color = QColor.fromHslF(h, min(s * 5, 1), l * 0.9, a)
-        highlighted_color = QColor.fromHslF(h, max(s, 1 - s**2), l * 0.9, a)    
-        highlighted_color.setAlpha(200)
+        highlighted_color = QColor.fromHslF(h, max(s, 1 - s**2), l * 0.8, a)    
         return highlighted_color
 
     def unhighlight_item(self, item) -> None:
@@ -664,7 +662,7 @@ class Selection:
             else:
                 item.setPen(self.default_style['transition line'])
         if isinstance(item, LabelArea):
-            item.area.setBrush(mkBrush(color=Settings.label_to_color[item.label]))
+            item.area.setBrush(mkBrush(color=Settings.get_label_color(item.label)))
             item.label_background.setBrush(mkBrush(color=item.get_background_color()))
             item.duration_background.setBrush(mkBrush(color=item.get_background_color()))
 

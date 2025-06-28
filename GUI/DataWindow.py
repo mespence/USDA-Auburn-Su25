@@ -64,9 +64,9 @@ class DataWindow(PlotWidget):
         self.df = None
         
         self.xy_data: list[NDArray] = [None, None]  # x and y data actually rendered to the screen
-        self.curve: PlotDataItem = PlotDataItem(antialias=False, pen = Settings.line_color) 
+        self.curve: PlotDataItem = PlotDataItem(antialias=False, pen = Settings.data_line_color) 
         self.scatter: ScatterPlotItem = ScatterPlotItem(
-            symbol="o", size=4, brush="blue"
+            symbol="o", size=4, brush=Settings.data_line_color
         )  # the discrete points shown at high zooms
         self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
 
@@ -131,18 +131,34 @@ class DataWindow(PlotWidget):
         self.chart_height: int = 400
         self.setGeometry(0, 0, self.chart_width, self.chart_height)
 
-        self.setBackground("white")
-        self.setTitle("<b>SCIDO Waveform Editor</b>", color="black", size="12pt")
+
+        #bg_color = Settings.plot_theme["BACKGROUND"]
+        #fg_color = Settings.plot_theme["FOREGROUND"]
+        self.setBackground(Settings.plot_theme["BACKGROUND"])
+        self.setTitle("<b>SCIDO Waveform Editor</b>", size="12pt", color=Settings.plot_theme["FONT_COLOR_1"])
 
         self.viewbox.setBorder(mkPen("black", width=3))
 
         self.plot_item.addItem(self.curve)
         self.plot_item.addItem(self.scatter)
-        self.plot_item.setLabel("bottom", "<b>Time [s]</b>", color="black")
-        self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color="black")
-        self.plot_item.showGrid(x=Settings.show_grid, y=Settings.show_grid)
+        self.plot_item.setLabel("bottom", "<b>Time [s]</b>", color=Settings.plot_theme["FONT_COLOR_1"])
+        self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color=Settings.plot_theme["FONT_COLOR_1"])
+        self.plot_item.showAxis('top', show=True)
+        self.plot_item.showAxis('right', show=True)
+        self.plot_item.showGrid(x=Settings.show_h_grid, y=Settings.show_v_grid)
         self.plot_item.layout.setContentsMargins(30, 30, 30, 20)
         self.plot_item.enableAutoRange(False)
+
+        axis_color = Settings.plot_theme["AXIS_COLOR"]
+        self.plot_item.getAxis('left').setPen(axis_color)
+        self.plot_item.getAxis('bottom').setPen(axis_color)
+        self.plot_item.getAxis('right').setPen(axis_color)
+        self.plot_item.getAxis('top').setPen(axis_color)
+        self.plot_item.getAxis('top').setTicks([[]])  # disable ticks
+        self.plot_item.getAxis('right').setTicks([[]])
+
+
+
 
         self.curve.setClipToView(False)  # already done in manual downsampling
         self.scatter.setVisible(False)
@@ -163,14 +179,14 @@ class DataWindow(PlotWidget):
         """
         self.compression = 0
         self.compression_text = TextItem(
-            text=f"Compression: {self.compression: .1f}", color="black", anchor=(0, 0)
+            text=f"Compression: {self.compression: .1f}", color=Settings.plot_theme["FONT_COLOR_1"], anchor=(0, 0)
         )
         self.compression_text.setPos(QPointF(80, 15))
         self.scene().addItem(self.compression_text)
 
         self.zoom_level = 1
         self.zoom_text = TextItem(
-            text=f"Zoom: {self.zoom_level * 100}%", color="black", anchor=(0, 0)
+            text=f"Zoom: {self.zoom_level * 100}%", color=Settings.plot_theme["FONT_COLOR_1"], anchor=(0, 0)
         )
         self.zoom_text.setPos(QPointF(80, 30))
         self.scene().addItem(self.zoom_text)
@@ -362,12 +378,8 @@ class DataWindow(PlotWidget):
         default_pix_per_second = plot_width / file_length_sec
 
         self.zoom_level = pix_per_second / default_pix_per_second
-
-        # leave off decimal if zoom level is int
-        if abs(self.zoom_level - round(self.zoom_level)) < 1e-9:
-            self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .0f}%")
-        else:
-            self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .1f}%")
+        self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .0f}%")
+       
 
     def plot_recording(self, file: str, prepost: str = "post") -> None:
         """
@@ -736,6 +748,7 @@ class DataWindow(PlotWidget):
         """
         self.curve.setPen(mkPen(color))
         self.scatter.setPen(mkPen(color))  
+        Settings.data_line_color = color.name()
 
     def set_durations_visible(self, visible: bool):
         """

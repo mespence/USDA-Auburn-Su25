@@ -73,14 +73,14 @@ class LabelArea:
         self.text_metrics = QFontMetricsF(font)
 
         self.label = label   
-        self.label_text = TextItem(label, color='black', anchor=(0.5, 0.5))
+        self.label_text = TextItem(label, color=Settings.plot_theme["FONT_COLOR_1"], anchor=(0.5, 0.5))
         self.label_text.setFont(font)
         self.label_text.setPos(centered_x, label_y)
         
         self.viewbox.addItem(self.label_text)
 
         self.duration = dur
-        self.duration_text = TextItem(f"{dur:.2f}", color='black', anchor=(0.5, 0.5))
+        self.duration_text = TextItem(f"{dur:.2f}", color=Settings.plot_theme["FONT_COLOR_1"], anchor=(0.5, 0.5))
         self.duration_text.setFont(font)
         self.duration_text.setPos(centered_x, duration_y)
         self.viewbox.addItem(self.duration_text)
@@ -91,7 +91,7 @@ class LabelArea:
         self.transition_line = InfiniteLine(
             pos=time,
             angle=90,  # vertical
-            pen=mkPen(color='black', width=2),
+            pen=mkPen(color=Settings.plot_theme["TRANSITION_LINE_COLOR"], width=3),
             hoverPen=None,
             movable=False,
         )
@@ -100,7 +100,7 @@ class LabelArea:
         self.area = LinearRegionItem(
             values = (time, time + dur),
             orientation='vertical',
-            brush=mkBrush(color=Settings.label_to_color[self.label]),
+            brush=mkBrush(color=Settings.get_label_color(self.label)),
             hoverBrush=None,
             movable=False,
         )
@@ -239,11 +239,10 @@ class LabelArea:
         Returns:
             QColor: The background color.
         """
-        color = self.plot_widget.composite_on_white(Settings.label_to_color[self.label]) 
-        color = color.darker(110) # 10% darker
-        h, s, v, f = color.getHsvF()
-        color = QColor.fromHsvF(h, s * 1.8, v, f) # 80% more saturated
-        color.setAlpha(200)
+        color: QColor = self.plot_widget.composite_on_white(QColor(Settings.get_label_color(self.label)) )
+        color = color.darker(110) # 20% darker
+        h, s, v, a = color.getHsvF()
+        color = QColor.fromHsvF(h, min(1.0, s * 1.8), v, a) # up to 80% more saturated
         return color
             
     
@@ -270,7 +269,7 @@ class LabelArea:
         # update text and area if changed
         if self.label_text.toPlainText() != self.label:  # label changed
             self.label_text.setText(self.label)
-            self.area.setBrush(mkBrush(color=Settings.label_to_color[self.label]))
+            self.area.setBrush(mkBrush(color=Settings.get_label_color(self.label)))
             self.label_background.setBrush(mkBrush(color=self.get_background_color()))
             self.duration_background.setBrush(mkBrush(color=self.get_background_color()))
 

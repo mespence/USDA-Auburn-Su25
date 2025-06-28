@@ -114,9 +114,9 @@ class LiveViewTab(QWidget):
             QToolButton {
                 outline: none;
             } QToolButton:disabled {
-                background-color: gray
-            QToolButton:focus {
-                outline 3px solid #4aa8ff;
+                background-color: gray;
+            } QToolButton:focus {
+                outline: 3px solid #4aa8ff;
             }
         """)
         self.slider_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)

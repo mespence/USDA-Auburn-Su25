@@ -167,12 +167,10 @@ class SocketServer:
             while True:
                 if not self.clients.get(client_id):  # already removed externally
                     break
-
                 chunk = sock.recv(1024)
                 if not chunk:
                     logging.info(f"[SOCKET] Client \"{client_id}\" disconnected")
                     break
-                
                 buffer += chunk.decode('utf-8')
                 while "\n" in buffer:
                     line, buffer = buffer.split("\n", 1)
@@ -194,10 +192,14 @@ class SocketServer:
         except json.JSONDecodeError:
             logging.warning(f"[SOCKET] Invalid JSON from {client_id}: {message}")
             return
-        
+        print(type(message_dict), message_dict)
+        print("A")
         message_type = message_dict["type"] 
+        print("B")
         if message_type == "data": # time-voltage data
+            print("C")
             self._forward_data(message_dict)
+            print("D")
 
         elif message_type  == "control": # control value        
             if message_dict.get("source") == client_id:
@@ -230,11 +232,10 @@ class SocketServer:
                 self._current_time = time.perf_counter()
             return
 
-        data_list = data["value"].split(",")
         msg = {
             "source": "ENGR",
             "type": "data",
-            "value": (data_list[0], data_list[2]),  # (timestamp, voltage)
+            "value": tuple(data['value']),  # (timestamp, voltage)
         }
         cs_sock.sendall((json.dumps(msg) + "\n").encode("utf-8"))
 

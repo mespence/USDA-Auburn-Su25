@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QTabBar
 )
 from PyQt6.QtCore import QRunnable, pyqtSignal, QThreadPool, QObject, QEvent, Qt, QSize, QTimer
-from PyQt6.QtGui import QIcon, QFont, QFontDatabase, QAction
+from PyQt6.QtGui import QIcon, QFont, QFontDatabase, QAction, QKeySequence
 from pyqtgraph import setConfigOptions
 
 from LoadingScreen import LoadingScreen
@@ -70,7 +70,13 @@ class MainWindow(QMainWindow):
         # === Menu Bar ===
         menubar = QMenuBar(self)
         file_menu = QMenu("File", self)
-        file_menu.addAction("Open")
+
+        new_recording = file_menu.addAction("New recording")
+        new_recording.setShortcut(QKeySequence("Ctrl+N"))
+        #new_recording.triggered.connect(self.create_recording())
+
+        open_recording = file_menu.addAction("Open existing recording")
+        file_menu.addSeparator()
         export_comment_csv = file_menu.addAction("Export Comments")
         export_comment_csv.triggered.connect(self.export_comments_from_current_tab)
         export_data = file_menu.addAction("Export Data")
@@ -134,6 +140,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.live_view_tab.socket_server.stop()
         super().closeEvent(event)
+
 
     def export_comments_from_current_tab(self):
         current_widget = self.tabs.currentWidget()
@@ -251,11 +258,17 @@ def main():
     QApplication.processEvents()
 
     window = MainWindow()
+
+    window.tabs.setCurrentIndex(1)
+    QApplication.processEvents()
+    window.tabs.setCurrentIndex(0)
     
     # Display Focused
     window.showMaximized()
     window.raise_()
     window.activateWindow()
+
+    
     
     tracker = GlobalMouseTracker(window)
     app.installEventFilter(tracker)
