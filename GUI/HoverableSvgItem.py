@@ -1,6 +1,6 @@
-from PyQt6.QtWidgets import QGraphicsColorizeEffect, QGraphicsTextItem, QGraphicsRectItem
+from PyQt6.QtWidgets import QGraphicsColorizeEffect, QGraphicsTextItem, QGraphicsPathItem
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
-from PyQt6.QtGui import QColor, QPen, QFont
+from PyQt6.QtGui import QColor, QPen, QFont, QPainterPath
 from PyQt6.QtCore import Qt, QPointF
 
 def truncate(text: str, limit: int) -> str:
@@ -51,7 +51,11 @@ class HoverableSvgItem(QGraphicsSvgItem):
         self.preview = None
         self.text = None
         self.text_limit = 150
+        self.timestamp = None
         self.offset = QPointF()
+
+        self.padding = 5
+        self.radius = 8
 
         self.marker.viewbox.sigTransformChanged.connect(self.viewbox_change)
 
@@ -90,33 +94,62 @@ class HoverableSvgItem(QGraphicsSvgItem):
         performance issues or crashes caused by rapid creation and 
         deletion of QGraphics items.
         """
-        padding = 5
         max_width = 200
         scene = self.scene()
 
-        text_item = QGraphicsTextItem(truncate(
-                                        self.marker.text, 
-                                        self.text_limit))
+        # Timestamp text
+        time_text = QGraphicsTextItem(f"{self.marker.time:.2f}s")
+        time_font = QFont("Arial", 9)
+        time_font.setItalic(True)
+        time_text.setFont(time_font)
+        time_text.setDefaultTextColor(QColor("#888888"))
+
+        # Main comment text
+        text_item = QGraphicsTextItem(truncate(self.marker.text, self.text_limit))
         text_item.setTextWidth(max_width)
         text_item.setDefaultTextColor(Qt.GlobalColor.black)
-        text_item.setFont(QFont("Arial", 12))
+        text_item.setFont(QFont("Inter", 11))
 
+
+
+
+        # text_item = QGraphicsTextItem(truncate(
+        #                                 self.marker.text, 
+        #                                 self.text_limit))
+        # text_item.setTextWidth(max_width)
+        # text_item.setDefaultTextColor(Qt.GlobalColor.black)
+        # text_item.setFont(QFont("Inter", 11))
+
+        # Calculate dimensions
+        time_bounds = time_text.boundingRect()
         text_bounds = text_item.boundingRect()
-        box_width = text_bounds.width() + 2 * padding
-        box_height = text_bounds.height() + 2 * padding
 
-        rect = QGraphicsRectItem(0, 0, box_width, box_height)
+        print(time_bounds, text_bounds)
+
+        box_width = max(time_bounds.width(), text_bounds.width()) + 2 * self.padding
+
+        box_height = time_bounds.height() + text_bounds.height() + 3 * self.padding
+
+        path = QPainterPath()
+        path.addRoundedRect(0, 0, box_width, box_height, self.radius, self.radius)
+
+        rect = QGraphicsPathItem(path)      
         rect.setBrush(QColor("#ffffe1"))
         rect.setPen(QPen(QColor("#000000"), 1))
         rect.setZValue(20)
 
+        time_text.setParentItem(rect)
+        time_text.setPos(self.padding, self.padding)
+
         text_item.setParentItem(rect)
-        text_item.setPos(padding, padding)
+        text_item.setPos(self.padding, time_bounds.height() + self.padding)
 
         self.preview = rect
         self.text = text_item
-        scene.addItem(self.preview)
+        self.timestamp = time_text
         self.preview.setVisible(False)
+
+        scene.addItem(self.preview)
 
     def update_offset(self) -> None:
         """
@@ -148,14 +181,21 @@ class HoverableSvgItem(QGraphicsSvgItem):
         Parameters:
             new_text (str): The updated comment text.
         """
-        if self.text:
+        if self.text and self.preview:
             self.text.setPlainText(truncate(new_text, self.text_limit))
             # adjust rect width/height if text length changes
-            padding = 5
-            text_bounds  = self.text.boundingRect()
-            self.preview.setRect(0, 0,
-                                  text_bounds.width()  + 2*padding,
-                                  text_bounds.height() + 2*padding)
+            time_bounds = self.timestamp.boundingRect()
+            text_bounds = self.text.boundingRect()
+
+            box_width = max(time_bounds.width(), text_bounds.width()) + 2 * self.padding
+            box_height = time_bounds.height() + text_bounds.height() + 3 * self.padding
+
+            self.timestamp.setPos(self.padding, self.padding)
+            self.text.setPos(self.padding, time_bounds.height() + self.padding)
+
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, box_width, box_height, self.radius, self.radius)
+            self.preview.setPath(path)
             
     def viewbox_change(self) -> None:
         """
