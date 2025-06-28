@@ -45,37 +45,43 @@ def create_theme_preview(theme: dict, size=(150, 110)) -> QByteArray:
     def adjusted_rect(x, y, w, h) -> QRectF:
         adjust = border_width / 2
         return QRectF(x + adjust, y + adjust, w - border_width, h - border_width)
+    
 
+    # Header
     painter.setBrush(QColor(theme["BACKGROUND_COLOR_1"]))
     painter.setPen(QPen(QColor(theme["BORDER_COLOR"]), border_width))
     painter.drawRoundedRect(adjusted_rect(0, 0, width, height), 6, 6)
 
+    # Background
     painter.setBrush(QColor(theme["BACKGROUND_COLOR_2"]))
-    body_rect = adjusted_rect(0, 15, width, height - 15)
+    body_rect = adjusted_rect(0, 15, width - 0.5, height - 15) # -0.5 for weird subpixel positioning
     CustomRoundedRect(body_rect, blRadius=6, brRadius=6).draw(painter)
 
+    # Body
     outer_margin = 15
     painter.setBrush(QColor(theme["BACKGROUND_COLOR_1"]))
     popup_rect = adjusted_rect(outer_margin, 25, width - 2 * outer_margin, height - 55)
     CustomRoundedRect(popup_rect, 6, 6, 6, 6).draw(painter)
 
+    # Buttons
     painter.setPen(Qt.PenStyle.NoPen)
     button_spacing = 5
 
     painter.setBrush(QColor(theme["ACCENT_COLOR"]))
-    left_button_rect = adjusted_rect(outer_margin, 85, (width - button_spacing) / 2 - outer_margin, 15)
+    left_button_rect = adjusted_rect(outer_margin, 85, (width - button_spacing) / 2 - outer_margin , 15)
     CustomRoundedRect(left_button_rect, 6, 6, 6, 6).draw(painter)
 
     painter.setBrush(QColor(theme["BUTTON_COLOR"]))
-    right_button_rect = adjusted_rect(width / 2 + 5, 85, (width - button_spacing) / 2 - outer_margin, 15)
+    right_button_rect = adjusted_rect((width + button_spacing) / 2 , 85, (width - button_spacing) / 2 - outer_margin , 15)
     CustomRoundedRect(right_button_rect, 6, 6, 6, 6).draw(painter)
 
+    # Text Lines
     painter.setBrush(QColor(theme["FONT_COLOR_1"]))
     inner_margin = 25
     for i in range(3):
         top = int(35 + i * 12)
         width_line = (width - 2 * inner_margin) if i < 2 else (width - 2 * inner_margin) // 2
-        painter.drawRoundedRect(inner_margin, top, width_line, 6, 4, 4)
+        painter.drawRoundedRect(inner_margin, top, width_line, 6, 3, 3)
 
     painter.end()
     buffer.close()
