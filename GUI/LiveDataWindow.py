@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 import sys
+import datetime
 import json
 import csv
 import os
@@ -69,19 +70,26 @@ class LiveDataWindow(PlotWidget):
         self.periodic_backup_dir = "waveform_backups"
         os.makedirs(self.periodic_backup_dir, exist_ok=True)
 
-        self.waveform_backup_csv = os.path.join(self.periodic_backup_dir, "waveform_backup.csv")
-        self.comments_backup_csv = os.path.join(self.periodic_backup_dir, "comments_backup.csv")
+        # Base names for the backup files
+        self.waveform_backup_base = "waveform_backup"
+        self.comments_backup_base = "comments_backup"
+
+        # These will store the *current* active filenames, updated after each save
+        self.waveform_backup_path = os.path.join(self.periodic_backup_dir, "waveform_backup.csv")
+        self.comments_backup_path = os.path.join(self.periodic_backup_dir, "comments_backup.csv")
 
         self.last_saved_data_index = 0 # track how much waveform data has been saved
 
         # initialize CSV headers if files don't exist
-        if not os.path.exists(self.waveform_backup_csv):
-            pd.DataFrame(columns=['time', 'voltage']).to_csv(self.waveform_backup_csv)
-        if not os.path.exists(self.comments_backup_csv):
-            pd.DataFrame(columns=['time', 'comment']).to_csv(self.comments_backup_csv)
+        if not os.path.exists(self.waveform_backup_path):
+            pd.DataFrame(columns=['time', 'voltage']).to_csv(self.waveform_backup_path, index=False)
+        if not os.path.exists(self.comments_backup_path):
+            pd.DataFrame(columns=['time', 'comment']).to_csv(self.comments_backup_path, index=False)
 
         self.save_lock = threading.Lock() # to prevent concurrent writes
         self.is_saving = False # flag for ongoing background save
+
+        self.data_modified = False
 
         # time for periodic data savaing (5 sec)
         self.save_timer = QTimer(self)
@@ -173,7 +181,25 @@ class LiveDataWindow(PlotWidget):
 
         self.socket_server.stop()
 
-        self.export_df()
+        if self.data_modified: # check if any new data or modifications
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Unsaved Changes")
+            msg_box.setText("You have unsaved changes. Do you want to save them before exiting?")
+
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
+            msg_box.setDefaultButton(QMessageBox.StandardButton.Save)
+
+            reply = msg_box.exec()
+
+            if reply == QMessageBox.StandardButton.Save:
+                export_successful = self.export_df()
+                if not export_successful:
+                    # export_df cancelled by the user, so cancel closing application
+                    event.ignore()
+                    return
+            elif reply == QMessageBox.StandardButton.Cancel:
+                event.ignore()
+                return
 
         super().closeEvent(event)
 
@@ -248,6 +274,8 @@ class LiveDataWindow(PlotWidget):
 
         self.buffer_data.clear()
 
+        self.data_modified = True
+
     def timed_plot_update(self):
         """
         TODO
@@ -281,17 +309,33 @@ class LiveDataWindow(PlotWidget):
                     new_t_data = times[self.last_saved_data_index : current_data_size]
                     new_v_data = volts[self.last_saved_data_index : current_data_size]
                     df_to_append = pd.DataFrame({'time': new_t_data, 'voltage': new_v_data})
-                    df_to_append.to_csv(self.waveform_backup_csv, mode='a', header=False)
+                    df_to_append.to_csv(self.waveform_backup_path, mode='a', header=False, index=False)
                     self.last_saved_data_index = current_data_size
                     print(f"Appended {len(new_t_data)} new waveform points.")
 
                 if self.comments:
                     comments_list = [(t, marker.text) for t, marker in self.comments.items()]
                     comments_df = pd.DataFrame(comments_list, columns=['time', 'comment'])
-                    comments_df.to_csv(self.comments_backup_csv)
+                    comments_df.to_csv(self.comments_backup_path, index=False)
                 else:
                     # if no comments, backup file empty
-                    pd.DataFrame(columns=['time', 'comment']).to_csv(self.comments_backup_csv)
+                    pd.DataFrame(columns=['time', 'comment']).to_csv(self.comments_backup_path, index=False)
+
+                # rename file and path
+                current_utc_time = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S_UTC')
+                new_waveform_filename = os.path.join(
+                    self.periodic_backup_dir, f"{self.waveform_backup_base}_{current_utc_time}.csv"
+                )
+                os.rename(self.waveform_backup_path, new_waveform_filename)
+                    # print(f"Renamed waveform backup to {new_waveform_filename}")
+                self.waveform_backup_path = new_waveform_filename
+
+                new_comments_filename = os.path.join(
+                    self.periodic_backup_dir, f"{self.comments_backup_base}_{current_utc_time}.csv"
+                )
+                os.rename(self.comments_backup_path, new_comments_filename)
+                    # print(f"Renamed waveform backup to {new_waveform_filename}")
+                self.comments_backup_path = new_comments_filename
         
         except Exception as e:
             print(f"[PERIODIC SAVE ERROR] Could not save data: {e}")
@@ -537,6 +581,8 @@ class LiveDataWindow(PlotWidget):
         new_marker = CommentMarker(comment_time, text, self)
         self.comments[comment_time] = new_marker
         self.update_plot()
+
+        self.data_modified = True
     
     def add_comment_live(self) -> None:
         """
@@ -557,6 +603,8 @@ class LiveDataWindow(PlotWidget):
         self.comments[comment_time] = new_marker
 
         self.update_plot()
+
+        self.data_modified = True
 
     def move_comment_helper(self, marker: CommentMarker):
         """
@@ -602,6 +650,7 @@ class LiveDataWindow(PlotWidget):
         self.comment_preview.setVisible(False)
 
         marker.moving = False
+        self.data_modified = True
         return
     
     def edit_comment(self, marker: CommentMarker, new_text: str) -> None:
@@ -615,6 +664,7 @@ class LiveDataWindow(PlotWidget):
         time = marker.time
         marker = self.comments[time]
         marker.text = new_text
+        self.data_modified = True
         return
     
     def delete_comment(self, time: float) -> None:
@@ -629,6 +679,7 @@ class LiveDataWindow(PlotWidget):
         marker = self.comments.pop(time)
         # remove marker from viewbox
         marker.remove()
+        self.data_modified = True
         return
     
     def find_nearest_time(self, time: float) -> float:
@@ -794,7 +845,7 @@ class LiveDataWindow(PlotWidget):
         
         return
         
-    def export_df(self):
+    def export_df(self) -> bool:
         """
         TODO
         Exports the current waveform data and associated comments to a
@@ -803,7 +854,7 @@ class LiveDataWindow(PlotWidget):
         """
         self.integrate_buffer_to_np()
 
-        if len(self.xy_data[0]):
+        if not len(self.xy_data[0]) > 0:
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle("No Data")
             msg_box.setText("There is no data to export from this live viewing.")
@@ -834,7 +885,17 @@ class LiveDataWindow(PlotWidget):
             df.loc[df['time'] == comment_time, 'comments'] = comment.text
 
         df.to_csv(filename)
+
+        self.data_modified = False
+        
         return
+    
+    def perform_final_save(self):
+        """
+        TODO
+        """
+        with self.save_lock:
+            self.integrate
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         """
