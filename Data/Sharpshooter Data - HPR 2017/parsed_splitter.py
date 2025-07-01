@@ -1,11 +1,16 @@
+import os
 import pandas as pd
 from pathlib import Path
-import os
+
+
+###################################################################
+# This script splits parsed CSVs into labeled and unlabeled files.
+###################################################################
 
 DATA_DIR = os.path.dirname(os.path.realpath(__file__))
-CSV_DIR = Path(DATA_DIR + r"\temp")
-LABELED_DIR = DATA_DIR + r"\sharpshooter_labeled_1"
-UNLABELED_DIR = DATA_DIR + r"\sharpshooter_unlabeled_1"
+CSV_DIR = Path(DATA_DIR + r"\sharpshooter_parsed")
+LABELED_DIR = DATA_DIR + r"\sharpshooter_labeled"
+UNLABELED_DIR = DATA_DIR + r"\sharpshooter_unlabeled"
 
 # Loop through all .csv files in the folder
 for csv_path in CSV_DIR.glob("*.csv"):

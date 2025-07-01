@@ -1,13 +1,15 @@
+import os
+import re
 import pandas as pd
 import windaq as wdq
-import os
 from pathlib import Path
-import re
+
+
 
 ################################################################################################################
 # This parser pairs time-voltage data from .WDQ files with the corresponding labels from the label .CSV 
 # based on the ID of the bug (see structure below). It is written specifically for the HPR 2017 sharpshooter 
-# dataset (06/2017-07/2017, .WDQs and .CSV) provided by Dr. Backus, # though may be expandable in the future 
+# dataset (06/2017-07/2017, .WDQs and .CSV) provided by Dr. Backus, though may be expandable in the future 
 # if all of their data is structured according to these bug IDs.
 ################################################################################################################
 
@@ -29,18 +31,15 @@ import re
 
 # hardcoded IDs from legend
 BUG_IDS = [
-    "a06", "b06", "c06", "d06"
+    "a01", "a02", "a03", "a04", "a05", "a06", "a07", "a09", "a10", "a11",
+    "a12", "a13", "a15", "a16", "a17", "a082", "a088", "a144", "a148", "a192",
+    "b01", "b02", "b03", "b04", "b05", "b06", "b07", "b09", "b10", "b11",
+    "b12", "b13", "b15", "b16", "b17", "b184", "b188", "b196", "b202", "b206", "b208", 
+    "c01", "c02", "c03", "c06", "c07", "c08", "c09", "c10", "c11", "c12",
+    "c13", "c14", "c15", "c16", "c17", "c046", "c048", "c182", "c186", "c204",
+    "d01", "d02", "d03", "d06", "d07", "d08", "d09", "d10", "d11", "d12",
+    "d13", "d14", "d15", "d16", "d17", "d056", "d058", "d194", "d196", "d198",
 ]
-# BUG_IDS = [
-#     "a01", "a02", "a03", "a04", "a05", "a06", "a07", "a09", "a10", "a11",
-#     "a12", "a13", "a15", "a16", "a17", "a082", "a088", "a144", "a148", "a192",
-#     "b01", "b02", "b03", "b04", "b05", "b06", "b07", "b09", "b10", "b11",
-#     "b12", "b13", "b15", "b16", "b17", "b184", "b188", "b196", "b202", "b206", "b208", 
-#     "c01", "c02", "c03", "c06", "c07", "c08", "c09", "c10", "c11", "c12",
-#     "c13", "c14", "c15", "c16", "c17", "c046", "c048", "c182", "c186", "c204",
-#     "d01", "d02", "d03", "d06", "d07", "d08", "d09", "d10", "d11", "d12",
-#     "d13", "d14", "d15", "d16", "d17", "d056", "d058", "d194", "d196", "d198",
-# ]
 TREATMENT_MAP = {
     "a": "clean-grape",
     "b": "infec-grape",
@@ -49,8 +48,8 @@ TREATMENT_MAP = {
 }
 
 
-DATA_DIR = os.path.dirname(os.path.realpath(__file__))
-OUTPUT_DIR = DATA_DIR + r"\temp"
+DATA_DIR = os.path.dirname(os.path.realpath(__file__)) + r"\windaq_files"
+OUTPUT_DIR = DATA_DIR + r"\sharpshooter_parsed"
 CSV_PATH = DATA_DIR + r"\Backus BGSS 2017 HPR data - for Mudd CS.csv"
 
 label_df = pd.read_csv(CSV_PATH)
