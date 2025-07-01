@@ -13,6 +13,7 @@ class Settings:
             'C'     : QColor(  120, 120,    80, Settings.alpha),
             'C1'    : QColor(  120, 120,    80, Settings.alpha),
             'C2'    : QColor(  255, 128,   255, Settings.alpha),
+            'CG'    : QColor(60, 80,   255, Settings.alpha),
             'D'     : QColor(  200,   0,   255, Settings.alpha), 
             'DG'    : QColor(  200,   120,  60, Settings.alpha), 
             'F1'    : QColor(  0, 0,   120, Settings.alpha),
@@ -30,6 +31,7 @@ class Settings:
 			'N'     : QColor(  0, 255, 255, Settings.alpha),
 			'W'     : QColor(255, 215,   0, Settings.alpha),
 			'Z'     : QColor(255, 215,   0, Settings.alpha),
+            '2'     : QColor(100, 60,   60, Settings.alpha),
             'END AREA' : QColor(  0,   0,   0, 0)
 		}
         Settings.labels_to_show = {
