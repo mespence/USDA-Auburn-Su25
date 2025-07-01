@@ -6,6 +6,8 @@ from pandas import DataFrame
 import sys
 import json
 import csv
+import os
+import threading
 
 from pyqtgraph import PlotWidget, PlotItem, ScatterPlotItem, PlotDataItem, mkPen, InfiniteLine
 
@@ -43,9 +45,52 @@ class LiveDataWindow(PlotWidget):
         self.viewbox.datawindow = self
         self.viewbox.menu = None  # disable default menu
 
+        # --- DATA STORAGE ---
+        # np array xy_data holds all historical data
         self.xy_data: list[NDArray] = [np.array([]), np.array([])]
+
+        # temporary buffer for incoming data before concatenating to xy_data np array
+        self.buffer_data: list[tuple[float, float]] = []
+
+        # store currently rendered data (downsampled for display)
         self.xy_rendered: list[NDArray] = [np.array([]), np.array([])]
+
+        # track last rendered state to optimize plot updates
+        self.last_rendered_x_range: tuple[float, float] = (0, 0)
+        
+        # timer for plot updates (~60 fps)
+        self.plot_update_timer = QTimer(self)
+        self.plot_update_timer.setInterval(int(1000/60))
+        self.plot_update_timer.timeout.connect(self.timed_plot_update)
+        self.plot_update_timer.start()
+
+        # --- PERIODIC BACKUP SETTINGS ---
+        # for simplicity: create a subfolder in the current working directory to save
+        self.periodic_backup_dir = "waveform_backups"
+        os.makedirs(self.periodic_backup_dir, exist_ok=True)
+
+        self.waveform_backup_csv = os.path.join(self.periodic_backup_dir, "waveform_backup.csv")
+        self.comments_backup_csv = os.path.join(self.periodic_backup_dir, "comments_backup.csv")
+
+        self.last_saved_data_index = 0 # track how much waveform data has been saved
+
+        # initialize CSV headers if files don't exist
+        if not os.path.exists(self.waveform_backup_csv):
+            pd.DataFrame(columns=['time', 'voltage']).to_csv(self.waveform_backup_csv)
+        if not os.path.exists(self.comments_backup_csv):
+            pd.DataFrame(columns=['time', 'comment']).to_csv(self.comments_backup_csv)
+
+        self.save_lock = threading.Lock() # to prevent concurrent writes
+        self.is_saving = False # flag for ongoing background save
+
+        # time for periodic data savaing (5 sec)
+        self.save_timer = QTimer(self)
+        self.save_timer.setInterval(5000) # 5000 ms = 5 sec
+        self.save_timer.timeout.connect(self.trigger_periodic_save)
+        self.save_timer.start()
+
         self.curve: PlotDataItem = PlotDataItem(pen=mkPen("blue", width=2))
+
         self.scatter: ScatterPlotItem = ScatterPlotItem(
             symbol="o", size=4, brush="blue"
         )  # the discrete points shown at high zooms
@@ -81,35 +126,31 @@ class LiveDataWindow(PlotWidget):
         self.default_scroll_window = 10
         self.auto_scroll_window = 10
 
-        # BASELINE
+        # --- BASELINE ---
         self.baseline: InfiniteLine = InfiniteLine(
             angle = 0, movable=True, pen=mkPen("gray", width = 3)
         )
         self.plot_item.addItem(self.baseline)
         self.baseline.setVisible(False)
-        
         self.baseline_preview: InfiniteLine = InfiniteLine(
             angle = 0, movable = False,
             pen=mkPen("gray", style = Qt.PenStyle.DashLine, width = 3),
         )
-
         self.addItem(self.baseline_preview)
         self.baseline_preview.setVisible(False)
         self.baseline_preview_enabled: bool = False
 
-        # COMMENTS
+        # --- COMMENTS ---
         self.comments: dict[float, CommentMarker] = {} # the dict of Comments
         self.comment_editing = False
 
-        # comment preview only for moving comment maybe can put this in moving comment func
+        # comment preview only for moving comment
         self.comment_preview: InfiniteLine = InfiniteLine(
             angle = 90, movable = False,
             pen=mkPen("gray", style = Qt.PenStyle.DashLine, width = 3),
         )
-
         self.addItem(self.comment_preview)
         self.comment_preview.setVisible(False)
-
         self.comment_preview_enabled: bool = False
         self.moving_comment: CommentMarker = None
         
@@ -124,7 +165,16 @@ class LiveDataWindow(PlotWidget):
         Parameters:
             event (QCloseEvent): The close event.
         """
+
+        if self.plot_update_timer.isActive():
+            self.plot_update_timer.stop()
+        if self.save_timer.isActive():
+            self.save_timer.stop()
+
         self.socket_server.stop()
+
+        self.export_df()
+
         super().closeEvent(event)
 
     def window_to_viewbox(self, point: QPointF) -> QPointF:
@@ -174,9 +224,8 @@ class LiveDataWindow(PlotWidget):
                     time = float(message['value'][0])
                     volt = float(message['value'][1])
 
-                    # this copies the np array each time to append so O(n)
-                    self.xy_data[0] = np.append(self.xy_data[0], time)
-                    self.xy_data[1] = np.append(self.xy_data[1], volt)   
+                    # append to buffer
+                    self.buffer_data.append((time, volt))
 
                     # update latest time input
                     self.current_time = time
@@ -184,52 +233,124 @@ class LiveDataWindow(PlotWidget):
 
             except Exception as e:
                 print("[RECIEVE LOOP ERROR]", e)
+
+    def integrate_buffer_to_np(self):
+        """
+        TODO
+        """
+
+        if not self.buffer_data:
+            return
         
+        # convert data to np array
+        new_xy_data = np.array([item for item in self.buffer_data], dtype=float)
+        self.xy_data = np.concatenate((self.xy_data, new_xy_data))
+
+        self.buffer_data.clear()
+
+    def timed_plot_update(self):
+        """
+        TODO
+        """
+
+        self.integrate_buffer_to_np()
+        self.update_plot()
+
+    def trigger_periodic_save(self):
+        if not self.is_saving:
+            self.is_saving = True
+            save_thread = threading.Thread(target=self.periodic_save_in_background, daemon=True)
+            save_thread.start()
+
+    def periodic_save_in_background(self):
+        """
+        TODO
+        Saves df and csv to file
+        """
+        
+        try:
+            with self.save_lock:
+                # ensure all buffer data integrated before saving data
+                self.integrate_buffer_to_np()
+                times = self.xy_data[0]
+                volts = self.xy_data[1]
+
+                # append new data
+                current_data_size = len(self.xy_data[0])
+                if current_data_size > self.last_saved_data_index:
+                    new_t_data = times[self.last_saved_data_index : current_data_size]
+                    new_v_data = volts[self.last_saved_data_index : current_data_size]
+                    df_to_append = pd.DataFrame({'time': new_t_data, 'voltage': new_v_data})
+                    df_to_append.to_csv(self.waveform_backup_csv, mode='a', header=False)
+                    self.last_saved_data_index = current_data_size
+                    print(f"Appended {len(new_t_data)} new waveform points.")
+
+                if self.comments:
+                    comments_list = [(t, marker.text) for t, marker in self.comments.items()]
+                    comments_df = pd.DataFrame(comments_list, columns=['time', 'comment'])
+                    comments_df.to_csv(self.comments_backup_csv)
+                else:
+                    # if no comments, backup file empty
+                    pd.DataFrame(columns=['time', 'comment']).to_csv(self.comments_backup_csv)
+        
+        except Exception as e:
+            print(f"[PERIODIC SAVE ERROR] Could not save data: {e}")
+        finally:
+            self.is_saving = False
+
     def update_plot(self):
         """
-        Updates the waveform plot based on the current data and view range.
-
-        If live mode is enabled, automatically scrolls to the latest data. If
-        paused, plots the currently visible range and disables x auto-scrolling.
-
-        Also manages scatter point visibility based on zoom level and calls
-        downsampling of the data for performance.
+        TODO
         """
+
+        current_x_range, _ = self.viewbox.viewRange()
+
+        rerender = False
+        if self.live_mode:
+            rerender = True
+        else:
+            if current_x_range != self.last_rendered_x_range:
+                rerender = True
+
+        if not rerender:
+            # no change in viewbox, just update leading line to follow live data
+            self.leading_line.setPos(self.current_time)
+            self.viewbox.update()
+            return
+
+        # rerender needed
         self.viewbox.setLimits(xMin=None, xMax=None, yMin=None, yMax=None) # clear stale data (avoids warning)
-        (x_min, x_max), _ = self.viewbox.viewRange()
 
         if self.live_mode:
             end = self.current_time
             start = end - self.auto_scroll_window
             offset = 0.1 # when zoomed in, leading line lags with plotting so need offset to keep hidden
             self.viewbox.setXRange(start, end, padding=0)
-            self.downsample_visible(x_range=(start, end))
+            self.downsample_visible(self.xy_data, x_range=(start, end))
             self.leading_line.setPos(end+offset)
-
         else:
-            self.downsample_visible(x_range=(x_min, x_max))
+            self.downsample_visible(self.xy_data, x_range=current_x_range)
             self.leading_line.setPos(self.current_time)
 
         # SCATTER
-        time_span = x_max - x_min
-
-        if time_span == 0:
-            return float("inf")  # avoid division by zero
-        
+        time_span = current_x_range[1] - current_x_range[0]
         plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
-        pix_per_second = plot_width / time_span
+        pix_per_second = plot_width / time_span if time_span != 0 else float("inf")
         default_pix_per_second = plot_width / self.default_scroll_window
         self.zoom_level = pix_per_second / default_pix_per_second
 
         # scatter if zoom is greater than 300%
-        if self.zoom_level >= 3:
-            self.scatter.setVisible(True)
+        self.scatter.setVisible(self.zoom_level >= 3)
+        if self.scatter.isVisible():
             self.scatter.setData(self.xy_rendered[0], self.xy_rendered[1])
         else:
-            self.scatter.setVisible(False)
+            self.scatter.setData([], []) # clear scatter data when not visible
 
         self.curve.setData(self.xy_rendered[0], self.xy_rendered[1])
         self.viewbox.update()
+
+        # update last rendered range
+        self.last_rendered_x_range = current_x_range
 
     def set_live_mode(self, enabled: bool):
         """
@@ -243,13 +364,15 @@ class LiveDataWindow(PlotWidget):
         return
     
     def downsample_visible(
-        self, x_range: tuple[float, float] = None, max_points=4000, method = 'peak'
+        self, full_xy_data: NDArray, x_range: tuple[float, float] = None, max_points=4000, method = 'peak'
     ) -> None:
         """
         Downsamples waveform data in the visible x range using the selected method.
-        Modifies self.xy_rendered and sorts it.
+        Modifies self.xy_rendered and sorts it (efficient for comment insertion idx
+        finding).
 
         Parameters:
+            xy (NDArray): full xy data array.
             x_range (tuple[float, float]): Optional x-axis range to downsample.
             max_points (int): Max number of points to plot.
             method (str): 'subsample', 'mean', or 'peak' downsampling method.
@@ -259,7 +382,7 @@ class LiveDataWindow(PlotWidget):
             `mean` averages each bin
             `peak` returns the min and max point of each bin (slowest, best looking)
         """
-        x, y = self.xy_data
+        x, y = full_xy_data
 
         # Filter to x_range if provided
         if x_range is not None:
@@ -274,40 +397,58 @@ class LiveDataWindow(PlotWidget):
                 right_idx = min(len(x), right_idx + 1)
   
   
-            x = x[left_idx:right_idx].copy()
-            y = y[left_idx:right_idx].copy()   
+            x_sliced = x[left_idx:right_idx].copy()
+            y_sliced = y[left_idx:right_idx].copy()   
+        else:
+            x_sliced = x.copy()
+            y_sliced = y.copy()   
     
-        num_points = len(x)
+        num_points = len(x_sliced)
 
         if num_points <= max_points:  # no downsampling needed
             # referencing self.xy_data
-            self.xy_rendered[0] = x
-            self.xy_rendered[1] = y
+            self.xy_rendered[0] = x_sliced
+            self.xy_rendered[1] = y_sliced
             return
 
         if method == 'subsampling': 
             stride = num_points // max_points
-            x_out = x[::stride].copy()
-            y_out = y[::stride].copy()
+            x_out = x_sliced[::stride].copy()
+            y_out = y_sliced[::stride].copy()
 
         elif method == 'mean':
             stride = num_points // max_points
             num_windows = num_points // stride
             start_idx = stride // 2
-            x_out = x[start_idx : start_idx + num_windows * stride : stride].copy()
-            y_out = y[:num_windows * stride].reshape(num_windows,stride).mean(axis=1)
+            x_out = x_sliced[start_idx : start_idx + num_windows * stride : stride].copy()
+            y_out = y_sliced[:num_windows * stride].reshape(num_windows, stride).mean(axis = 1)
         elif method == 'peak':
             stride = max(1, num_points // (max_points // 2))  # each window gives 2 points
             num_windows = num_points // stride
 
-            start_idx = stride // 2  # Choose a representative x (near center) for each window
-            x_win = x[start_idx : start_idx + num_windows * stride : stride]
-            x_out = np.repeat(x_win, 2)  # repeated for (x, y_min), (x, y_max)
+            x_win = x_sliced[stride // 2 : stride // 2 + num_windows * stride : stride]
+            y_reshaped = y_sliced[: num_windows * stride].reshape(num_windows, stride)
 
-            y_reshaped = y[: num_windows * stride].reshape(num_windows, stride)
+            # create output arrays for peaks
+            x_out = np.empty(num_windows * 2)
             y_out = np.empty(num_windows * 2)
+
+            # assign peaks
             y_out[::2] = y_reshaped.max(axis=1)
             y_out[1::2] = y_reshaped.min(axis=1)
+            x_out[::2] = x_win
+            x_out[1::2] = x_win
+
+
+            # PAST DOwnsample
+            # start_idx = stride // 2  # Choose a representative x (near center) for each window
+            # x_win = x_sliced[start_idx : start_idx + num_windows * stride : stride]
+            # x_out = np.repeat(x_win, 2)  # repeated for (x, y_min), (x, y_max)
+
+            # y_reshaped = y_sliced[: num_windows * stride].reshape(num_windows, stride)
+            # y_out = np.empty(num_windows * 2)
+            # y_out[::2] = y_reshaped.max(axis=1)
+            # y_out[1::2] = y_reshaped.min(axis=1)
 
             # if receive another mismatched shape error try this
                 # # Safely calculate number of full windows
@@ -461,7 +602,6 @@ class LiveDataWindow(PlotWidget):
         self.comment_preview.setVisible(False)
 
         marker.moving = False
-        self.update_plot()
         return
     
     def edit_comment(self, marker: CommentMarker, new_text: str) -> None:
@@ -562,6 +702,7 @@ class LiveDataWindow(PlotWidget):
             elif self.comment_preview_enabled and self.moving_comment is not None:
                 self.move_comment(self.moving_comment, x)
                 self.moving_comment = None
+            self.update_plot()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """
@@ -655,20 +796,32 @@ class LiveDataWindow(PlotWidget):
         
     def export_df(self):
         """
+        TODO
         Exports the current waveform data and associated comments to a
         CSV file. Prompts the user to select a file location. If no
         data is available, shows a message box informing the user.
         """
-        times = self.xy_data[0]
-        volts = self.xy_data[1]
+        self.integrate_buffer_to_np()
 
-        if len(times) == 0:
+        if len(self.xy_data[0]):
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle("No Data")
             msg_box.setText("There is no data to export from this live viewing.")
             msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
             msg_box.exec()
             return
+        
+        filename, _ = QFileDialog.getSaveFileName(
+            parent=self,
+            caption="Export Data As",
+            filter="CSV Files (*.csv);;All Files (*)"
+        )
+
+        if not filename:
+            return
+
+        times = self.xy_data[0]
+        volts = self.xy_data[1]
         
         df = DataFrame({
             "time": times,
@@ -680,15 +833,7 @@ class LiveDataWindow(PlotWidget):
         for comment_time, comment in self.comments.items():
             df.loc[df['time'] == comment_time, 'comments'] = comment.text
 
-        filename, _ = QFileDialog.getSaveFileName(
-            parent=self,
-            caption="Export Data As",
-            filter="CSV Files (*.csv);;All Files (*)"
-        )
-
-        if filename:
-            df.to_csv(filename)
-
+        df.to_csv(filename)
         return
 
     def wheelEvent(self, event: QWheelEvent) -> None:
