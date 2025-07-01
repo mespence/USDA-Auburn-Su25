@@ -1,5 +1,4 @@
 from pandas import read_csv, DataFrame
-from pathlib import Path
 import numpy as np
 import pandas as pd
 import re
@@ -20,9 +19,10 @@ class EPGData:
         self.dir_path = os.path.dirname(os.path.realpath(__file__))
         self.current_file = os.path.join(
             os.path.abspath(os.path.join(self.dir_path, "..")), # root dir
-            r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_d07_labeled.csv"
-        )
-        # self.current_file = 'test_recording.csv'
+            #r"GUI\test_recording.csv"
+            #r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
+            r"Data\Sharpshooter Data - HPR 2017\sharpshooter_parsed\sharpshooter_a01_raw.csv"
+        )        
        
         
 

@@ -2,7 +2,7 @@
 # LabelTab.py
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
-    QProgressBar, QToolButton, QSizePolicy, QApplication
+    QProgressBar, QScrollBar, QApplication
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
@@ -32,6 +32,46 @@ class LabelTab(QWidget):
         self.epgdata.load_data(file)
 
         self.datawindow = DataWindow(self.epgdata)
+        self.datawindow.viewbox.sigRangeChanged.connect(self.sync_view_to_scroll)
+
+        self.scrollbar = QScrollBar(Qt.Orientation.Horizontal)
+        self.scrollbar.setMinimum(0)
+        self.scrollbar.setMaximum(1000)
+        self.scrollbar.setPageStep(100) # value dynamically updated
+        self.scrollbar.installEventFilter(self)
+        self.scrollbar.sliderMoved.connect(self.sync_scroll_to_view)
+        # self.scrollbar.setStyleSheet("""
+        #     QScrollBar:horizontal {
+        #         background: #ddd;
+        #         height: 12px;
+        #         margin: 0px;
+        #         border-radius: 6px;
+        #     }
+
+        #     QScrollBar::handle:horizontal {
+        #         background: #666;
+        #         border-width: 1px;
+        #         border: 1px solid #000;
+        #         border-radius: 6px;
+        #         min-width: 40px;
+        #     }
+
+        #     QScrollBar::handle:horizontal:hover {
+        #         background: #444;
+        #     }
+
+        #     QScrollBar::add-line:horizontal,
+        #     QScrollBar::sub-line:horizontal {
+        #         background: none;
+        #         width: 0px;
+        #     }
+
+        #     QScrollBar::add-page:horizontal,
+        #     QScrollBar::sub-page:horizontal {
+        #         background: none;
+        #     }
+        # """)
+
 
         QApplication.processEvents()
         self.datawindow.plot_recording(file, "pre")
@@ -89,13 +129,16 @@ class LabelTab(QWidget):
         resetButton = QPushButton("Reset Zoom (R)")
         resetButton.clicked.connect(self.datawindow.reset_view)
 
-
-
         # Top layout
         top_controls = QHBoxLayout()
         top_controls.addWidget(settingsButton)
         top_controls.addWidget(self.modelChooser)
         top_controls.addWidget(resetButton)
+
+        # Plot Layout
+        plot_layout = QVBoxLayout()
+        plot_layout.addWidget(self.datawindow)
+        plot_layout.addWidget(self.scrollbar)
 
         # Bottom layout
         bottom_controls = QHBoxLayout()
@@ -112,7 +155,7 @@ class LabelTab(QWidget):
         # Main layout
         main_layout = QVBoxLayout()
         main_layout.addLayout(top_controls)
-        main_layout.addWidget(self.datawindow)
+        main_layout.addLayout(plot_layout) 
         main_layout.addLayout(bottom_controls)
         main_layout.addLayout(bottom_controls_2)
 
@@ -130,6 +173,63 @@ class LabelTab(QWidget):
 
         #self.openSettings()
 
+    def sync_scroll_to_view(self, slider_value: int):
+        if self.datawindow.df is None:
+            return
+
+        data_max = self.datawindow.df["time"].iloc[-1]
+        (x_min, x_max), _ = self.datawindow.viewbox.viewRange()
+        view_width = x_max - x_min
+
+        pan_min = -self.datawindow.viewbox.zoom_viewbox_limit * view_width
+        pan_max = data_max - (1 - self.datawindow.viewbox.zoom_viewbox_limit) * view_width
+        scroll_span = pan_max - pan_min
+
+        page_step = self.scrollbar.pageStep()
+        slider_max = self.scrollbar.maximum()
+        effective_range = slider_max - page_step
+
+        x_min = pan_min + (slider_value / effective_range) * (scroll_span - view_width)
+        x_min = max(pan_min, min(x_min, pan_max))
+        x_max = x_min + view_width
+
+        self.datawindow.viewbox.setXRange(x_min, x_max, padding=0)
+
+
+
+    def sync_view_to_scroll(self):
+        if self.datawindow.df is None:
+            return
+
+        data_max = self.datawindow.df["time"].iloc[-1]
+        (x_min, x_max), _ = self.datawindow.viewbox.viewRange()
+        view_width = x_max - x_min
+
+        pan_min = -self.datawindow.viewbox.zoom_viewbox_limit * view_width
+        pan_max = data_max - (1 - self.datawindow.viewbox.zoom_viewbox_limit) * view_width
+        scroll_span = pan_max - pan_min
+
+        slider_max = 1000
+        page_step = max(1, int((view_width / scroll_span) * slider_max))
+        effective_range = slider_max - page_step
+
+
+        # Clamp check: ensure slider_value = 0 or max at limits
+        if abs(x_min - pan_min) < 1e-6:
+            slider_value = 0
+        elif abs(x_max - pan_max) < 1e-6:
+            slider_value = effective_range
+        else:
+            slider_value = int(((x_min - pan_min) / (scroll_span - view_width)) * effective_range)
+
+        self.scrollbar.blockSignals(True)
+        self.scrollbar.setMaximum(slider_max)
+        self.scrollbar.setPageStep(page_step)
+        self.scrollbar.setValue(slider_value)
+        self.scrollbar.blockSignals(False)
+
+
+
     def update_progress(self, current, total):
         self.progressBar.setValue(int((current / total) * 100))
 
@@ -143,6 +243,11 @@ class LabelTab(QWidget):
         self.settings_window.show()
         self.settings_window.raise_()
         self.settings_window.activateWindow()
+
+    def eventFilter(self, obj, event):
+        if obj == self.scrollbar and event.type() == event.Type.Wheel:
+            return True  # block the wheel event
+        return super().eventFilter(obj, event)
 
 
 

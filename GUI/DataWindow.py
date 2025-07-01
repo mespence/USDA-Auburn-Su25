@@ -301,7 +301,7 @@ class DataWindow(PlotWidget):
     def update_compression(self) -> None:
         """
         Calculates the compression level based on the current zoom level.
-        Uses a WinDAQ-derived formula.
+        A compresion of 1 corresponds to 0.2 sec/division.
         """
         # """
         # update_compression updates the compression readout
@@ -329,7 +329,7 @@ class DataWindow(PlotWidget):
         pix_per_second = plot_width / time_span
         second_per_pix = 1 / (pix_per_second)
 
-        # Convert to compression based on WinDaq
+        # Convert to compression based on formula derived from experimenting with WinDaq
         self.compression = second_per_pix * 125
         self.compression_text.setText(f"Compression Level: {self.compression :.1f}")
 
@@ -362,12 +362,8 @@ class DataWindow(PlotWidget):
         default_pix_per_second = plot_width / file_length_sec
 
         self.zoom_level = pix_per_second / default_pix_per_second
-
-        # leave off decimal if zoom level is int
-        if abs(self.zoom_level - round(self.zoom_level)) < 1e-9:
-            self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .0f}%")
-        else:
-            self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .1f}%")
+        self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .0f}%")
+        
 
     def plot_recording(self, file: str, prepost: str = "post") -> None:
         """

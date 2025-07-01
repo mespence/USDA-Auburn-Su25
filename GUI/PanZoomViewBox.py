@@ -84,11 +84,14 @@ class PanZoomViewBox(ViewBox):
                     dx = delta * h_zoom_factor * width
 
                     new_x_min = x_min + dx
-                    zero_ratio = - new_x_min / width
+                    new_x_max = x_max + dx
+                    x_min_limit, x_max_limit = self.get_pan_limits(width)
 
                     # prevent panning if x=0 moves past 80% from left edge
-                    if zero_ratio > self.zoom_viewbox_limit:
-                        self.snap_within_viewbox(width) 
+                    if new_x_min < x_min_limit:
+                        self.setXRange(x_min_limit, x_min_limit + width, padding=0)
+                    elif new_x_max > x_max_limit:
+                        self.setXRange(x_max_limit - width, x_max_limit, padding=0)
                     else:
                         self.translateBy(x=dx)
 
@@ -117,24 +120,36 @@ class PanZoomViewBox(ViewBox):
             # ensure 0 stays within 80% of viewbox limit
             new_width = current_span / zoom_factor
             new_x_min = center_x - (center_x - x_min) / zoom_factor
-            zero_ratio = - new_x_min / new_width
+            new_x_max = new_x_min + new_width
+            x_min_limit, x_max_limit = self.get_pan_limits(new_width)
 
-            if zero_ratio > self.zoom_viewbox_limit:
-                self.snap_within_viewbox(new_width)
+            # Enforce both pan limits
+            if new_x_min < x_min_limit:
+                self.setXRange(x_min_limit, x_min_limit + new_width, padding=0)
+            elif new_x_max > x_max_limit:
+                self.setXRange(x_max_limit - new_width, x_max_limit, padding=0)
             else:
                 self.scaleBy((1 / zoom_factor, 1), center)
-        pass
 
-    def snap_within_viewbox(self, width):
+    def get_pan_limits(self, view_width: float) -> tuple[float, float]:
         """
-        Restrict panning or zooming to keep x=0 within 80% of the left edge.
+        Compute the min and max x-range allowed based on pan constraints.
 
         Parameters:
-            width (float): Width of the visible view range.
+            view_width (float): Width of the current view.
+
+        Returns:
+            (x_min_limit, x_max_limit): bounds for allowed panning
         """
-        new_x_min = 0 - self.zoom_viewbox_limit * width
-        new_x_max = new_x_min + width
-        self.setXRange(new_x_min, new_x_max, padding=0)
+        left_limit = -self.zoom_viewbox_limit * view_width 
+
+        if self.datawindow and self.datawindow.df is not None:
+            data_max = self.datawindow.df["time"].iloc[-1]
+            right_limit = data_max + self.zoom_viewbox_limit * view_width
+        else:
+            right_limit = float("inf")  # fail open
+
+        return left_limit, right_limit
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """
