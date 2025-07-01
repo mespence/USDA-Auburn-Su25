@@ -22,7 +22,7 @@ class EPGData:
             #r"GUI\test_recording.csv"
             #r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
             r"Data\Sharpshooter Data - HPR 2017\sharpshooter_parsed\sharpshooter_a01_raw.csv"
-            r"Data/Sharpshooter Data - HPR 2017/sharpshooter_parsed/sharpshooter_a01_raw.csv"
+            # r"Data/Sharpshooter Data - HPR 2017/sharpshooter_parsed/sharpshooter_a01_raw.csv"
         )        
        
         
