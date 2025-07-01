@@ -6,6 +6,7 @@ import json
 
 import csv
 
+# NOTE: run this file from the root of the repo
 
 recv_queue = queue.Queue()
 send_queue = queue.Queue()
@@ -17,9 +18,7 @@ def device_simulation():
     """
     Simulates a device reading (time, voltage) data every 0.01s
     """
-    # DATA_FILE = r"C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\sharpshooter_label3.csv"
-    DATA_FILE = r"/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Exploration/Jonathan/Data/sharpshooter_label2.csv"
-    # DATA_FILE = r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\Exploration\Jonathan\Data\sharpshooter_label2.csv"
+    DATA_FILE = r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
     with open(DATA_FILE, newline="") as file:
         reader = csv.reader(file)
         next(reader)  # skip header row
@@ -29,7 +28,7 @@ def device_simulation():
         # simulate sending data every 0.01s, 
         # taking into account execution time
         for row in reader:
-            data_row = f"{float(row[4]):.4f},DATA,{float(row[5]):.4f},0\n"
+            data_row = f"{float(row[1]):.4f},DATA,{float(row[3]):.4f},0\n"
             data_dict = {"type":"data", "value":data_row, "source": "ENGR"}
             send_queue.put_nowait(data_dict)
             next_time += interval

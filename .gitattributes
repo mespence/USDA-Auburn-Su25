@@ -1,0 +1,4 @@
+*.csv filter=lfs diff=lfs merge=lfs -text
+*.wdq filter=lfs diff=lfs merge=lfs -text
+*.WDQ filter=lfs diff=lfs merge=lfs -text
+Data filter=lfs diff=lfs merge=lfs -text

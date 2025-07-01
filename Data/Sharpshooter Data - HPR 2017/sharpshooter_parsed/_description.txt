@@ -1,0 +1,3 @@
+This `sharpshooter_parsed` folder contains the full data output by the parser, 
+including both the labeled and unlabeled sections. File lengths are all around 20 hrs.
+This data was split into the labeled in unlabeled folders, with each split file being about 10 hrs.
