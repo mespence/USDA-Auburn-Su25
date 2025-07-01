@@ -133,6 +133,11 @@ class MainWindow(QMainWindow):
     
     def closeEvent(self, event):
         self.live_view_tab.socket_server.stop()
+
+        current_widget = self.tabs.currentWidget()
+        if isinstance(current_widget, LiveViewTab):
+            current_widget.datawindow.closeEvent(event)
+
         super().closeEvent(event)
 
     def export_comments_from_current_tab(self):
