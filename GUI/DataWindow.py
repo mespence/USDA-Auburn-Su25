@@ -338,20 +338,22 @@ class DataWindow(PlotWidget):
         """
         Updates the displayed zoom percentage based on current vs full-scale width.
         """
-        plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
+        # plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
 
-        (x_min, x_max), _ = self.viewbox.viewRange()
-        time_span = x_max - x_min
+        # (x_min, x_max), _ = self.viewbox.viewRange()
+        # time_span = x_max - x_min
 
-        pix_per_second = plot_width / time_span
+        # pix_per_second = plot_width / time_span
 
-        if time_span == 0:
-            return float("inf")  # Avoid division by zero
+        # if time_span == 0:
+        #     return float("inf")  # Avoid division by zero
 
-        file_length_sec = self.df["time"].iloc[-1]
-        default_pix_per_second = plot_width / file_length_sec
+        # file_length_sec = self.df["time"].iloc[-1]
+        # default_pix_per_second = plot_width / file_length_sec
 
-        self.zoom_level = pix_per_second / default_pix_per_second
+        # self.zoom_level = pix_per_second / default_pix_per_second
+        # self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .0f}%")
+
         self.zoom_level = 1 / float(self.compression) if self.compression != 0 else 1
         if self.zoom_level < 0.5:
             precision = 2
@@ -377,7 +379,7 @@ class DataWindow(PlotWidget):
         if self.labels: # clear previous labels, if any
             self.selection.deselect_all()
             for label_area in self.labels[::-1]:
-                self.selection.delete_label_area(label_area, multi_delete=False)
+                self.selection.delete_label_area(label_area)
 
         self.file = file
         self.prepost = prepost
