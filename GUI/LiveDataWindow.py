@@ -5,7 +5,6 @@ import pandas as pd
 from pandas import DataFrame
 import sys
 import datetime
-import json
 import csv
 import os
 import threading
@@ -25,20 +24,23 @@ class LiveDataWindow(PlotWidget):
     Widget for visualizing real-time waveform data streams with live updating.
 
     Features:
-    - Displays incoming waveform data from a data queue.
+    - Displays continuous data from an incoming stream.
     - Supports live auto-scrolling or paused manual scrolling.
     - Interactive baseline setting and comment annotations.
     - Zooming and panning via custom PanZoomViewBox.
-    - Data downsampling for performance at different zoom levels.
+    - Data downsampling for performance rendering.
+    - Periodic auto-backup of waveform and comments.
     - Export functionality for waveform data and comments.
     """
     def __init__(self):
         """
         Initializes the LiveDataWindow widget.
 
-        Sets up plotting area, UI elements, live mode state, baseline lines,
-        comment markers, and connects the custom viewbox.
+        Sets up plotting area/custom viwebox and UI elements,
+        thread-safe data buffers, live rendering timer at ~60 Hz, 
+        periodiic auto-backup.
         """
+        # --- GENERAL INIT ITEMS ---
         super().__init__(viewBox=PanZoomViewBox(datawindow=self))
 
         self.plot_item: PlotItem = self.getPlotItem()
@@ -47,12 +49,12 @@ class LiveDataWindow(PlotWidget):
         self.viewbox.menu = None  # disable default menu
 
         # --- DATA STORAGE ---
-        # np array xy_data holds all historical data
+        # holds all historical data
         self.xy_data: list[NDArray] = [np.array([]), np.array([])]
 
-        # temporary buffer for incoming data before concatenating to xy_data np array
-        self.buffer_lock = threading.Lock()
+        # temporary buffer for incoming data, to be added to full xy_data every plot update
         self.buffer_data: list[tuple[float, float]] = []
+        self.buffer_lock = threading.Lock() # lock to prevent data loss
 
         # store currently rendered data (downsampled for display)
         self.xy_rendered: list[NDArray] = [np.array([]), np.array([])]
@@ -67,15 +69,16 @@ class LiveDataWindow(PlotWidget):
         self.plot_update_timer.start()
 
         # --- PERIODIC BACKUP SETTINGS ---
-        # for simplicity: create a subfolder in the current working directory to save
+        # for simplicity, save to subfolder in current working directory (GUI)
+        # TODO change when have initial program window where choose working directory
         self.periodic_backup_dir = "backups"
         os.makedirs(self.periodic_backup_dir, exist_ok=True)
 
-        # Base names for the backup files
+        # base names for the backup files
         self.waveform_backup_base = "waveform_backup"
         self.comments_backup_base = "comments_backup"
 
-        # These will store the *current* active filenames, updated after each save
+        # store the active filenames, updated after each save with utc time stamp
         self.waveform_backup_path = os.path.join(self.periodic_backup_dir, "waveform_backup.csv")
         self.comments_backup_path = os.path.join(self.periodic_backup_dir, "comments_backup.csv")
 
@@ -90,26 +93,23 @@ class LiveDataWindow(PlotWidget):
         self.save_lock = threading.Lock() # to prevent concurrent writes
         self.is_saving = False # flag for ongoing background save
 
-        self.data_modified = False
+        self.data_modified = False # flag for new data to append
 
-        # time for periodic data savaing (5 sec)
+        # timer for periodic background data saving (~5 sec)
         self.save_timer = QTimer(self)
-        self.save_timer.setInterval(5000) # 5000 ms = 5 sec
+        self.save_timer.setInterval(5000)
         self.save_timer.timeout.connect(self.trigger_periodic_save)
         self.save_timer.start()
 
+        # --- UI ELEMENTS ---
         self.curve: PlotDataItem = PlotDataItem(pen=mkPen("blue", width=2))
-
         self.scatter: ScatterPlotItem = ScatterPlotItem(
             symbol="o", size=4, brush="blue"
         )  # the discrete points shown at high zooms
         self.zoom_level: float = 1
-
-        # Setting up UI of graph (mimics datawindow)
         self.chart_width: int = 400
         self.chart_height: int = 400
         self.setGeometry(0, 0, self.chart_width, self.chart_height)
-
         self.setBackground("white")
         self.setTitle("<b>Live Waveform Viewer<b>", color="black", size="12pt")
         self.viewbox.setBorder(mkPen("black", width=3))
@@ -120,16 +120,16 @@ class LiveDataWindow(PlotWidget):
         self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color="black")
         self.plot_item.showGrid(x=True, y=True)
         self.plot_item.layout.setContentsMargins(30, 30, 30, 20)
+        self.plot_item.disableAutoRange() # no autoscaling
+
         self.leading_line: InfiniteLine = InfiniteLine(pos=0, angle=90, movable=False, pen=mkPen("red", width=3))
         self.addItem(self.leading_line)
-        self.viewbox.setYRange(-0.5, 1, padding=0)
 
-        # first sec enable auto range
-        self.plot_item.disableAutoRange()
+        # TODO change once have initial loading page for researcher to set range
+        self.viewbox.setYRange(-0.5, 1, padding=0)
 
         # Live mode button
         self.live_mode = True
-
         self.current_time = 0
         # for live view, follow only 10 seconds of visible data
         self.default_scroll_window = 10
@@ -168,14 +168,16 @@ class LiveDataWindow(PlotWidget):
 
     def closeEvent(self, event):
         """
-        Handles the widget close event. Stops the socket server connection
-        cleanly before closing the window.
+        Handles cleanup on window close.
+
+        Ensures all pending data in the buffer is integrated into the
+        full dataset, and saves a final backup of waveform and comment
+        data before closing if the user hasn't saved since new data 
+        was modified.
 
         Parameters:
-            event (QCloseEvent): The close event.
+            event (QCloseEvent): The close event triggered by the window system.
         """
-
-        print("closeEVENT", self.data_modified)
 
         if self.plot_update_timer.isActive():
             self.plot_update_timer.stop()
@@ -220,14 +222,18 @@ class LiveDataWindow(PlotWidget):
 
     def integrate_buffer_to_np(self):
         """
-        TODO
+        Transfers all buffered data into the full waveform dataset.
+
+        Thread-safe method that locks the buffer to prevent loss
+        during integration. Intended to be called during plot updates
+        or before closing the window.
         """
         with self.buffer_lock:
             if not self.buffer_data:
                 return
             
             # create local copy of buffer and clear orig, to release lock
-            data_to_process = self.buffer_data[:] # create shallow copy
+            data_to_process = self.buffer_data.copy()
             self.buffer_data.clear()
 
         # convert data to np array
@@ -239,20 +245,33 @@ class LiveDataWindow(PlotWidget):
 
     def timed_plot_update(self):
         """
-        TODO
+        Periodically triggers a refresh the plot.
+
+        - Moves data from the buffer to full storage.
+        - Calls update_plot()
         """
         self.integrate_buffer_to_np()
         self.update_plot()
 
     def trigger_periodic_save(self):
+        """
+        Periodically triggers a background save of waveform and comment data.
+
+        Actual saving is offloaded to a background thread.
+        """
         if not self.is_saving and self.data_modified:
             save_thread = threading.Thread(target=self.periodic_save_in_background, daemon=True)
             save_thread.start()
 
     def periodic_save_in_background(self):
         """
-        TODO
-        Saves df and csv to file
+        Performs a periodic backup save in a background thread.
+
+        Saves:
+            - Waveform data to CSV (appends new data)
+            - Comment data to separate CSV (rewrites each time)
+
+        Ensures filenames are updated with recent UTC timestamp.
         """
         
         with self.save_lock:
@@ -262,50 +281,54 @@ class LiveDataWindow(PlotWidget):
             times = self.xy_data[0].copy()
             volts = self.xy_data[1].copy()
             comments = self.comments.copy()
-
-            # append new data
         
-        try:
-            df_to_append = pd.DataFrame({'time': times[self.last_saved_data_index:], 'voltage': volts[self.last_saved_data_index:]})
-            df_to_append.to_csv(self.waveform_backup_path, mode='a', header=False, index=False)
+            try:
+                df_to_append = pd.DataFrame({'time': times[self.last_saved_data_index:], 'voltage': volts[self.last_saved_data_index:]})
+                df_to_append.to_csv(self.waveform_backup_path, mode='a', header=False, index=False)
 
-            comments_list = [{'time': t, 'comment': c.text} for t, c in comments.items()]
-            comments_df = pd.DataFrame(comments_list, columns=['time', 'comment'])
-            comments_df.to_csv(self.comments_backup_path, mode='w', header=True, index=False)
+                comments_list = [{'time': t, 'comment': c.text} for t, c in comments.items()]
+                comments_df = pd.DataFrame(comments_list, columns=['time', 'comment'])
+                comments_df.to_csv(self.comments_backup_path, mode='w', header=True, index=False)
 
-            current_utc_time = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')
-            # rename file and path
-            new_waveform_filename = os.path.join(
-                self.periodic_backup_dir, f"{self.waveform_backup_base}_{current_utc_time}.csv"
-            )
-            new_comments_filename = os.path.join(
-                self.periodic_backup_dir, f"{self.comments_backup_base}_{current_utc_time}.csv"
-            )
-            os.rename(self.waveform_backup_path, new_waveform_filename)
-            os.rename(self.comments_backup_path, new_comments_filename)
-            self.waveform_backup_path = new_waveform_filename
-            self.comments_backup_path = new_comments_filename
+                current_utc_time = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')
+                # rename file and path
+                new_waveform_filename = os.path.join(
+                    self.periodic_backup_dir, f"{self.waveform_backup_base}_{current_utc_time}.csv"
+                )
+                new_comments_filename = os.path.join(
+                    self.periodic_backup_dir, f"{self.comments_backup_base}_{current_utc_time}.csv"
+                )
+                os.rename(self.waveform_backup_path, new_waveform_filename)
+                os.rename(self.comments_backup_path, new_comments_filename)
+                self.waveform_backup_path = new_waveform_filename
+                self.comments_backup_path = new_comments_filename
 
-            self.last_saved_data_index = len(times)
-            self.data_modified = False
-            
-        except Exception as e:
-            print(f"[PERIODIC SAVE ERROR] Could not save data: {e}")
-        finally:
-            self.is_saving = False
+                self.last_saved_data_index = len(times)
+                self.data_modified = False
+                
+            except Exception as e:
+                print(f"[PERIODIC SAVE ERROR] Could not save data: {e}")
+            finally:
+                self.is_saving = False
 
     def update_plot(self):
         """
-        TODO
-        """
+        Redraws the waveform on the screen if live mode is enabled
+        or the user manually adjusts the viewbox.
 
+        - Computes the current view range from the ViewBox.
+        - Downsamples data if zoomed out.
+        - Updates the curve with new x and y values.
+        - Enables scatter for zoom levels greater than 300%
+        - Avoids unnecessary re-renders if the view hasn't changed.
+        """
         current_x_range, _ = self.viewbox.viewRange()
 
         rerender = False
         if self.live_mode:
             rerender = True
         else:
-            if current_x_range != self.last_rendered_x_range:
+            if current_x_range != self.last_rendered_x_range or current_x_range[1] > self.current_time:
                 rerender = True
 
         if not rerender:
@@ -434,17 +457,6 @@ class LiveDataWindow(PlotWidget):
             y_out[1::2] = y_reshaped.min(axis=1)
             x_out[::2] = x_win
             x_out[1::2] = x_win
-
-
-            # PAST DOwnsample
-            # start_idx = stride // 2  # Choose a representative x (near center) for each window
-            # x_win = x_sliced[start_idx : start_idx + num_windows * stride : stride]
-            # x_out = np.repeat(x_win, 2)  # repeated for (x, y_min), (x, y_max)
-
-            # y_reshaped = y_sliced[: num_windows * stride].reshape(num_windows, stride)
-            # y_out = np.empty(num_windows * 2)
-            # y_out[::2] = y_reshaped.max(axis=1)
-            # y_out[1::2] = y_reshaped.min(axis=1)
 
             # if receive another mismatched shape error try this
                 # # Safely calculate number of full windows
@@ -801,12 +813,10 @@ class LiveDataWindow(PlotWidget):
         
     def export_df(self) -> bool:
         """
-        TODO
         Exports the current waveform data and associated comments to a
         CSV file. Prompts the user to select a file location. If no
         data is available, shows a message box informing the user.
         """
-        print("export df")
         self.integrate_buffer_to_np()
 
         if not len(self.xy_data[0]) > 0:
@@ -840,17 +850,9 @@ class LiveDataWindow(PlotWidget):
             df.loc[df['time'] == comment_time, 'comments'] = comment.text
 
         df.to_csv(filename)
-
         self.data_modified = False
         
         return
-    
-    def perform_final_save(self):
-        """
-        TODO
-        """
-        with self.save_lock:
-            self.integrate
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         """
