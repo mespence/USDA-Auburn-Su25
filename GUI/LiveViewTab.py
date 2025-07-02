@@ -227,14 +227,13 @@ class LiveViewTab(QWidget):
                         time = float(message['value'][0])
                         volt = float(message['value'][1])
 
-                        # this copies the np array each time to append so O(n)
-                        xy_data = self.datawindow.xy_data
-                        xy_data[0] = np.append(xy_data[0], time)
-                        xy_data[1] = np.append(xy_data[1], volt)   
+                        print(message['value'][1])
 
+                        with self.datawindow.buffer_lock:
+                            self.datawindow.buffer_data.append((time, volt))
+                            
                         # update latest time input
                         self.datawindow.current_time = time
-                        self.datawindow.update_plot()
 
                     elif message_type == "control":
                         name = message["name"]

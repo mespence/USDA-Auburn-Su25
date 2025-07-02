@@ -51,6 +51,7 @@ class LiveDataWindow(PlotWidget):
         self.xy_data: list[NDArray] = [np.array([]), np.array([])]
 
         # temporary buffer for incoming data before concatenating to xy_data np array
+        self.buffer_lock = threading.Lock()
         self.buffer_data: list[tuple[float, float]] = []
 
         # store currently rendered data (downsampled for display)
@@ -216,80 +217,35 @@ class LiveDataWindow(PlotWidget):
         scene_pos = self.mapToScene(point.toPoint())
         data_pos = self.viewbox.mapSceneToView(scene_pos)
         return data_pos
-    
-    def recv_queue_loop(self):
-        """
-        Continuously receives data messages from the socket client's queue.
-
-        Parses incoming JSON data messages containing time and voltage values,
-        appends them to the internal data arrays, updates the current time,
-        and triggers plot updates.
-
-        Runs in a loop until the socket client stops.
-        """
-        while self.socket_client.running:
-            try:
-                # can include multiple commands/data in one message
-                raw_message = self.socket_client.recv_queue.get(timeout=1.0)
-            except Empty:
-                continue  # restart the loop
-
-            try:
-                # parse message
-                message_list = raw_message.split("\n")
-                messages = [json.loads(s) for s in message_list if s.strip()]
-
-                if '' in message_list:
-                    message_list.remove('')
-
-                for message in messages:
-                    if message['type'] != 'data':
-                        # message is for sliders
-                        continue
-
-                    time = float(message['value'][0])
-                    volt = float(message['value'][1])
-
-                    # append to buffer
-                    self.buffer_data.append((time, volt))
-                    print("appended to buffer")
-
-                    # update latest time input
-                    self.current_time = time
-
-            except Exception as e:
-                print("[RECIEVE LOOP ERROR]", e)
 
     def integrate_buffer_to_np(self):
         """
         TODO
         """
-        print("called integrate")
-        if not self.buffer_data:
-            print("DEBUG: integrate_buffer_to_np: Buffer is empty, returning.")
-            return
-        
-        print("running 60 times per sec")
+        with self.buffer_lock:
+            if not self.buffer_data:
+                return
+            
+            # create local copy of buffer and clear orig, to release lock
+            data_to_process = self.buffer_data[:] # create shallow copy
+            self.buffer_data.clear()
+
         # convert data to np array
+        new_xy_data = np.array(data_to_process, dtype=float)
         self.data_modified = True
-        new_xy_data = np.array(self.buffer_data, dtype=float)
 
         self.xy_data[0] = np.concatenate((self.xy_data[0], new_xy_data[:, 0]))
         self.xy_data[1] = np.concatenate((self.xy_data[1], new_xy_data[:, 1]))
-
-        self.buffer_data.clear()
 
     def timed_plot_update(self):
         """
         TODO
         """
-        print("timed_plot_update")
         self.integrate_buffer_to_np()
         self.update_plot()
 
     def trigger_periodic_save(self):
-        if not self.is_saving:
-            self.is_saving = True
+        if not self.is_saving and self.data_modified:
             save_thread = threading.Thread(target=self.periodic_save_in_background, daemon=True)
             save_thread.start()
 
@@ -299,48 +255,40 @@ class LiveDataWindow(PlotWidget):
         Saves df and csv to file
         """
         
-        try:
-            with self.save_lock:
-                # ensure all buffer data integrated before saving data
-                print("periodic save inbackground, save_lock TRUE")
-                self.integrate_buffer_to_np()
-                times = self.xy_data[0]
-                volts = self.xy_data[1]
+        with self.save_lock:
+            self.is_saving = True
+            
+            # want stable snapshot
+            times = self.xy_data[0].copy()
+            volts = self.xy_data[1].copy()
+            comments = self.comments.copy()
 
-                # append new data
-                current_data_size = len(self.xy_data[0])
-                if current_data_size > self.last_saved_data_index:
-                    new_t_data = times[self.last_saved_data_index : current_data_size]
-                    new_v_data = volts[self.last_saved_data_index : current_data_size]
-                    df_to_append = pd.DataFrame({'time': new_t_data, 'voltage': new_v_data})
-                    df_to_append.to_csv(self.waveform_backup_path, mode='a', header=False, index=False)
-                    self.last_saved_data_index = current_data_size
-                    print(f"Appended {len(new_t_data)} new waveform points.")
-
-                if self.comments:
-                    comments_list = [(t, marker.text) for t, marker in self.comments.items()]
-                    comments_df = pd.DataFrame(comments_list, columns=['time', 'comment'])
-                    comments_df.to_csv(self.comments_backup_path, index=False)
-                else:
-                    # if no comments, backup file empty
-                    pd.DataFrame(columns=['time', 'comment']).to_csv(self.comments_backup_path, index=False)
-
-                # rename file and path
-                current_utc_time = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')
-                new_waveform_filename = os.path.join(
-                    self.periodic_backup_dir, f"{self.waveform_backup_base}_{current_utc_time}.csv"
-                )
-                os.rename(self.waveform_backup_path, new_waveform_filename)
-                    # print(f"Renamed waveform backup to {new_waveform_filename}")
-                self.waveform_backup_path = new_waveform_filename
-
-                new_comments_filename = os.path.join(
-                    self.periodic_backup_dir, f"{self.comments_backup_base}_{current_utc_time}.csv"
-                )
-                os.rename(self.comments_backup_path, new_comments_filename)
-                    # print(f"Renamed waveform backup to {new_waveform_filename}")
-                self.comments_backup_path = new_comments_filename
+            # append new data
         
+        try:
+            df_to_append = pd.DataFrame({'time': times[self.last_saved_data_index:], 'voltage': volts[self.last_saved_data_index:]})
+            df_to_append.to_csv(self.waveform_backup_path, mode='a', header=False, index=False)
+
+            comments_list = [{'time': t, 'comment': c.text} for t, c in comments.items()]
+            comments_df = pd.DataFrame(comments_list, columns=['time', 'comment'])
+            comments_df.to_csv(self.comments_backup_path, mode='w', header=True, index=False)
+
+            current_utc_time = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')
+            # rename file and path
+            new_waveform_filename = os.path.join(
+                self.periodic_backup_dir, f"{self.waveform_backup_base}_{current_utc_time}.csv"
+            )
+            new_comments_filename = os.path.join(
+                self.periodic_backup_dir, f"{self.comments_backup_base}_{current_utc_time}.csv"
+            )
+            os.rename(self.waveform_backup_path, new_waveform_filename)
+            os.rename(self.comments_backup_path, new_comments_filename)
+            self.waveform_backup_path = new_waveform_filename
+            self.comments_backup_path = new_comments_filename
+
+            self.last_saved_data_index = len(times)
+            self.data_modified = False
+            
         except Exception as e:
             print(f"[PERIODIC SAVE ERROR] Could not save data: {e}")
         finally:
