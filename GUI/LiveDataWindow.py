@@ -67,7 +67,7 @@ class LiveDataWindow(PlotWidget):
 
         # --- PERIODIC BACKUP SETTINGS ---
         # for simplicity: create a subfolder in the current working directory to save
-        self.periodic_backup_dir = "waveform_backups"
+        self.periodic_backup_dir = "backups"
         os.makedirs(self.periodic_backup_dir, exist_ok=True)
 
         # Base names for the backup files
@@ -174,12 +174,12 @@ class LiveDataWindow(PlotWidget):
             event (QCloseEvent): The close event.
         """
 
+        print("closeEVENT", self.data_modified)
+
         if self.plot_update_timer.isActive():
             self.plot_update_timer.stop()
         if self.save_timer.isActive():
             self.save_timer.stop()
-
-        self.socket_server.stop()
 
         if self.data_modified: # check if any new data or modifications
             msg_box = QMessageBox(self)
@@ -255,7 +255,6 @@ class LiveDataWindow(PlotWidget):
 
                     # update latest time input
                     self.current_time = time
-                self.update_plot()
 
             except Exception as e:
                 print("[RECIEVE LOOP ERROR]", e)
@@ -268,13 +267,15 @@ class LiveDataWindow(PlotWidget):
         if not self.buffer_data:
             return
         
+        print("running 60 times per sec")
         # convert data to np array
-        new_xy_data = np.array([item for item in self.buffer_data], dtype=float)
-        self.xy_data = np.concatenate((self.xy_data, new_xy_data))
+        self.data_modified = True
+        new_xy_data = np.array(self.buffer_data, dtype=float)
+
+        self.xy_data[0] = np.concatenate((self.xy_data[0], new_xy_data[:, 0]))
+        self.xy_data[1] = np.concatenate((self.xy_data[1], new_xy_data[:, 1]))
 
         self.buffer_data.clear()
-
-        self.data_modified = True
 
     def timed_plot_update(self):
         """
@@ -322,7 +323,7 @@ class LiveDataWindow(PlotWidget):
                     pd.DataFrame(columns=['time', 'comment']).to_csv(self.comments_backup_path, index=False)
 
                 # rename file and path
-                current_utc_time = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S_UTC')
+                current_utc_time = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')
                 new_waveform_filename = os.path.join(
                     self.periodic_backup_dir, f"{self.waveform_backup_base}_{current_utc_time}.csv"
                 )
