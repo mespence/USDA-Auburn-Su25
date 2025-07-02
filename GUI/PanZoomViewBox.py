@@ -1,10 +1,11 @@
 from pyqtgraph import ViewBox, InfiniteLine
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QWheelEvent, QAction, QKeyEvent
+from PyQt6.QtGui import QWheelEvent, QAction, QKeyEvent, QKeySequence
 from PyQt6.QtWidgets import QMenu
 
 from Settings import Settings
+from LabelArea import LabelArea
 
 class PanZoomViewBox(ViewBox):
     """
@@ -143,8 +144,13 @@ class PanZoomViewBox(ViewBox):
         """
         left_limit = -self.zoom_viewbox_limit * view_width 
 
-        if self.datawindow and self.datawindow.df is not None:
-            data_max = self.datawindow.df["time"].iloc[-1]
+
+        if self.datawindow:
+            if hasattr(self.datawindow, "df"):
+                if self.datawindow.df is not None:
+                    data_max = self.datawindow.df["time"].iloc[-1]
+            else:
+                data_max = self.datawindow.xy_data[0][-1]    
             right_limit = data_max + self.zoom_viewbox_limit * view_width
         else:
             right_limit = float("inf")  # fail open
@@ -205,38 +211,78 @@ class PanZoomViewBox(ViewBox):
             event.ignore()
             return
 
+        
+        scene_pos = event.scenePos()
+        data_pos = self.mapSceneToView(scene_pos)
+        x = data_pos.x()  
         item = self.datawindow.selection.hovered_item
+
         if isinstance(item, InfiniteLine):
             print('Right-clicked InfiniteLine')
             return  # TODO: infinite line context menu not yet implemented
 
-        scene_pos = event.scenePos()
-        data_pos = self.mapSceneToView(scene_pos)
-        x = data_pos.x()  
+        elif isinstance(item, LabelArea):
+            self.label_area_menu(event, item, x)
         
-        menu = QMenu()
-        label_type_dropdown = QMenu("Change Label Type", menu)
+        elif item is None:
+            self.default_menu(event, x)
 
+
+    def default_menu(self, event, x: float):
+        menu = QMenu()
+        add_comment = QAction("Add Comment", menu)
+
+        menu.addAction(add_comment)
+
+        selected_action = menu.exec(event.screenPos())           
+        if selected_action == add_comment:
+            self.datawindow.add_comment_at_click(x)
+            print("add comment")
+        else:
+            pass
+    
+
+    def label_area_menu(self, event, label_area: LabelArea, x: float):
+        menu = QMenu()
+
+        add_comment = QAction("Add Comment", menu)
+
+        label_type_dropdown = QMenu("Change Waveform Type", menu)
         label_names = list(Settings.label_to_color.keys())
-        
         for label in label_names:            
             action = QAction(label, menu)
             action.setCheckable(True)
 
-            if item.label == label:
+            if label_area.label == label:
                 action.setChecked(True)
                 
             action.triggered.connect(
-                lambda checked, label_area=item, label=label:
+                lambda checked, label_area=label_area, label=label:
                 self.datawindow.selection.change_label_type(label_area, label)
             )
         
             label_type_dropdown.addAction(action)
 
-        add_comment = QAction("Add Comment", menu)
+        snap_left = QAction("Snap Waveform Left", menu)
+        snap_left.setShortcut(QKeySequence("Ctrl+["))
+        snap_right = QAction("Snap Waveform Right", menu)
+        snap_right.setShortcut(QKeySequence("Ctrl+]"))
 
-        menu.addMenu(label_type_dropdown)
+        # Find which (if any) snaps to disable
+        idx = self.datawindow.labels.index(label_area)
+        left_touching = False
+        right_touching = False
+        if idx > 0:
+            left_touching = False
+
+
+
+
         menu.addAction(add_comment)
+        menu.addMenu(label_type_dropdown)
+        menu.addAction(snap_left)
+        menu.addAction(snap_right)
+       
 
         selected_action = menu.exec(event.screenPos())           
         if selected_action == label_type_dropdown:
@@ -246,3 +292,4 @@ class PanZoomViewBox(ViewBox):
             print("add comment")
         else:
             pass
+    

@@ -3,9 +3,9 @@ from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 
-from LabelArea import LabelArea
-from TextEdit import TextEdit  
+from TextEdit import TextEdit  # reuse your existing text input field
 from Settings import Settings
+from LabelArea import LabelArea
 
 
 class AddLabelManager:
@@ -28,16 +28,12 @@ class AddLabelManager:
         self.active = True
         self.first_time = None
         self.dragging = False
-        Settings.alpha = 10
-        for label_area in self.dw.labels:
-            label_area.update_label_area()
         self.dw.selection.deselect_all()
 
     def cancel(self):
         self.active = False
         self.first_time = None
         self.dragging = False
-        Settings.alpha = 30
         for item in [self.line1, self.line2, self.region]:
             item.setVisible(False)
 
@@ -68,9 +64,6 @@ class AddLabelManager:
         start, end = sorted([self.first_time, second_time])
         duration = end - start
 
-        for item in [self.line1, self.line2, self.region]:
-            item.setVisible(False)
-
         # Prompt for label
         dialog = QDialog(self.dw)
         dialog.setWindowTitle("Enter Waveform")
@@ -92,6 +85,9 @@ class AddLabelManager:
         if not label:
             self.cancel()
             return
+        
+        for item in [self.line1, self.line2, self.region]:
+            item.setVisible(False)
 
         # Build updated label list
         new_labels = []
@@ -108,12 +104,13 @@ class AddLabelManager:
 
             elif s0 < start < e0:
                 la.duration = start - s0
+                la.set_transition_line('right', start)
                 la.update_label_area()
 
             elif s0 < end < e0:
                 la.start_time = end
                 la.duration = e0 - end
-                la.set_transition_line(end)
+                la.set_transition_line('left', end)
                 la.update_label_area()
 
             new_labels.append(la)
@@ -134,3 +131,4 @@ class AddLabelManager:
 
         self.dw.update_plot()
         self.cancel()
+

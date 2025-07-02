@@ -25,6 +25,7 @@ from Settings import Settings
 from LabelArea import LabelArea
 from CommentMarker import CommentMarker
 from SelectionManager import Selection
+from AddLabelManager import AddLabelManager
 from TextEdit import TextEdit
 
 class DataWindow(PlotWidget):
@@ -87,6 +88,7 @@ class DataWindow(PlotWidget):
         self.selection: Selection = Selection(self)
         self.moving_mode: bool = False  # whether an interactive item is being moved
         self.edit_mode_enabled: bool = True  # whether the labels can be interacted with
+        self.add_label_manager = AddLabelManager(self)
 
         # BASELINE
         self.baseline: InfiniteLine = InfiniteLine(
@@ -284,7 +286,7 @@ class DataWindow(PlotWidget):
 
             if label_width_px < 1:
                 label_area.setVisible(False)
-                continue
+                
 
             label_area.setVisible(True)
             label_area.update_label_area()
@@ -871,6 +873,8 @@ class DataWindow(PlotWidget):
         """
         if event.key() == Qt.Key.Key_R:
             self.reset_view()  
+        elif event.key() == Qt.Key.Key_L:
+            self.add_label_manager.start()
         elif event.key() == Qt.Key.Key_B:
             if self.baseline_preview_enabled:
                 # Turn it off
@@ -917,6 +921,10 @@ class DataWindow(PlotWidget):
             if self.baseline_preview_enabled:
                 if x_min <= x <= x_max and y_min <= y <= y_max:
                     self.set_baseline(y)
+            elif self.add_label_manager.active:
+                x = self.window_to_viewbox(event.position()).x()
+                self.add_label_manager.mouse_press(x)
+                return
             elif self.comment_preview_enabled and self.moving_comment is not None:
                 if x_min <= x <= x_max and y_min <= y <= y_max:
                     self.move_comment(self.moving_comment, x)
@@ -940,9 +948,11 @@ class DataWindow(PlotWidget):
             if isinstance(self.selected_item, InfiniteLine) and self.selected_item is not self.baseline:
                 transitions = [(label_area.start_time, label_area.label) for label_area in self.labels]
                 self.epgdata.set_transitions(self.file, transitions, self.transition_mode)
-        return
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.handle_transitions(event, "release")
+            return
+        elif self.add_label_manager.active:
+            x = self.window_to_viewbox(event.position()).x()
+            self.add_label_manager.mouse_release(x)
+            return
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         return
@@ -970,6 +980,10 @@ class DataWindow(PlotWidget):
                 self.baseline_preview.setVisible(True)
             else:
                 self.baseline_preview.setVisible(False)
+        elif self.add_label_manager.active:
+            x = self.window_to_viewbox(event.position()).x()
+            self.add_label_manager.mouse_move(x)
+            return
         elif self.comment_preview_enabled:
             if x_min <= x <= x_max:
                 self.comment_preview.setPos(x)
@@ -980,8 +994,6 @@ class DataWindow(PlotWidget):
             self.selection.mouse_move_event(event)
 
         return
-
-        self.handle_transitions(event, "move")
     
 
     def wheelEvent(self, event: QWheelEvent) -> None:

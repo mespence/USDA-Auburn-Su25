@@ -153,7 +153,6 @@ class Selection:
             if item == self.datawindow.baseline:
                 item.setPen(self.default_style['baseline'])
             else:
-                print(1)
                 item.setPen(self.default_style['transition line'])      
 
         if isinstance(item, LabelArea):
@@ -167,11 +166,9 @@ class Selection:
             item.duration_text.setColor(self.default_style['text color'])
 
             if item.transition_line and not self._is_line_shared(item.transition_line):
-                print(2)
                 item.transition_line.setPen(self.default_style['transition line'])
 
             if item.right_transition_line and not self._is_line_shared(item.right_transition_line):
-                print(3)
                 item.right_transition_line.setPen(self.default_style['transition line'])
 
         self.selected_items.remove(item)
@@ -426,6 +423,7 @@ class Selection:
 
                 # Merge if needed
                 self.merge_adjacent_labels(right)
+                self.datawindow.update_right_transition_lines()
 
         elif line_type == "right" and idx + 1 < len(labels):
             left = labels[idx]
@@ -445,8 +443,7 @@ class Selection:
 
                 # Merge if needed
                 self.merge_adjacent_labels(left)   
-
-        self.datawindow.update_right_transition_lines()
+                self.datawindow.update_right_transition_lines()
         
     def apply_drag(self, x: float, y: float) -> None:
         """
@@ -753,21 +750,16 @@ class Selection:
         if self.is_selected(item):
             self.unhighlight_item(self.highlighted_item) # unhighlight previous item
             return  # don't highlight already selected items
-        print("_____________")
-        print("Reached 1")
 
         # Check if highlighted item needs to change:
         if self.highlighted_item != item:
             if self.highlighted_item is not None:
                 self.unhighlight_item(self.highlighted_item) # unhighlight previous item
-
-            print("Reached 2")
     
             if isinstance(item ,InfiniteLine):
                 if item == self.datawindow.baseline:
                     item.setPen(self.highlighted_style['baseline'])
                 else:
-                    print("Setting Tline highlihgt")
                     item.setPen(self.highlighted_style['transition line'])
 
             elif isinstance(item, LabelArea):
@@ -809,7 +801,6 @@ class Selection:
             if item == self.datawindow.baseline:
                 item.setPen(self.default_style['baseline'])
             else:
-                print(4)
                 item.setPen(self.default_style['transition line'])
         if isinstance(item, LabelArea):
             item.area.setBrush(mkBrush(color=Settings.label_to_color[item.label]))

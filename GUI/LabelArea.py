@@ -366,7 +366,7 @@ class LabelArea:
         """
         if line == "left":
             self.transition_line.setValue(x)
-        else:
+        elif self.right_transition_line:
             self.right_transition_line.setValue(x)
 
     def add_right_transition_line(self):

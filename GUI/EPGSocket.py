@@ -48,7 +48,7 @@ class SocketServer:
         Stops the server, closes all sockets, and disconnects any clients.
         """
         self.running = False
-        logging.info("[SOCKET] Shutting down...")
+        logging.info("[SOCKET] Shutting down socket...")
 
         # Close client connections
         for client_id, client_sock in list(self.clients.items()):
