@@ -32,7 +32,6 @@ class Settings:
 			'W'     : QColor(255, 215,   0, Settings.alpha),
 			'Z'     : QColor(255, 215,   0, Settings.alpha),
             '2'     : QColor(100, 60,   60, Settings.alpha),
-            'END AREA' : QColor(  0,   0,   0, 0)
 		}
         Settings.labels_to_show = {
 			'NP' : True,

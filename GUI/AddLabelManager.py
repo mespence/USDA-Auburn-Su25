@@ -96,9 +96,6 @@ class AddLabelManager:
         # Build updated label list
         new_labels = []
         for la in self.dw.labels:
-            if la.is_end_area:
-                continue
-
             s0 = la.start_time
             e0 = s0 + la.duration
 
@@ -130,27 +127,6 @@ class AddLabelManager:
 
         # Sort
         self.dw.labels.sort(key=lambda la: la.start_time)
-
-        # Fix or add END AREA if
-        if self.dw.labels:
-            if self.dw.labels[-1].label == "END AREA":
-                # Update existing END AREA
-                last_real_label = self.dw.labels[-2]
-                end_time = last_real_label.start_time + last_real_label.duration
-                end_area = self.dw.labels[-1]
-                end_area.start_time = end_time
-                end_area.set_transition_line(end_time)
-                end_area.update_label_area()
-            else:
-                # Add new END AREA
-                last = self.dw.labels[-1]
-                end_time = last.start_time + last.duration
-                end_area = LabelArea(end_time, 0, "END AREA", self.dw)
-                end_area.label_text.setVisible(False)
-                end_area.label_background.setVisible(False)
-                end_area.duration_text.setVisible(False)
-                end_area.duration_background.setVisible(False)
-                self.dw.labels.append(end_area)
 
         # Push to epgdata
         transitions = [(la.start_time, la.label) for la in self.dw.labels]

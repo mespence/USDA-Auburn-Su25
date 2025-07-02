@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pyqtgraph import PlotWidget, InfiniteLine, mkPen, mkBrush
 
 from PyQt6.QtGui import QColor, QMouseEvent, QKeyEvent
@@ -78,28 +80,34 @@ class Selection:
             item (InfiniteLine | LabelArea): The item to select.
         """
         self.highlighted_item = None
+        labels = self.datawindow.labels
         if isinstance(item, InfiniteLine):
             item.setPen(self.selected_style['transition line']) # same as highlighting currently
         if isinstance(item, LabelArea):
-            labels = self.datawindow.labels
+            if item.transition_line:
+                item.transition_line.setPen(self.selected_style['transition line'])
+                if item.transition_line not in self.selected_items:
+                    self.selected_items.append(item.transition_line)
+
             idx = labels.index(item)
-            left_line = labels[idx].transition_line
-            if labels[idx] == labels[-1]: # trying to the end area
-                right_line = left_line  # TODO: fix this to work with whatever we decide for last line
-            else:
-                right_line = labels[idx+1].transition_line
-            left_line.setPen(self.selected_style['transition line'])
-            right_line.setPen(self.selected_style['transition line'])
+            if item.right_transition_line:
+                item.right_transition_line.setPen(self.selected_style['transition line'])
+                if item.right_transition_line not in self.selected_items:
+                    self.selected_items.append(item.right_transition_line)
+            elif idx + 1 < len(labels):
+                next_label = labels[idx + 1]
+                if next_label.transition_line:
+                    next_label.transition_line.setPen(self.selected_style['transition line'])
+                    if next_label.transition_line not in self.selected_items:
+                        self.selected_items.append(next_label.transition_line)
+
+
             item.area.setBrush(self.selected_style['area'])
             item.label_text.setColor(self.selected_style['text color'])
             item.duration_text.setColor(self.selected_style['text color'])
             item.label_background.setBrush(self.selected_style['text background'])
             item.duration_background.setBrush(self.selected_style['text background'])
 
-            if left_line not in self.selected_items:
-                self.selected_items.append(left_line)
-            if right_line not in self.selected_items:
-                self.selected_items.append(right_line)
 
         self.selected_items.append(item)
         self.selected_items.sort(key=self._sort_key)
@@ -118,7 +126,7 @@ class Selection:
             self.selection_parent = item
             self.select(item)
 
-        labels = self.datawindow.labels[:]
+        labels = self.datawindow.labels[:] # shallow copy
         parent = self.selection_parent
 
         try:
@@ -130,8 +138,7 @@ class Selection:
         start_idx, end_idx = sorted((idx1, idx2))
         self.deselect_all()
         for i in range(start_idx, end_idx + 1):
-            if not labels[i].is_end_area:
-                self.select(labels[i])
+            self.select(labels[i])
         self.selection_parent = parent
 
     def deselect_item(self, item: InfiniteLine | LabelArea) -> None:
@@ -141,11 +148,13 @@ class Selection:
         Parameters:
             item (InfiniteLine | LabelArea): The item to deselect.
         """
-        if isinstance(item ,InfiniteLine) and item != self.highlighted_item:
+        
+        if isinstance(item, InfiniteLine) and item != self.highlighted_item:
             if item == self.datawindow.baseline:
                 item.setPen(self.default_style['baseline'])
             else:
-                item.setPen(self.default_style['transition line'])
+                print(1)
+                item.setPen(self.default_style['transition line'])      
 
         if isinstance(item, LabelArea):
             labels = self.datawindow.labels
@@ -154,17 +163,24 @@ class Selection:
             item.area.setBrush(mkBrush(color=Settings.label_to_color[item.label]))
             item.label_background.setBrush(mkBrush(item.get_background_color()))
             item.duration_background.setBrush(mkBrush(item.get_background_color()))
-
             item.label_text.setColor(self.default_style['text color'])
             item.duration_text.setColor(self.default_style['text color'])
 
-            item.transition_line.setPen(self.default_style['transition line'])
+            if item.transition_line and not self._is_line_shared(item.transition_line):
+                print(2)
+                item.transition_line.setPen(self.default_style['transition line'])
 
-            # deselect right transition line if next item is unselected
-            if idx < len(labels) - 1 and not self.is_selected(labels[idx + 1]):
-                labels[idx + 1].transition_line.setPen(self.default_style['transition line'])
+            if item.right_transition_line and not self._is_line_shared(item.right_transition_line):
+                print(3)
+                item.right_transition_line.setPen(self.default_style['transition line'])
 
         self.selected_items.remove(item)
+
+    def _is_line_shared(self, line: InfiniteLine) -> bool:
+        return sum(
+            1 for item in self.selected_items 
+            if isinstance(item, LabelArea) and (item.transition_line == line or item.right_transition_line == line)
+        ) > 1
 
     def deselect_all(self) -> None:
         """
@@ -173,7 +189,6 @@ class Selection:
         for item in self.selected_items[:]:
             self.deselect_item(item)
         self.selection_parent = None
-        
     
     def is_selected(self, item) -> bool:
         """
@@ -198,25 +213,18 @@ class Selection:
         Returns:
             list[InfiniteLine]: All selected InfiniteLines, including those adjacent to selected LabelAreas.
         """
-        if not self.selected_items:
-            return []
-        
-        lines = [
-            item if isinstance(item, InfiniteLine) else getattr(item, 'transition_line', None)
-            for item in self.selected_items
-        ]
 
-        if not any(isinstance(item, LabelArea) for item in self.selected_items):  # no label areas
-            return lines
-
-        last_label = [item for item in self.selected_items if isinstance(item, LabelArea)][-1]
-        labels = self.datawindow.labels
-
-        if last_label != labels[-1]: # not end area
-            idx = labels.index(last_label)
-            lines.append(labels[idx + 1].transition_line)
-        
+        lines = []
+        for item in self.selected_items:
+            if isinstance(item, InfiniteLine):
+                lines.append(item)
+            elif isinstance(item, LabelArea):
+                if item.transition_line:
+                    lines.append(item.transition_line)
+                if item.right_transition_line:
+                    lines.append(item.right_transition_line)
         return lines
+
 
     def key_press_event(self, event: QKeyEvent) -> None:
         """
@@ -232,11 +240,10 @@ class Selection:
             self.deselect_all()
 
             for label_area in label_areas_to_delete:
-                print(f"Deleting: {label_area.label} at {label_area.start_time:.2f}s" )
                 if label_area != label_areas_to_delete[-1]:
-                    self.delete_label_area(label_area, multi_delete = True)
+                    self.delete_label_area(label_area)
                 else:
-                    self.delete_label_area(label_area, multi_delete = False)  # treat last delete of multi-delete as singular
+                    self.delete_label_area(label_area)
 
     def mouse_press_event(self, event: QMouseEvent) -> None:
         """
@@ -260,14 +267,10 @@ class Selection:
         
         # ----------- LEFT CLICK -----------
         if event.button() == Qt.MouseButton.LeftButton:
-
             #COMMENT TESITNG
-
             if self.datawindow.comment_editing:
                 self.datawindow.comment_editing = False
                 return
-
-            # END
 
             # Left-clicked no item
             if self.hovered_item == None:
@@ -285,9 +288,6 @@ class Selection:
 
             # Left-clicked LabelArea
             elif isinstance(self.hovered_item, LabelArea):
-                if self.hovered_item.is_end_area:
-                    return  # can't select end area
-
                 # ---- Normal click -------
                 if event.modifiers() == Qt.KeyboardModifier.NoModifier:
                     self.deselect_all()
@@ -341,43 +341,116 @@ class Selection:
         point = self.datawindow.window_to_viewbox(event.position())
         x, y = point.x(), point.y()
 
+        if not self.dragged_line:
+            return 
+        
         if self.moving_mode:
+            self.hover(x,y)
             if self.dragged_line == self.datawindow.baseline:
                 # Place baseline
                 self.dragged_line.setPen(self.highlighted_style['baseline'])
                 self.highlighted_item = self.dragged_line
                 self.deselect_item(self.dragged_line)
             else:
-                # Place transition line, resetting to previous style
+                # Get the index of the label area the dragged line belongs to
                 labels = self.datawindow.labels
-
-                # get the index of the label area the dragged line belongs to
-                idx = next(
-                    i for i, label_area in enumerate(labels) 
-                    if label_area.transition_line == self.dragged_line
-                )
+                idx = None
+                for i, label_area in enumerate(labels):
+                    if (
+                        label_area.transition_line == self.dragged_line
+                        or label_area.right_transition_line == self.dragged_line
+                    ):
+                        idx = i
 
                 if idx is not None:
-                    left_selected = self.is_selected(labels[idx-1]) if idx > 0 else False
-                    right_selected = self.is_selected(labels[idx]) if idx < len(labels) else False
+                    if labels[idx].transition_line == self.dragged_line:
+                        left_area_selected = self.is_selected(labels[idx - 1]) if idx > 0 else False
+                        right_area_selected = self.is_selected(labels[idx]) if idx < len(labels) else False
+                    else:
+                        left_area_selected = self.is_selected(labels[idx])
+                        right_area_selected = False # no right area if right transition line exists
 
-                    if left_selected or right_selected:
-                        pass  # already selected: don't update pen
-                    elif self.dragged_line == self.hovered_item: # standalone selection
+                    if not (left_area_selected or right_area_selected) and self.dragged_line == self.hovered_item:
                         self.dragged_line.setPen(self.highlighted_style['transition line'])
                         self.highlighted_item = self.dragged_line
                         self.deselect_item(self.dragged_line)
+                self._attempt_snap_and_merge(self.dragged_line)
                 
             self.moving_mode = False
             self.dragged_line = None
             self.datawindow.setCursor(Qt.CursorShape.OpenHandCursor)
+        return
 
-            self.hover(x,y)
-        return     
+    def _attempt_snap_and_merge(self, line: InfiniteLine) -> None:
+        """
+        If the given transition line is near a neighbor's transition line, snap to it and merge if labels match.
+        
+        Parameters:
+            line (InfiniteLine): The line being released after dragging.
+        """
+        SNAP_THRESHOLD = 2 * self.datawindow.devicePixelRatioF()
+        labels = self.datawindow.labels
+        idx = None
+        line_type = None
+
+        for i, label in enumerate(labels):
+            if label.transition_line == line:
+                idx = i
+                line_type = 'left'
+                break
+            elif label.right_transition_line == line:
+                idx = i
+                line_type = 'right'
+                break
+
+        if idx is None:
+            return  # line not associated with a label
+
+        if line_type == "left" and idx > 0:
+            left = labels[idx - 1]
+            right = labels[idx]
+            left_end = left.start_time + left.duration
+            right_start = right.start_time
+
+            # Compute the gap in viewbox coordinates
+            vb_x = lambda x: self.datawindow.viewbox_to_window(QPointF(x ,0)).x() 
+            view_dist = abs(vb_x(left_end) - vb_x(right_start))
+
+            if abs(view_dist - SNAP_THRESHOLD) <= 1e-6:
+                # Snap
+                right.start_time = left_end
+                right.duration = (right_start + right.duration) - right.start_time
+                right.set_transition_line("left", left_end)
+                left.update_label_area()
+                right.update_label_area()
+
+                # Merge if needed
+                self.merge_adjacent_labels(right)
+
+        elif line_type == "right" and idx + 1 < len(labels):
+            left = labels[idx]
+            right = labels[idx + 1]
+            left_end = left.start_time + left.duration
+            right_start = right.start_time
+
+            # Compute the gap in viewbox coordinates
+            vb_x = lambda x: self.datawindow.viewbox_to_window(QPointF(x ,0)).x() 
+            view_dist = abs(vb_x(left_end) - vb_x(right_start))
+
+            if abs(view_dist - SNAP_THRESHOLD) <= 1e-6:
+                # Snap
+                left.duration = right_start - left.start_time
+                left.set_transition_line("right", right_start)
+                left.update_label_area()
+
+                # Merge if needed
+                self.merge_adjacent_labels(left)   
+
+        self.datawindow.update_right_transition_lines()
         
     def apply_drag(self, x: float, y: float) -> None:
         """
-        Applies dragging motion to a transition or baseline line, updating LabelArea boundaries.
+        Applies dragging motion to a transition line or baseline, updating LabelArea boundaries.
 
         Parameters:
             x (float): The ViewBox x-coordinate.
@@ -387,86 +460,137 @@ class Selection:
         if line is None:
             return
 
-        # Dragging the baseline
         if line == self.datawindow.baseline:
             self.datawindow.baseline.setPos(y)
             return
-    
-        # Dragging a transition line
-        MIN_PIXEL_DISTANCE = 2 * self.datawindow.devicePixelRatioF()
-        labels = self.datawindow.labels
-        viewbox = self.datawindow.viewbox
 
+        labels = self.datawindow.labels
         for i, label in enumerate(labels):
             if label.transition_line == line:
-                if i == 0:
-                    return  # can't drag the leftmost edge
+                self._apply_drag_transition(i, x, which_line='left')
+                return
+            elif label.right_transition_line == line:
+                self._apply_drag_transition(i, x, which_line='right')
+                return
+            
+    def _pixels_to_time(self, pixels: float, viewbox) -> float:
+        start_scene = viewbox.mapViewToScene(QPointF(0, 0)).x()
+        end_scene = viewbox.mapViewToScene(QPointF(pixels, 0)).x()
+        start_view = viewbox.mapSceneToView(QPointF(start_scene, 0)).x()
+        end_view = viewbox.mapSceneToView(QPointF(end_scene, 0)).x()
+        return end_view - start_view
+    
+    
+    def _apply_drag_transition(self, index: int, x: float, which_line: Literal['left', 'right']) -> None:
+        labels = self.datawindow.labels
+        viewbox = self.datawindow.viewbox
+        MIN_PIXEL_DISTANCE = 2 * self.datawindow.devicePixelRatioF()
 
-                left = labels[i - 1]  # label area to the left of the line
-                right = label  # label area to the right of the line
+        # Compute the minimum gap in viewbox coordinates
+        vb_x = lambda x: self.datawindow.window_to_viewbox(QPointF(x ,0)).x() 
+        min_vb_distance = vb_x(MIN_PIXEL_DISTANCE) - vb_x(0)
 
-                # minimum of the clamp
-                min_x_scene = viewbox.mapViewToScene(QPointF(left.start_time, 0)).x() + MIN_PIXEL_DISTANCE
-                min_x = viewbox.mapSceneToView(QPointF(min_x_scene, 0)).x()     
-                   
-                if right.is_end_area: # no right clamp if next label is end area
-                    x = max(x, min_x)
-                else:  # clamp to right
-                    right_end_time =right.start_time + right.duration
-                    max_x_scene = viewbox.mapViewToScene(QPointF(right_end_time, 0)).x() - MIN_PIXEL_DISTANCE
-                    max_x = viewbox.mapSceneToView(QPointF(max_x_scene, 0)).x()
-                    x = max(min_x, min(x, max_x)) # clamp x to range (min_x, max_x)
+        if which_line == 'left':
+            if index == 0:
+                return  # can't drag first transition line
 
-                delta = x - right.start_time
-                left.duration += delta
-                right.start_time = x
-                right.duration -= delta
-                right.set_transition_line(x)
+            left = labels[index - 1]
+            right = labels[index]
+            left_end = left.start_time + left.duration
+            right_end = right.start_time + right.duration
 
-                left.update_label_area()
+            touching = abs(left_end - right.start_time) < 1e-9  # exact match
+
+            if touching:
+                # Shared transition line
+                min_x = left.start_time + min_vb_distance
+                max_x = right_end - min_vb_distance
+                clamped_x = max(min_x, min(x, max_x))
+
+                left.duration = clamped_x - left.start_time
+                right.start_time = clamped_x
+                right.duration = right_end - clamped_x
+            else:
+                # Separate transition line
+                min_x = left_end + min_vb_distance
+                max_x = right_end - min_vb_distance
+                clamped_x = max(min_x, min(x, max_x))
+
+                right.start_time = clamped_x
+                right.duration = right_end - clamped_x
+
+            right.set_transition_line("left", clamped_x)
+            left.update_label_area()
+            right.update_label_area()
+
+        elif which_line == 'right':
+            left = labels[index]
+            right = labels[index + 1] if index + 1 < len(labels) else None
+
+            left_end = left.start_time + left.duration
+            right_start = right.start_time if right else float('inf')
+
+            touching = right and abs(left_end - right_start) < 1e-9
+
+            if touching:
+                # Right line is shared
+                min_x = left.start_time + min_vb_distance
+                max_x = right_start + right.duration - min_vb_distance
+                clamped_x = max(min_x, min(x, max_x))
+
+                left.duration = clamped_x - left.start_time
+                right.start_time = clamped_x
+                right.duration = (right_start + right.duration) - clamped_x
+
+                right.set_transition_line("left", clamped_x)
                 right.update_label_area()
-        return
+
+            else:
+                # Right line is local to `left`
+                min_x = left.start_time + min_vb_distance
+                max_x = right_start - min_vb_distance if right else float('inf')
+                clamped_x = max(min_x, min(x, max_x))
+
+                left.duration = clamped_x - left.start_time
+
+            left.set_transition_line("right", clamped_x)
+            left.update_label_area()
 
 
-
-    def delete_label_area(self, label_area: LabelArea, multi_delete: bool = False) -> None:
+    def delete_label_area(self, label_area: LabelArea) -> None:
         """
-        Deletes a LabelArea and expands an adjacent one to absorb its duration.
+        Deletes a LabelArea in place, ensuring the left neighbor 
+        receives a right_transition_line, if it exists.
 
         Parameters:
             label_area (LabelArea): The LabelArea to delete.
             multi_delete (bool): Whether a multi-selection is being deleted.
         """
-        if label_area.is_end_area:
-            return # dont delete end area
-
         labels = self.datawindow.labels
+        idx = labels.index(label_area)
 
-        current_idx = labels.index(label_area)
+        # Update left neighbor to add right_transition_line
+        if idx > 0:
+            left_neighbor = labels[idx - 1]
+            if not left_neighbor.right_transition_line:
+                x = label_area.start_time + label_area.duration
+                left_neighbor.add_right_transition_line()
+
         
-        before_idx = current_idx - 1
-        after_idx = current_idx + 1
+        # Remove all visual elements
+        for item in label_area.getItems():
+            scene = item.scene()
+            if scene:
+                scene.removeItem(item)
 
-        # process deletion by changing label type and merging
-        if len(labels) > 1:
-            if label_area == labels[0] and after_idx < len(labels):  # expand the right label area
-                expanded_label_area = labels[after_idx] 
-                if expanded_label_area.is_end_area:
-                    label_area.is_end_area = True
-                label_area.label = expanded_label_area.label
-                self.merge_adjacent_labels(label_area, deleting = multi_delete)
+        if self.is_selected(label_area):
+            self.deselect_item(label_area)
 
-            else:  # expand the left label area
-                expanded_label_area = labels[before_idx]
-                label_area.label = expanded_label_area.label
-                self.merge_adjacent_labels(label_area, deleting = multi_delete)
-                
-        # hide if we expanded into the end area
-        if label_area.is_end_area: 
-            label_area.label_text.setVisible(False)
-            label_area.label_background.setVisible(False)
-            label_area.duration_text.setVisible(False)
-            label_area.duration_background.setVisible(False)
+        self.datawindow.labels.remove(label_area)
+
+        if self.datawindow.last_cursor_pos:
+            view_pos = self.datawindow.window_to_viewbox(self.datawindow.last_cursor_pos)
+            self.hover(view_pos.x(), view_pos.y())
 
     def merge_adjacent_labels(self, label_area: LabelArea, deleting = False) -> bool:
         """
@@ -515,6 +639,9 @@ class Selection:
             before.duration = before.duration + label_area.duration + after.duration
             before.update_label_area()
 
+            if before.right_transition_line:
+                before.remove_right_transition_line()
+
         elif merging_left:
             if self.is_selected(label_area):
                 self.select(before)
@@ -523,10 +650,16 @@ class Selection:
             before.duration = before.duration + label_area.duration
             before.update_label_area()
 
+            if before.right_transition_line:
+                before.remove_right_transition_line()
+
         elif merging_right:
             remove_label_area(after)
             label_area.duration = label_area.duration + after.duration
             label_area.update_label_area()
+
+            if label_area.right_transition_line:
+                label_area.remove_right_transition_line()
 
         if self.datawindow.last_cursor_pos:
             view_pos = self.datawindow.window_to_viewbox(self.datawindow.last_cursor_pos)
@@ -560,7 +693,7 @@ class Selection:
 
         self.update_highlight(item_to_highlight, cursor=cursor)
 
-    def get_hovered_item(self, x:float, y:float) -> InfiniteLine | LabelArea:
+    def get_hovered_item(self, x: float, y: float) -> InfiniteLine | LabelArea | None:
         """
         Determines the item under the cursor for highlighting or interaction.
 
@@ -569,9 +702,9 @@ class Selection:
             y (float): ViewBox y-coordinate.
 
         Returns:
-            (LabelArea | InfiniteLine): The item nearest the cursor.
+            (InfiniteLine | LabelArea | None): The item nearest the cursor, or None if nothing should be highlighted.
         """
-        TRANSITION_HIGHLIGHT_THRESHOLD = 3 * self.datawindow.devicePixelRatioF() # pixels
+        TRANSITION_HIGHLIGHT_THRESHOLD = 3 * self.datawindow.devicePixelRatioF()
         BASELINE_HIGHLIGHT_THRESHOLD = 3 * self.datawindow.devicePixelRatioF()
 
         # Get distances to relevant items
@@ -580,19 +713,28 @@ class Selection:
         label_area = self.datawindow.get_closest_label_area(x)
 
         if not self.datawindow.baseline.isVisible():
-            baseline_distance = float('inf')  # ignore baseline if not visible
+            baseline_distance = float('inf')
 
         if transition_distance <= TRANSITION_HIGHLIGHT_THRESHOLD:
             if transition_line == self.datawindow.labels[0].transition_line:
-                return  # can't drag the leftmost transition
+                return None  # leftmost transition line can't be dragged
             hovered_item = transition_line
+
         elif baseline_distance <= BASELINE_HIGHLIGHT_THRESHOLD:
             hovered_item = baseline
-        else:
-            hovered_item = label_area
 
-        self.hovered_item = hovered_item  # update attribute
+        elif label_area is not None:
+            # Only highlight label area if cursor is inside it
+            if label_area.start_time <= x <= label_area.start_time + label_area.duration:
+                hovered_item = label_area
+            else:
+                hovered_item = None
+        else:
+            hovered_item = None
+
+        self.hovered_item = hovered_item
         return hovered_item
+
 
 
     def update_highlight(self, item, cursor: Qt.CursorShape = None) -> None:
@@ -611,16 +753,21 @@ class Selection:
         if self.is_selected(item):
             self.unhighlight_item(self.highlighted_item) # unhighlight previous item
             return  # don't highlight already selected items
+        print("_____________")
+        print("Reached 1")
 
         # Check if highlighted item needs to change:
         if self.highlighted_item != item:
             if self.highlighted_item is not None:
                 self.unhighlight_item(self.highlighted_item) # unhighlight previous item
+
+            print("Reached 2")
     
             if isinstance(item ,InfiniteLine):
                 if item == self.datawindow.baseline:
                     item.setPen(self.highlighted_style['baseline'])
                 else:
+                    print("Setting Tline highlihgt")
                     item.setPen(self.highlighted_style['transition line'])
 
             elif isinstance(item, LabelArea):
@@ -662,6 +809,7 @@ class Selection:
             if item == self.datawindow.baseline:
                 item.setPen(self.default_style['baseline'])
             else:
+                print(4)
                 item.setPen(self.default_style['transition line'])
         if isinstance(item, LabelArea):
             item.area.setBrush(mkBrush(color=Settings.label_to_color[item.label]))

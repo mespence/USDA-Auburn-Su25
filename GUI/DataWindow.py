@@ -295,25 +295,17 @@ class DataWindow(PlotWidget):
             view_pos = self.window_to_viewbox(self.last_cursor_pos)
             self.selection.hover(view_pos.x(), view_pos.y())
 
-            
         
 
     def update_compression(self) -> None:
         """
-        Calculates the compression level based on the current zoom level.
+        Calculates the compression level based on the current zoom level and 
+        updates the compression readout.
         A compresion of 1 corresponds to 0.2 sec/division.
+
+        NOTE: WinDaq also has 'negative' compression levels for
+        high levels of zooming out. We do not implement those here.
         """
-        # """
-        # update_compression updates the compression readout
-        # based on the zoom level according to the formula
-        # COMPRESSION = (SECONDS/PIXEL) * 125
-        # obtained by experimentation with WINDAQ. Note that
-        # WINDAQ also has 'negative' compression levels for
-        # high levels of zooming out. We do not implement those here.
-
-        # TODO: Verify this formula
-        # """
-
         if not self.isVisible():
             return  # don't run prior to initialization
 
@@ -332,17 +324,6 @@ class DataWindow(PlotWidget):
         # Convert to compression based on formula derived from experimenting with WinDaq
         self.compression = second_per_pix * 125
         self.compression_text.setText(f"Compression Level: {self.compression :.1f}")
-
-        # ----- CLINIC CODE -----------------
-        # Update the compression readout.
-        # Get the pixel distance of one second, we use a wide range to avoid rounding issues.
-        # width = 1000
-        # pix_per_second = (self.chart_to_window(width, 0)[0] - \
-        #           self.chart_to_window(0, 0)[0]) / width
-        # second_per_pix = 1 / (pix_per_second)
-        # # Convert to compression based on WinDaq
-        # self.compression = second_per_pix * 125
-        # self.compression_text.setPlainText(f'Compression Level: {self.compression :.1f}')
 
     def update_zoom(self) -> None:
         """
@@ -654,8 +635,6 @@ class DataWindow(PlotWidget):
         """
         Plots labeled regions from label transition data as colored areas on the plot.
 
-        Also inserts a zero-width "END AREA" to add the final transition line.
-
         Parameters:
             file (str): File identifier.
         """
@@ -693,22 +672,29 @@ class DataWindow(PlotWidget):
                 continue
             label_area = LabelArea(time, dur, label, self) # init. also adds items to viewbox
             self.labels.append(label_area)
-
-        # NOTE: Each LabelArea has one transition line, but we need an additional ending
-        # line so that the final LabelArea doesn't end without a transition line. We chose
-        # to do this by adding a zero-width, invisible LabelArea, called the "end area", to 
-        # the end of the labels, so that just the transition line appears.
-        time, dur, _ = durations[-1]
-        end_start_time = time + dur
-
-        label_area = LabelArea(end_start_time, 0, 'END AREA', self)
-        label_area.label_text.setVisible(False)
-        label_area.label_background.setVisible(False)
-        label_area.duration_text.setVisible(False)
-        label_area.duration_background.setVisible(False)
-        self.labels.append(label_area)
         
+        self.update_right_transition_lines()
         self.update_plot()
+
+    def update_right_transition_lines(self):
+        """
+        Shows all right transition lines of LabelAreas without a right neighbor,
+        hides it otherwise.
+        """
+        for i, label_area in enumerate(self.labels):
+            label_area.remove_right_transition_line()
+
+            end_time = label_area.start_time + label_area.duration
+
+            # Check if next label starts at this one's end
+            has_adjacent_right = (
+                i + 1 < len(self.labels) and 
+                abs(self.labels[i + 1].start_time - end_time) < 1e-6  # within float error
+            )
+
+            if not has_adjacent_right:
+                label_area.add_right_transition_line()
+
 
     def change_label_color(self, label: str, color: QColor) -> None:
         """
@@ -741,8 +727,6 @@ class DataWindow(PlotWidget):
             visible (bool): Whether to show or hide the durations.
         """
         for label_area in self.labels:
-            if label_area.is_end_area:
-                continue
             label_area.set_duration_visible(visible)
          
 
@@ -763,7 +747,7 @@ class DataWindow(PlotWidget):
         
     def get_closest_transition(self, x: float) -> tuple[int, float]:
         """
-        Finds the transition line closest to the given x-coordinate.
+        Finds the transition line (left or right) closest to the given x-coordinate.
 
         Parameters:
             x (float): ViewBox x-coordinate.
@@ -773,30 +757,53 @@ class DataWindow(PlotWidget):
         if not self.labels:
             return None, float('inf')  # no labels present
         
-        transitions = np.array([label_area.start_time for label_area in self.labels])
-        idx = np.searchsorted(transitions, x)
+        candidates = []
+        for label in self.labels:
+            # Add left/start transition line
+            if label.transition_line is not None:
+                candidates.append((label.transition_line, label.start_time))
 
-        zero_point = self.viewbox_to_window(QPointF(0,0)).x()
-        
-        if idx == len(transitions):
-            transition = self.labels[idx-1].transition_line
-            dist = abs(transitions[idx-1] - x)
-            dist_px = self.viewbox_to_window(QPointF(dist, 0)).x() - zero_point
-            return transition, dist_px
-        
-        else:
-            # Check which of the two neighbors is closer
-            dist_to_left = abs(x - transitions[idx-1])
-            dist_to_right = abs(transitions[idx] - x)
+            # (maybe) add right/end transition line
+            if label.right_transition_line is not None:
+                end_time = label.start_time + label.duration
+                candidates.append((label.right_transition_line, end_time))
 
-            if dist_to_left <= dist_to_right:
-                transition = self.labels[idx-1].transition_line
-                dist_px = self.viewbox_to_window(QPointF(dist_to_left, 0)).x()- zero_point
-                return transition, dist_px
-            else:
-                transition = self.labels[idx].transition_line
-                dist_px = self.viewbox_to_window(QPointF(dist_to_right, 0)).x()- zero_point
-                return transition, dist_px
+        # Compute distances and find closest
+        closest_line = None
+        closest_dist_px = float('inf')
+
+        for line, t in candidates:
+            dist_px = abs(self.viewbox_to_window(QPointF(t, 0)).x() - self.viewbox_to_window(QPointF(x, 0)).x())
+            if dist_px < closest_dist_px:
+                closest_line = line
+                closest_dist_px = dist_px
+
+        return closest_line, closest_dist_px
+        
+        # transitions = np.array([label_area.start_time for label_area in self.labels])
+        # idx = np.searchsorted(transitions, x)
+
+        # zero_point = self.viewbox_to_window(QPointF(0,0)).x()
+        
+        # if idx == len(transitions):
+        #     transition = self.labels[idx-1].transition_line
+        #     dist = abs(transitions[idx-1] - x)
+        #     dist_px = self.viewbox_to_window(QPointF(dist, 0)).x() - zero_point
+        #     return transition, dist_px
+        
+        # else:
+        #     # Check which of the two neighbors is closer
+        #     dist_to_left = abs(x - transitions[idx-1])
+        #     dist_to_right = abs(transitions[idx] - x)
+
+        #     if dist_to_left <= dist_to_right:
+        #         transition = self.labels[idx-1].transition_line
+        #         dist_px = self.viewbox_to_window(QPointF(dist_to_left, 0)).x()- zero_point
+        #         return transition, dist_px
+        #     else:
+        #         transition = self.labels[idx].transition_line
+        #         dist_px = self.viewbox_to_window(QPointF(dist_to_right, 0)).x()- zero_point
+        #         return transition, dist_px
             
     def get_baseline_distance(self, y: float) -> float:
         """
@@ -822,34 +829,21 @@ class DataWindow(PlotWidget):
         Returns:
             LabelArea: Label area the x-coordinate is part of.
         """
-
         if not self.labels:
             return None
-        
-        # don't include the last label
-        visible_labels = [label for label in self.labels if not label == self.labels[-1]]
 
-        if not visible_labels:
-            return None
-
-        if x < visible_labels[0].start_time or x > (visible_labels[-1].start_time + visible_labels[-1].duration):
+        if x < self.labels[0].start_time or x > (self.labels[-1].start_time + self.labels[-1].duration):
             return None  # outside the labels
-        label_ends = np.array([label.start_time + label.duration for label in visible_labels])
+        label_ends = np.array([label.start_time + label.duration for label in self.labels])
         idx = np.searchsorted(label_ends, x)  # idk why this works
-        if idx >= len(visible_labels):
-            return visible_labels[-1]
-        return visible_labels[idx]
+        if idx >= len(self.labels):
+            return self.labels[-1]
+        return self.labels[idx]
 
     def delete_all_label_instances(self, label: str) -> None:
         """
         TODO: implement
         """
-
-    def handle_transitions(self):
-        return
-
-    def handle_labels(self):
-        return
 
     def set_baseline(self, y_pos: float):
         """
@@ -988,7 +982,6 @@ class DataWindow(PlotWidget):
         return
 
         self.handle_transitions(event, "move")
-
     
 
     def wheelEvent(self, event: QWheelEvent) -> None:
@@ -997,28 +990,3 @@ class DataWindow(PlotWidget):
         """
         self.viewbox.wheelEvent(event)
         event.ignore()
-
-# def main():
-#     Settings()
-    
-#     app = QApplication([])
-
-#     epgdata = EPGData()
-#     epgdata.load_data(r"C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\sharpshooter_label2.csv")
-#     #epgdata.load_data("test_recording.csv")
-
-#     #epgdata.load_data(r'C:\EPG-Project\Summer\CS-Repository\Exploration\Jonathan\Data\smooth_18mil.csv')
-#     window = DataWindow(epgdata)
-#     window.plot_recording(window.epgdata.current_file, 'post')
-#     window.plot_transitions(window.epgdata.current_file)
-
-#     window.showMaximized()
-
-    
-    
-
-#     sys.exit(app.exec())
-
-
-# if __name__ == "__main__":
-#     main()

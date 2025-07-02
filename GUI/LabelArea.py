@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pyqtgraph import (
     PlotWidget, ViewBox,
     TextItem, InfiniteLine, LinearRegionItem,
@@ -20,20 +22,20 @@ class LabelArea:
     - Label and duration text (`TextItem`)
     - Background rectangles and optional debug boxes
     """
-    def __init__(self, time: float, dur: float, label: str, plot_widget: PlotWidget):
+    def __init__(self, time: float, dur: float, label: str, datawindow):
         """
         Initializes a new LabelArea with a label, duration, and graphical elements.
 
         Parameters:
             time (float): Start time of the label region.
             dur (float): Duration of the labeled region.
-            label (str): Label string (e.g. "FLIGHT", "END AREA").
-            plot_widget (PlotWidget): The parent plotting widget managing this label.
+            label (str): Label string (e.g. "N", "B2").
+            datawindow (DataWindow): The parent DataWnidow managing this label.
 
         Notes:
             Also connects to the viewbox's transformChanged signal.
         """
-        self.plot_widget: PlotWidget  # the parent PlotWidget
+        self.datawindow: PlotWidget  # the parent DataWindow
         self.viewbox: ViewBox # the ViewBox object that the LabelArea is being rendered in
         self.text_metrics: QFontMetricsF  # metrics about the font for the text
         self.start_time: float # the time at the start of the label
@@ -51,16 +53,15 @@ class LabelArea:
         self.duration_debug_box: QGraphicsRectItem  # the debug bbox for the duration
 
         self.transition_line: InfiniteLine  # the vertical line starting the LabelArea
+        self.right_transition_line: InfiniteLine # optional vertical line if this LabelArea has no right neighbor
         self.area: LinearRegionItem   # the colored FillBetweenItem for the label
-
-        self.is_end_area: bool # whether this label area is the zero-width end area
 
         self.enable_debug: bool # whether to show debug boxes
         
         # ----- initialize instance variables --------------------------
 
-        self.plot_widget = plot_widget
-        self.viewbox = self.plot_widget.getPlotItem().getViewBox()
+        self.datawindow = datawindow
+        self.viewbox = self.datawindow.viewbox
         self.start_time = time
 
         _, (y_min, y_max) = self.viewbox.viewRange()
@@ -85,8 +86,7 @@ class LabelArea:
         self.duration_text.setPos(centered_x, duration_y)
         self.viewbox.addItem(self.duration_text)
 
-        self.is_end_area = (label == 'END AREA')
-        self.enable_debug = self.plot_widget.enable_debug
+        self.enable_debug = self.datawindow.enable_debug
 
         self.transition_line = InfiniteLine(
             pos=time,
@@ -96,6 +96,16 @@ class LabelArea:
             movable=False,
         )
         self.viewbox.addItem(self.transition_line)
+
+        # add now, remove later
+        self.right_transition_line = InfiniteLine(
+            pos=time + dur,
+            angle=90,  # vertical
+            pen=mkPen(color='black', width=2),
+            hoverPen=None,
+            movable=False,
+        )
+        self.viewbox.addItem(self.right_transition_line)
   
         self.area = LinearRegionItem(
             values = (time, time + dur),
@@ -239,7 +249,7 @@ class LabelArea:
         Returns:
             QColor: The background color.
         """
-        color = self.plot_widget.composite_on_white(Settings.label_to_color[self.label]) 
+        color = self.datawindow.composite_on_white(Settings.label_to_color[self.label]) 
         color = color.darker(110) # 10% darker
         h, s, v, f = color.getHsvF()
         color = QColor.fromHsvF(h, s * 1.8, v, f) # 80% more saturated
@@ -253,13 +263,8 @@ class LabelArea:
         Redraws and repositions label area elements after zoom/pan or label changes.
 
         Called automatically on `sigTransformChanged` or manually after edits.
-        """
-        if self.is_end_area: # clamp end area to zero width
-            self.label = "END AREA"  # double check
-            self.area.setRegion((self.start_time, self.start_time))
-            return
-        
-        self.viewbox = self.plot_widget.getPlotItem().getViewBox()
+        """        
+        self.viewbox = self.datawindow.viewbox
         _, (y_min, y_max) = self.viewbox.viewRange()
 
         centered_x = self.start_time + self.duration / 2
@@ -317,8 +322,6 @@ class LabelArea:
 
         NOTE: Uses opacity rather than visibilty to keep allow objects to keep updating.
         """
-        if self.is_end_area:
-            return  # keep end area hidden
     
         label_overlapping = self.label_bbox.left() < self.start_time < self.label_bbox.right()
         self.label_text.setOpacity(0.0 if  label_overlapping else 1.0)
@@ -340,26 +343,54 @@ class LabelArea:
                 that make up this LabelArea.
         """
         itemsToRemove = [
-            self.area, self.label_text, self.duration_text, self.transition_line,
-            self.label_background, self.duration_background
+            self.area, self.transition_line, self.label_text, 
+            self.duration_text,self.label_background, self.duration_background
         ]
+        if self.right_transition_line is not None:
+            itemsToRemove.append(self.right_transition_line)
 
-        if self.plot_widget.enable_debug:
+
+        if self.datawindow.enable_debug:
             itemsToRemove.append(self.label_debug_box)
             itemsToRemove.append(self.duration_debug_box)
 
         return itemsToRemove
 
-    # functions for manually setting label properties
-    # unused rn, but maybe could use for manual label editing.
 
-
-    def set_transition_line(self, x: float):
+    def set_transition_line(self, line: Literal["left", "right"], x: float):
         """
         Moves the transition line to a new x-position.
 
         Parameters:
             x (float): The x-value to set the vertical transition line to.
         """
-        
-        self.transition_line.setValue(x)
+        if line == "left":
+            self.transition_line.setValue(x)
+        else:
+            self.right_transition_line.setValue(x)
+
+    def add_right_transition_line(self):
+        if self.right_transition_line is not None:
+            return
+        self.right_transition_line = InfiniteLine(
+            pos= self.start_time + self.duration,
+            angle=90,  # vertical
+            pen=mkPen(color='black', width=2), # updated below
+            hoverPen=None,
+            movable=False,
+        )
+        self.viewbox.addItem(self.right_transition_line)
+        selection = self.datawindow.selection
+        if selection and selection.is_selected(self):
+            self.right_transition_line.setPen(selection.selected_style['transition line'])
+        elif selection.highlighted_item == self.right_transition_line:
+            self.right_transition_line.setPen(selection.highlighted_style['transition line'])
+        else:
+            self.right_transition_line.setPen(selection.default_style['transition line'])
+
+
+    def remove_right_transition_line(self):
+        if self.right_transition_line is None:
+            return
+        self.viewbox.removeItem(self.right_transition_line)
+        self.right_transition_line = None
