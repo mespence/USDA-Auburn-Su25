@@ -252,6 +252,7 @@ class LiveDataWindow(PlotWidget):
 
                     # append to buffer
                     self.buffer_data.append((time, volt))
+                    print("appended to buffer")
 
                     # update latest time input
                     self.current_time = time
@@ -263,8 +264,9 @@ class LiveDataWindow(PlotWidget):
         """
         TODO
         """
-
+        print("called integrate")
         if not self.buffer_data:
+            print("DEBUG: integrate_buffer_to_np: Buffer is empty, returning.")
             return
         
         print("running 60 times per sec")
@@ -281,7 +283,7 @@ class LiveDataWindow(PlotWidget):
         """
         TODO
         """
-
+        print("timed_plot_update")
         self.integrate_buffer_to_np()
         self.update_plot()
 
@@ -300,6 +302,7 @@ class LiveDataWindow(PlotWidget):
         try:
             with self.save_lock:
                 # ensure all buffer data integrated before saving data
+                print("periodic save inbackground, save_lock TRUE")
                 self.integrate_buffer_to_np()
                 times = self.xy_data[0]
                 volts = self.xy_data[1]
@@ -782,6 +785,8 @@ class LiveDataWindow(PlotWidget):
                 self.baseline_preview.setPos(y_pos)
         elif event.key() == Qt.Key.Key_Up or event.key() == Qt.Key.Key_Down or event.key() == Qt.Key.Key_Left or event.key() == Qt.Key.Key_Right:
             self.viewbox.keyPressEvent(event)
+        elif event.key() == Qt.Key.Key_S and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self.export_df()
         
         self.viewbox.update()
 
@@ -853,6 +858,7 @@ class LiveDataWindow(PlotWidget):
         CSV file. Prompts the user to select a file location. If no
         data is available, shows a message box informing the user.
         """
+        print("export df")
         self.integrate_buffer_to_np()
 
         if not len(self.xy_data[0]) > 0:

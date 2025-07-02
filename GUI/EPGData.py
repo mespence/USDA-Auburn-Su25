@@ -20,8 +20,8 @@ class EPGData:
         self.current_file = os.path.join(
             os.path.abspath(os.path.join(self.dir_path, "..")), # root dir
             #r"GUI\test_recording.csv"
-            r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
-            #r"Data\Sharpshooter Data - HPR 2017\sharpshooter_parsed\sharpshooter_a01_raw.csv"
+            # r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
+            r"Data/Sharpshooter Data - HPR 2017/sharpshooter_labeled/sharpshooter_a01_labeled.csv"
         )          
 
     def load_data(self, file):
