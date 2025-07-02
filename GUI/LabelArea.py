@@ -96,16 +96,7 @@ class LabelArea:
             movable=False,
         )
         self.viewbox.addItem(self.transition_line)
-
-        # add now, remove later
-        self.right_transition_line = InfiniteLine(
-            pos=time + dur,
-            angle=90,  # vertical
-            pen=mkPen(color='black', width=2),
-            hoverPen=None,
-            movable=False,
-        )
-        self.viewbox.addItem(self.right_transition_line)
+        self.right_transition_line = None
   
         self.area = LinearRegionItem(
             values = (time, time + dur),

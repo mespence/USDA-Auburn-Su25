@@ -118,8 +118,12 @@ class PanZoomViewBox(ViewBox):
         else:
             center_x = center.x()
 
-            # ensure 0 stays within 80% of viewbox limit
+            
             new_width = current_span / zoom_factor
+            if new_width < 1: # dont zoom less than 1 sec
+                return
+            
+            # ensure 0 stays within 80% of viewbox limit
             new_x_min = center_x - (center_x - x_min) / zoom_factor
             new_x_max = new_x_min + new_width
             x_min_limit, x_max_limit = self.get_pan_limits(new_width)

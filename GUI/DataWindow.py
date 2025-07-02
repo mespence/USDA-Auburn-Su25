@@ -285,8 +285,8 @@ class DataWindow(PlotWidget):
             label_width_px = right_px_loc - left_px_loc
 
             if label_width_px < 1:
-                label_area.setVisible(False)
-                
+                label_area.setVisible(False)     
+                continue           
 
             label_area.setVisible(True)
             label_area.update_label_area()
@@ -325,7 +325,14 @@ class DataWindow(PlotWidget):
 
         # Convert to compression based on formula derived from experimenting with WinDaq
         self.compression = second_per_pix * 125
-        self.compression_text.setText(f"Compression Level: {self.compression :.1f}")
+        if self.compression < 1:
+            compression_str = round(self.compression, 2)
+            compression_str = 1.0 if compression_str == "1.00" else compression_str
+        else:
+            compression_str = round(self.compression, 1)
+        
+        self.compression_text.setText(f"Compression Level: {compression_str}")
+
 
     def update_zoom(self) -> None:
         """
@@ -345,8 +352,17 @@ class DataWindow(PlotWidget):
         default_pix_per_second = plot_width / file_length_sec
 
         self.zoom_level = pix_per_second / default_pix_per_second
-        self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .0f}%")
-        
+        self.zoom_level = 1 / float(self.compression) if self.compression != 0 else 1
+        if self.zoom_level < 0.5:
+            precision = 2
+        if self.zoom_level < 1:
+            precision = 1
+        else:
+            precision = 3
+
+        value = round(self.zoom_level * 100, precision)
+        value = int(value) if value >= 1 else value
+        self.zoom_text.setText(f"Zoom: {value}%")
 
     def plot_recording(self, file: str, prepost: str = "post") -> None:
         """
