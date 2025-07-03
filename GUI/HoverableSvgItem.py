@@ -124,8 +124,6 @@ class HoverableSvgItem(QGraphicsSvgItem):
         time_bounds = time_text.boundingRect()
         text_bounds = text_item.boundingRect()
 
-        print(time_bounds, text_bounds)
-
         box_width = max(time_bounds.width(), text_bounds.width()) + 2 * self.padding
 
         box_height = time_bounds.height() + text_bounds.height() + 3 * self.padding

@@ -32,9 +32,6 @@ class Labeler(QObject):
         model_chooser.lineEdit().setStyleSheet("color: gray;")
         model_chooser.setEnabled(False)
 
-
-
-
         QApplication.setOverrideCursor(QCursor(Qt.CursorShape.BusyCursor))
         QApplication.processEvents()
 

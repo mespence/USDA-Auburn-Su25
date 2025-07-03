@@ -70,6 +70,13 @@ class DataWindow(PlotWidget):
             symbol="o", size=4, brush="blue"
         )  # the discrete points shown at high zooms
         self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
+        self.zero_line = InfiniteLine(
+            pos = 0,
+            angle = 90,
+            pen=mkPen(color='black', width=3),
+            hoverPen=None,
+            movable=False,
+        )
 
         # CURSOR
         self.last_cursor_pos: QPointF = None # last cursor pos rel. to top left of application
@@ -140,6 +147,7 @@ class DataWindow(PlotWidget):
 
         self.plot_item.addItem(self.curve)
         self.plot_item.addItem(self.scatter)
+        self.viewbox.addItem(self.zero_line)
         self.plot_item.setLabel("bottom", "<b>Time [s]</b>", color="black")
         self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color="black")
         self.plot_item.showGrid(x=Settings.show_grid, y=Settings.show_grid)
@@ -285,8 +293,8 @@ class DataWindow(PlotWidget):
             label_width_px = right_px_loc - left_px_loc
 
             if label_width_px < 1:
-                label_area.setVisible(False)
-                
+                label_area.setVisible(False)     
+                continue           
 
             label_area.setVisible(True)
             label_area.update_label_area()
@@ -325,28 +333,46 @@ class DataWindow(PlotWidget):
 
         # Convert to compression based on formula derived from experimenting with WinDaq
         self.compression = second_per_pix * 125
-        self.compression_text.setText(f"Compression Level: {self.compression :.1f}")
+        if self.compression < 1:
+            compression_str = round(self.compression, 2)
+            compression_str = 1.0 if compression_str == "1.00" else compression_str
+        else:
+            compression_str = round(self.compression, 1)
+        
+        self.compression_text.setText(f"Compression Level: {compression_str}")
+
 
     def update_zoom(self) -> None:
         """
         Updates the displayed zoom percentage based on current vs full-scale width.
         """
-        plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
+        # plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
 
-        (x_min, x_max), _ = self.viewbox.viewRange()
-        time_span = x_max - x_min
+        # (x_min, x_max), _ = self.viewbox.viewRange()
+        # time_span = x_max - x_min
 
-        pix_per_second = plot_width / time_span
+        # pix_per_second = plot_width / time_span
 
-        if time_span == 0:
-            return float("inf")  # Avoid division by zero
+        # if time_span == 0:
+        #     return float("inf")  # Avoid division by zero
 
-        file_length_sec = self.df["time"].iloc[-1]
-        default_pix_per_second = plot_width / file_length_sec
+        # file_length_sec = self.df["time"].iloc[-1]
+        # default_pix_per_second = plot_width / file_length_sec
 
-        self.zoom_level = pix_per_second / default_pix_per_second
-        self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .0f}%")
-        
+        # self.zoom_level = pix_per_second / default_pix_per_second
+        # self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .0f}%")
+
+        self.zoom_level = 1 / float(self.compression) if self.compression != 0 else 1
+        if self.zoom_level < 0.5:
+            precision = 2
+        if self.zoom_level < 1:
+            precision = 1
+        else:
+            precision = 3
+
+        value = round(self.zoom_level * 100, precision)
+        value = int(value) if value >= 1 else value
+        self.zoom_text.setText(f"Zoom: {value}%")
 
     def plot_recording(self, file: str, prepost: str = "post") -> None:
         """
@@ -361,7 +387,7 @@ class DataWindow(PlotWidget):
         if self.labels: # clear previous labels, if any
             self.selection.deselect_all()
             for label_area in self.labels[::-1]:
-                self.selection.delete_label_area(label_area, multi_delete=False)
+                self.selection.delete_label_area(label_area)
 
         self.file = file
         self.prepost = prepost

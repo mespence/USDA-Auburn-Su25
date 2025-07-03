@@ -96,16 +96,7 @@ class LabelArea:
             movable=False,
         )
         self.viewbox.addItem(self.transition_line)
-
-        # add now, remove later
-        self.right_transition_line = InfiniteLine(
-            pos=time + dur,
-            angle=90,  # vertical
-            pen=mkPen(color='black', width=2),
-            hoverPen=None,
-            movable=False,
-        )
-        self.viewbox.addItem(self.right_transition_line)
+        self.right_transition_line = None
   
         self.area = LinearRegionItem(
             values = (time, time + dur),
@@ -172,6 +163,13 @@ class LabelArea:
         """
         for item in self.getItems():
             item.setVisible(visible)
+
+    def isVisible(self) -> bool:
+        """
+        Returns whether the LabelArea is curerntly set to visible or not.
+        """
+        return self.area.isVisible() # as a proxy for the whole visibility
+
 
 
     def set_duration_visible(self, visible: bool) -> None:
@@ -316,12 +314,26 @@ class LabelArea:
 
     def update_visibility(self) -> None:
         """
-        Hides label or duration text and backgrounds when they intersect a transition line.
+        Hides the LabelArea if it is rendered <1px wide. If visible, it also hides the 
+        label or duration text and backgrounds when they intersect a transition line (uses 
+        opacity rather than visibilty to keep allow objects to keep updating.)
 
         Also checks whether to display duration text based on `Settings.show_durations`.
 
-        NOTE: Uses opacity rather than visibilty to keep allow objects to keep updating.
+        NOTE: hiding <1px can lead to multiple sequential short labels all being
+        hidden, which can cause visible white regions, esp. when zoomed out.
+        Not sure if there is a good fix for this, but it's pretty minor
         """
+
+
+        window_x = lambda x: self.datawindow.viewbox_to_window(QPointF(x, 0)).x()
+        label_width_px = abs(window_x(self.start_time + self.duration) - window_x(self.start_time))
+
+        if label_width_px < 1:
+            self.setVisible(False)     
+            return
+        elif not self.isVisible():
+            self.setVisible(True)
     
         label_overlapping = self.label_bbox.left() < self.start_time < self.label_bbox.right()
         self.label_text.setOpacity(0.0 if  label_overlapping else 1.0)
@@ -366,8 +378,13 @@ class LabelArea:
         """
         if line == "left":
             self.transition_line.setValue(x)
+            self.duration -= x - self.start_time
+            self.start_time = x
         elif self.right_transition_line:
             self.right_transition_line.setValue(x)
+            self.duration += x - (self.start_time + self.duration)
+        self.update_label_area()
+
 
     def add_right_transition_line(self):
         if self.right_transition_line is not None:
@@ -387,7 +404,6 @@ class LabelArea:
             self.right_transition_line.setPen(selection.highlighted_style['transition line'])
         else:
             self.right_transition_line.setPen(selection.default_style['transition line'])
-
 
     def remove_right_transition_line(self):
         if self.right_transition_line is None:
