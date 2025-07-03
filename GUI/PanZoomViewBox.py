@@ -276,17 +276,29 @@ class PanZoomViewBox(ViewBox):
         idx = self.datawindow.labels.index(label_area)
         left_touching = False
         right_touching = False
+
         if idx > 0:
-            left_touching = False
+            left_label = self.datawindow.labels[idx - 1]
+            left_end = left_label.start_time + left_label.duration
+            if abs(left_end - label_area.start_time) < 1e-4:
+                left_touching = True
+        else:
+            left_end = 0
+            left_touching = True
 
+        if idx < len(self.datawindow.labels) - 1:
+            right_label = self.datawindow.labels[idx + 1]
+            this_end = label_area.start_time + label_area.duration
+            if abs(right_label.start_time - this_end) < 1e-4:
+                right_touching = True
 
-
+        snap_left.setEnabled(not left_touching)
+        snap_right.setEnabled(not right_touching)
 
         menu.addAction(add_comment)
         menu.addMenu(label_type_dropdown)
         menu.addAction(snap_left)
         menu.addAction(snap_right)
-       
 
         selected_action = menu.exec(event.screenPos())           
         if selected_action == label_type_dropdown:
@@ -294,6 +306,14 @@ class PanZoomViewBox(ViewBox):
         elif selected_action == add_comment:
             self.datawindow.add_comment_at_click(x)
             print("add comment")
+        elif selected_action == snap_left:
+            #label_area.duration += label_area.start_time - left_end
+            label_area.set_transition_line("left", left_end)
+            self.datawindow.selection._attempt_snap_and_merge(label_area.transition_line)
+        elif selected_action == snap_right:
+            #label_area.duration += right_label.start_time - this_end
+            label_area.set_transition_line("right", right_label.start_time)
+            self.datawindow.selection._attempt_snap_and_merge(label_area.right_transition_line)
         else:
             pass
     

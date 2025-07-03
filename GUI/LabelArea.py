@@ -378,8 +378,13 @@ class LabelArea:
         """
         if line == "left":
             self.transition_line.setValue(x)
+            self.duration -= x - self.start_time
+            self.start_time = x
         elif self.right_transition_line:
             self.right_transition_line.setValue(x)
+            self.duration += x - (self.start_time + self.duration)
+        self.update_label_area()
+
 
     def add_right_transition_line(self):
         if self.right_transition_line is not None:
@@ -399,7 +404,6 @@ class LabelArea:
             self.right_transition_line.setPen(selection.highlighted_style['transition line'])
         else:
             self.right_transition_line.setPen(selection.default_style['transition line'])
-
 
     def remove_right_transition_line(self):
         if self.right_transition_line is None:

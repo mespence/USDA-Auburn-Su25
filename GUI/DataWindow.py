@@ -70,6 +70,13 @@ class DataWindow(PlotWidget):
             symbol="o", size=4, brush="blue"
         )  # the discrete points shown at high zooms
         self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
+        self.zero_line = InfiniteLine(
+            pos = 0,
+            angle = 90,
+            pen=mkPen(color='black', width=3),
+            hoverPen=None,
+            movable=False,
+        )
 
         # CURSOR
         self.last_cursor_pos: QPointF = None # last cursor pos rel. to top left of application
@@ -140,6 +147,7 @@ class DataWindow(PlotWidget):
 
         self.plot_item.addItem(self.curve)
         self.plot_item.addItem(self.scatter)
+        self.viewbox.addItem(self.zero_line)
         self.plot_item.setLabel("bottom", "<b>Time [s]</b>", color="black")
         self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color="black")
         self.plot_item.showGrid(x=Settings.show_grid, y=Settings.show_grid)

@@ -402,6 +402,7 @@ class Selection:
 
         if idx is None:
             return  # line not associated with a label
+    
 
         if line_type == "left" and idx > 0:
             left = labels[idx - 1]
@@ -419,7 +420,6 @@ class Selection:
                 right.duration = (right_start + right.duration) - right.start_time
                 right.set_transition_line("left", left_end)
                 left.update_label_area()
-                right.update_label_area()
 
                 # Merge if needed
                 self.merge_adjacent_labels(right)
@@ -436,10 +436,10 @@ class Selection:
             view_dist = abs(vb_x(left_end) - vb_x(right_start))
 
             if abs(view_dist - SNAP_THRESHOLD) <= 1e-6:
+                print(2)
                 # Snap
                 left.duration = right_start - left.start_time
                 left.set_transition_line("right", right_start)
-                left.update_label_area()
 
                 # Merge if needed
                 self.merge_adjacent_labels(left)   
@@ -469,13 +469,6 @@ class Selection:
             elif label.right_transition_line == line:
                 self._apply_drag_transition(i, x, which_line='right')
                 return
-            
-    def _pixels_to_time(self, pixels: float, viewbox) -> float:
-        start_scene = viewbox.mapViewToScene(QPointF(0, 0)).x()
-        end_scene = viewbox.mapViewToScene(QPointF(pixels, 0)).x()
-        start_view = viewbox.mapSceneToView(QPointF(start_scene, 0)).x()
-        end_view = viewbox.mapSceneToView(QPointF(end_scene, 0)).x()
-        return end_view - start_view
     
     
     def _apply_drag_transition(self, index: int, x: float, which_line: Literal['left', 'right']) -> None:
@@ -488,28 +481,24 @@ class Selection:
         min_vb_distance = vb_x(MIN_PIXEL_DISTANCE) - vb_x(0)
 
         if which_line == 'left':
-            if index == 0:
-                return  # can't drag first transition line
-
-            left = labels[index - 1]
+            left = labels[index - 1] if index > 0 else None
             right = labels[index]
-            left_end = left.start_time + left.duration
+            left_end = left.start_time + left.duration if left else 0
             right_end = right.start_time + right.duration
 
             touching = abs(left_end - right.start_time) < 1e-9  # exact match
 
-            if touching:
-                # Shared transition line
-                min_x = left.start_time + min_vb_distance
+            if touching and index > 0:
+                min_x = left.start_time + min_vb_distance if index != 0 else 0
                 max_x = right_end - min_vb_distance
                 clamped_x = max(min_x, min(x, max_x))
+
 
                 left.duration = clamped_x - left.start_time
                 right.start_time = clamped_x
                 right.duration = right_end - clamped_x
             else:
-                # Separate transition line
-                min_x = left_end + min_vb_distance
+                min_x = left_end + min_vb_distance if index != 0 else 0
                 max_x = right_end - min_vb_distance
                 clamped_x = max(min_x, min(x, max_x))
 
@@ -517,8 +506,8 @@ class Selection:
                 right.duration = right_end - clamped_x
 
             right.set_transition_line("left", clamped_x)
-            left.update_label_area()
-            right.update_label_area()
+            if left:
+                left.update_label_area()
 
         elif which_line == 'right':
             left = labels[index]
@@ -540,7 +529,6 @@ class Selection:
                 right.duration = (right_start + right.duration) - clamped_x
 
                 right.set_transition_line("left", clamped_x)
-                right.update_label_area()
 
             else:
                 # Right line is local to `left`
@@ -551,7 +539,6 @@ class Selection:
                 left.duration = clamped_x - left.start_time
 
             left.set_transition_line("right", clamped_x)
-            left.update_label_area()
 
 
     def delete_label_area(self, label_area: LabelArea) -> None:
@@ -591,7 +578,8 @@ class Selection:
 
     def merge_adjacent_labels(self, label_area: LabelArea, deleting = False) -> bool:
         """
-        Merges the given LabelArea with adjacent ones if they share the same label type.
+        Merges the given LabelArea with adjacent ones if they are of the same type
+        and are exactly adjacent (no gap between them).
 
         Parameters:
             label_area (LabelArea): The LabelArea to merge from.
@@ -602,9 +590,8 @@ class Selection:
         labels = self.datawindow.labels
         if not labels:
             return
+        
         idx = labels.index(label_area)
-
-
         before = labels[idx - 1] if idx > 0 else None
         after = labels[idx + 1] if idx + 1 < len(labels) else None
 
@@ -612,8 +599,17 @@ class Selection:
             after = None  # dont merge right on deletion
 
 
-        merging_left = (before and before.label == label_area.label)
-        merging_right = (after and after.label == label_area.label)
+        epsilon = 1e-9
+        merging_left = (
+            before and
+            before.label == label_area.label and
+            abs((before.start_time + before.duration) - label_area.start_time) < epsilon
+        )
+        merging_right = (
+            after and
+            after.label == label_area.label and
+            abs((label_area.start_time + label_area.duration) - after.start_time) < epsilon
+        )
 
         def remove_label_area(area: LabelArea) -> None:
             """Helper function to remove label areas from the viewbox and update labels."""
@@ -633,7 +629,8 @@ class Selection:
 
             remove_label_area(label_area)
             remove_label_area(after)
-            before.duration = before.duration + label_area.duration + after.duration
+
+            before.duration += + label_area.duration + after.duration
             before.update_label_area()
 
             if before.right_transition_line:
@@ -644,7 +641,7 @@ class Selection:
                 self.select(before)
 
             remove_label_area(label_area)
-            before.duration = before.duration + label_area.duration
+            before.duration +=  label_area.duration
             before.update_label_area()
 
             if before.right_transition_line:
@@ -652,7 +649,7 @@ class Selection:
 
         elif merging_right:
             remove_label_area(after)
-            label_area.duration = label_area.duration + after.duration
+            label_area.duration += after.duration
             label_area.update_label_area()
 
             if label_area.right_transition_line:
@@ -684,8 +681,6 @@ class Selection:
 
         cursor = None
         if isinstance(item_to_highlight, InfiniteLine):
-            if item_to_highlight == self.datawindow.labels[0].transition_line:
-                return
             cursor = Qt.CursorShape.OpenHandCursor
 
         self.update_highlight(item_to_highlight, cursor=cursor)
@@ -713,8 +708,6 @@ class Selection:
             baseline_distance = float('inf')
 
         if transition_distance <= TRANSITION_HIGHLIGHT_THRESHOLD:
-            if transition_line == self.datawindow.labels[0].transition_line:
-                return None  # leftmost transition line can't be dragged
             hovered_item = transition_line
 
         elif baseline_distance <= BASELINE_HIGHLIGHT_THRESHOLD:
