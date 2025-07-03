@@ -64,7 +64,7 @@ def launch_application():
     main_window_instance = None
 
     def launch_main_window(settings):
-        main_window_instance = MainWindow()
+        main_window_instance = MainWindow(settings=settings)
         main_window_instance.show()
 
     launcher_dialog.launchMainWindow.connect(launch_main_window)
