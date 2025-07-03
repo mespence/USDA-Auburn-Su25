@@ -8,12 +8,13 @@ import datetime
 import csv
 import os
 import threading
+import re
 
 from pyqtgraph import PlotWidget, PlotItem, ScatterPlotItem, PlotDataItem, mkPen, InfiniteLine
 
 from PyQt6.QtCore import QTimer, Qt, QPointF
 from PyQt6.QtGui import QWheelEvent, QMouseEvent, QCursor, QKeyEvent
-from PyQt6.QtWidgets import QApplication, QPushButton, QDialog, QVBoxLayout, QLabel, QDialogButtonBox, QMessageBox, QFileDialog
+from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel, QDialogButtonBox, QMessageBox, QFileDialog
 
 from PanZoomViewBox import PanZoomViewBox
 from CommentMarker import CommentMarker
@@ -74,13 +75,18 @@ class LiveDataWindow(PlotWidget):
         self.periodic_backup_dir = "backups"
         os.makedirs(self.periodic_backup_dir, exist_ok=True)
 
+        # assign from new rec window
+        self.save_path = None
+
         # base names for the backup files
-        self.waveform_backup_base = "waveform_backup"
-        self.comments_backup_base = "comments_backup"
+        self.waveform_backup_base = "waveform_backup.csv"
+        self.comments_backup_base = "comments_backup.csv"
 
         # store the active filenames, updated after each save with utc time stamp
-        self.waveform_backup_path = os.path.join(self.periodic_backup_dir, "waveform_backup.csv")
-        self.comments_backup_path = os.path.join(self.periodic_backup_dir, "comments_backup.csv")
+        self.waveform_backup_path = os.path.join(self.periodic_backup_dir, self.waveform_backup_base)
+        self.comments_backup_path = os.path.join(self.periodic_backup_dir, self.comments_backup_base)
+
+        self.backup_renamed = False
 
         self.last_saved_data_index = 0 # track how much waveform data has been saved
 
@@ -125,8 +131,11 @@ class LiveDataWindow(PlotWidget):
         self.leading_line: InfiniteLine = InfiniteLine(pos=0, angle=90, movable=False, pen=mkPen("red", width=3))
         self.addItem(self.leading_line)
 
+        self.init_min_volt = -0.5
+        self.init_max_volt = 1
+
         # TODO change once have initial loading page for researcher to set range
-        self.viewbox.setYRange(-0.5, 1, padding=0)
+        self.viewbox.setYRange(self.init_min_volt, self.init_max_volt, padding=0)
 
         # Live mode button
         self.live_mode = True
@@ -183,6 +192,34 @@ class LiveDataWindow(PlotWidget):
             self.plot_update_timer.stop()
         if self.save_timer.isActive():
             self.save_timer.stop()
+
+        if not self.backup_renamed:
+            # store the active filenames, updated after each save with utc time stamp
+            
+            # delete waveform and comments csv because no data uploaded
+            os.remove(self.waveform_backup_path)
+            os.remove(self.comments_backup_path)
+
+        three_days_ago_utc = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=3)
+        
+        # --- DELETE OLD BACKUPS --- 
+        if os.path.exists(self.periodic_backup_dir):
+            for fname in os.listdir(self.periodic_backup_dir):
+                fpath = os.path.join(self.periodic_backup_dir, fname)
+                if not os.path.isfile(fpath):
+                    continue
+
+                match = re.search(r'(\d{8}_\d{6})', fname)
+                if match:
+                    timestamp_str = match.group(1)
+                    file_utc_time = datetime.datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S").replace(tzinfo=datetime.timezone.utc)
+                            
+                    if file_utc_time < three_days_ago_utc: # Check if file time is BEFORE 3 days ago
+                        try:
+                            os.remove(fpath)
+                            print(f"DEBUG: Deleted old timestamped backup: {fpath} (Created: {file_utc_time})")
+                        except OSError as e:
+                            print(f"ERROR: Could not delete old {fpath}: {e}")
 
         if self.data_modified: # check if any new data or modifications
             msg_box = QMessageBox(self)
@@ -283,27 +320,33 @@ class LiveDataWindow(PlotWidget):
             comments = self.comments.copy()
         
             try:
-                df_to_append = pd.DataFrame({'time': times[self.last_saved_data_index:], 'voltage': volts[self.last_saved_data_index:]})
-                df_to_append.to_csv(self.waveform_backup_path, mode='a', header=False, index=False)
-
-                comments_list = [{'time': t, 'comment': c.text} for t, c in comments.items()]
-                comments_df = pd.DataFrame(comments_list, columns=['time', 'comment'])
-                comments_df.to_csv(self.comments_backup_path, mode='w', header=True, index=False)
-
                 current_utc_time = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')
-                # rename file and path
-                new_waveform_filename = os.path.join(
-                    self.periodic_backup_dir, f"{self.waveform_backup_base}_{current_utc_time}.csv"
-                )
-                new_comments_filename = os.path.join(
-                    self.periodic_backup_dir, f"{self.comments_backup_base}_{current_utc_time}.csv"
-                )
-                os.rename(self.waveform_backup_path, new_waveform_filename)
-                os.rename(self.comments_backup_path, new_comments_filename)
-                self.waveform_backup_path = new_waveform_filename
-                self.comments_backup_path = new_comments_filename
+                df_to_append = pd.DataFrame({'time': times[self.last_saved_data_index:], 'voltage': volts[self.last_saved_data_index:]})
+                comments_list = [{'time': t, 'comment': c.text} for t, c in comments.items()]
 
-                self.last_saved_data_index = len(times)
+                if not df_to_append.empty:
+                    df_to_append.to_csv(self.waveform_backup_path, mode='a', header=False, index=False)
+                    new_waveform_filename = os.path.join(
+                        self.periodic_backup_dir, f"{self.waveform_backup_base}_{current_utc_time}.csv"
+                    )
+                    os.rename(self.waveform_backup_path, new_waveform_filename)
+                    self.waveform_backup_path = new_waveform_filename
+                    self.last_saved_data_index = len(times)
+                    if not self.backup_renamed:
+                        self.backup_renamed = True
+                
+                if comments_list:
+                    comments_df = pd.DataFrame(comments_list, columns=['time', 'comment'])
+                    comments_df.to_csv(self.comments_backup_path, mode='w', header=True, index=False)
+
+                    # rename file and path
+                    
+                    new_comments_filename = os.path.join(
+                        self.periodic_backup_dir, f"{self.comments_backup_base}_{current_utc_time}.csv"
+                    )
+                    os.rename(self.comments_backup_path, new_comments_filename)
+                    self.comments_backup_path = new_comments_filename
+
                 self.data_modified = False
                 
             except Exception as e:
@@ -865,6 +908,8 @@ class LiveDataWindow(PlotWidget):
         self.viewbox.wheelEvent(event)
         
 if __name__ == "__main__":
+
+
     app = QApplication([])
     window = LiveDataWindow()
     window.resize(1000, 500)

@@ -1,21 +1,25 @@
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QDialog, QLabel, QLineEdit, QDoubleSpinBox, QSpinBox,
     QComboBox, QPushButton, QHBoxLayout, QVBoxLayout, QFormLayout, QDialogButtonBox,
-    QSpacerItem, QSizePolicy, QToolButton
+    QSpacerItem, QSizePolicy, QToolButton, QFileDialog
 )
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QSize
 import sys
 
+from main import MainWindow
+
 class NewRecordingDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Create New EPG Recording")
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(500)
+        self.setModal(True)
 
         # === Input Fields ===
         self.filename_edit = QLineEdit()
         self.filename_edit.setPlaceholderText("Untitled recording")
+        self.filename_edit.setMinimumWidth(250)
 
         spacer = QSpacerItem(0, 10, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
 
@@ -47,12 +51,12 @@ class NewRecordingDialog(QDialog):
         voltage_widget = QWidget()
         voltage_widget.setLayout(voltage_layout)
 
-        voltage_info_icon = QToolButton()
-        voltage_info_icon.setIcon(QIcon("icons/info-circle.svg"))
-        voltage_info_icon.setIconSize(QSize(16, 16))     # size of the icon inside the button
-        voltage_info_icon.setFixedSize(24, 24)           # size of the button itself
-        voltage_info_icon.setToolTip("Info tooltip here")
-        voltage_info_icon.setStyleSheet("QToolButton { border: none; padding: 4px; }")
+        # voltage_info_icon = QToolButton()
+        # voltage_info_icon.setIcon(QIcon("icons/info-circle.svg"))
+        # voltage_info_icon.setIconSize(QSize(16, 16))     # size of the icon inside the button
+        # voltage_info_icon.setFixedSize(24, 24)           # size of the button itself
+        # voltage_info_icon.setToolTip("Info tooltip here")
+        # voltage_info_icon.setStyleSheet("QToolButton { border: none; padding: 4px; }")
 
 
         # voltage_info_button = QToolButton()
@@ -72,7 +76,7 @@ class NewRecordingDialog(QDialog):
         
         info_row = QHBoxLayout()
         info_row.addWidget(voltage_widget)
-        info_row.addWidget(voltage_info_icon,alignment=Qt.AlignmentFlag.AlignVCenter)
+        # info_row.addWidget(voltage_info_icon,alignment=Qt.AlignmentFlag.AlignVCenter)
 
         wrapper = QWidget()
         wrapper.setLayout(info_row)
@@ -83,7 +87,7 @@ class NewRecordingDialog(QDialog):
         form_layout.addRow("Filename", self.filename_edit)
         form_layout.addItem(spacer)
         form_layout.addRow("Initial Voltage Range", wrapper)
-        #form_layout.addRow(voltage_info_label)
+        # form_layout.addRow(voltage_info_label)
         # form_layout.addRow("Min Voltage:", self.min_voltage_spin)
         # form_layout.addRow(self.min_voltage_label)
         # form_layout.addRow("Max Voltage:", self.max_voltage_spin)
@@ -93,7 +97,7 @@ class NewRecordingDialog(QDialog):
 
         # === Buttons ===
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        self.button_box.accepted.connect(self.accept)
+        self.button_box.accepted.connect(self.prompt_save_location)
         self.button_box.rejected.connect(self.reject)
 
         # === Final Layout ===
@@ -102,14 +106,34 @@ class NewRecordingDialog(QDialog):
         layout.addWidget(self.button_box)
         self.setLayout(layout)
 
+        self.save_file_path = None
+
+    def prompt_save_location(self):
+        """
+        Opens a file dialog to prompt the user for a save location
+        """
+
+        initial_filename = self.filename_edit.text().strip()
+
+        # open file dialog
+        save_path, _ = QFileDialog.getSaveFileName(
+            parent=self,
+            caption="Save As",
+            directory=initial_filename,
+            filter="CSV Files (*.csv);;All Files (*)"
+        )
+
+        if save_path:
+            self.save_file_path = save_path
+            self.accept()
+        else:
+            self.save_file_path = None
+
     def get_data(self):
         return {
-            "filename": self.filename_edit.text().strip(),
-            "min_voltage": self.min_voltage_spin.value(),
-            "max_voltage": self.max_voltage_spin.value(),
-            "sampling_rate": self.sampling_rate_spin.value(),
-            "duration": self.duration_spin.value(),
-            "channel": self.channel_combo.currentText(),
+            "filename": self.save_file_path,
+            "min_voltage": self.voltage_min_spin.value(),
+            "max_voltage": self.voltage_max_spin.value(),
         }
 
 def main():
