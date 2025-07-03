@@ -7,8 +7,6 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSlot
 
 import sys
 
-
-
 class SliderPanel(QWidget):
     def __init__(self, parent: str = None):
         super().__init__(parent=parent)
@@ -38,7 +36,7 @@ class SliderPanel(QWidget):
 
         grid.addWidget(QLabel("Mode"), 0, 0)
         self.mode_toggle = QComboBox()
-        self.mode_toggle.addItems(["DC", "AC"])
+        self.mode_toggle.addItems(["DC", "AC"]) # does this start with DC or nothing
 
         self.mode_toggle.currentIndexChanged.connect(self.on_mode_change)
         grid.addWidget(self.mode_toggle, 0, 1)
@@ -59,41 +57,50 @@ class SliderPanel(QWidget):
 
             entry.textEdited.connect(on_text_edited)
 
-        def add_slider_row(row, label_text, unit=None):
-            grid.addWidget(QLabel(label_text), row, 0)
-
+        def create_slider_row_widgets(label_text, unit=None):
+            label = QLabel(label_text)
             slider = QSlider(Qt.Orientation.Horizontal)
             slider.setFixedWidth(150)
             self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-            grid.addWidget(slider, row, 1)
-
             entry = QLineEdit("0")
             entry.setFixedWidth(50)
-            grid.addWidget(entry, row, 2)
-
-            if unit:
-                grid.addWidget(QLabel(unit), row, 3)
+            unit_label = QLabel(unit) if unit else None
 
             sync_slider_and_entry(slider, entry)    
 
-            return slider
+            return label, slider, entry, unit_label
 
+        self.slider_widgets_map = {}
 
-        # Add rows
+        self.dds_offset_widget = create_slider_row_widgets("Excitation Voltage", "V")
+        self.dds_slider = self.dds_offset_widget[1]
+        self.dds_slider.setRange(-33, 33)
+        self.slider_widgets_map["ddso"] = self.dds_offset_widget
 
-        self.dds_slider = add_slider_row(1, "Excitation Voltage", "V")
-        self.dds_slider.setRange(-33,33)
-        self.dds_slider.setVisible(False)
+        self.ddsa_amplitude_widget = create_slider_row_widgets("Excitation Voltage", "Vrms")
+        self.ddsa_slider = self.ddsa_amplitude_widget[1]
+        self.ddsa_slider.setRange(-500, 1)
+        self.slider_widgets_map["ddsa"] = self.ddsa_amplitude_widget
 
-        self.ddsa_slider = add_slider_row(2, "Excitation Voltage", "Vrms")
-        self.ddsa_slider.setRange(-500,-1)
-        self.ddsa_slider.setVisible(False)
+        self.sca_widgets = create_slider_row_widgets("Gain", "V")
+        self.sca_slider = self.sca_widgets[1]
+        self.sca_slider.setRange(1, 700)
+        self.slider_widgets_map["sca"] = self.sca_widgets
 
-        self.sca_slider = add_slider_row(3, "Gain", "V")
-        self.sca_slider.setRange(1,700)
+        self.sco_widgets = create_slider_row_widgets("Offset", "V")
+        self.sco_slider = self.sco_widgets[1]
+        self.sco_slider.setRange(-33, 33)
+        self.slider_widgets_map["sco"] = self.sco_widgets
 
-        self.sco_slider = add_slider_row(4, "Offset", "V")
-        self.sco_slider.setRange(-33,33)
+        grid_row = 1
+        for value in self.slider_widgets_map.values():
+            label, slider, entry, unit_label = value
+            grid.addWidget(label, grid_row, 0)
+            grid.addWidget(slider, grid_row, 1)
+            grid.addWidget(entry, grid_row, 2)
+            if unit_label:
+                grid.addWidget(unit_label, grid_row, 3)
+            grid_row += 1
 
         layout.addLayout(grid)
 
@@ -140,28 +147,49 @@ class SliderPanel(QWidget):
         for label, item in self.controls.items():
             if isinstance(item, QSlider):
                 item.valueChanged.connect(lambda val, l=label: self.send_control_update(l, val))
-            elif isinstance(item, QComboBox):
-                item.currentTextChanged.connect(lambda text, l=label: self.send_control_update(l, text))
             elif isinstance(item, QPushButton):
                 item.clicked.connect(lambda _, l=label: self.send_control_update(l, "clicked"))
 
-    def on_mode_change(self):
-            selected_text = self.mode_toggle.currentText()
-            print("mode change:", selected_text)
+        self.on_mode_change()
 
-            if selected_text == "DC":
-                self.dds_slider.setVisible(True)
-                self.ddsa_slider.setVisible(False)
-                self.ddsa_slider.setValue(1)
-                print("dds offset", self.dds_slider.value())
-                print("ddsa amp", self.ddsa_slider.value())
-            elif selected_text == "AC":
-                self.dds_slider.setVisible(False)
-                self.ddsa_slider.setVisible(True)
-                self.dds_slider.setValue(-0.3) # check on abiliy of slider to be set to non-int
-                print("dds offset", self.dds_slider.value())
-                print("ddsa amp", self.ddsa_slider.value())
-    
+    def on_mode_change(self):
+        selected_mode = self.mode_toggle.currentText()
+        print("mode changed to:", selected_mode)
+
+        self._suppress = True
+        
+        always_visible = ["sca", "sco"]
+
+        for name in always_visible:
+            for widget in self.slider_widgets_map[name]:
+                widget.setVisible(True)
+
+        if selected_mode == "DC":
+            for widget in self.slider_widgets_map["ddso"]:
+                widget.setVisible(True)
+            for widget in self.slider_widgets_map["ddsa"]:
+                widget.setVisible(False)
+            self.ddsa_slider.setValue(1) # its saying ddsa is -1 ?
+            self.send_control_update("ddsa", 1)
+
+            print("DC Mode Active:")
+            print(f"  DDS Offset (visible): {self.dds_slider.value()}")
+            print(f"  DDSA Amplitude (hidden, set to): {self.ddsa_slider.value()}")
+
+        elif selected_mode == "AC":
+            for widget in self.slider_widgets_map["ddsa"]:
+                widget.setVisible(True)
+            for widget in self.slider_widgets_map["ddso"]:
+                widget.setVisible(False)
+            self.dds_slider.setValue(-1) # TODO i think this is -0.3, but no float for slider ?
+            self.send_control_update("ddsa", -0.3)
+
+            print("AC Mode Active:")
+            print(f"  DDSA Amplitude (visible): {self.ddsa_slider.value()}")
+            print(f"  DDS Offset (hidden, set to): {self.dds_slider.value()}")
+
+        QTimer.singleShot(0, lambda: setattr(self, "_suppress", False))
+
     def send_control_update(self, name, value):
         if self._suppress:
             return
@@ -201,6 +229,9 @@ class SliderPanel(QWidget):
         """
         Sets all controls to the values given by a full control state dictionary.
         """
+        if "mode" in full_state:
+            self.set_control_value("mode", full_state["mode"])
+
         for name, value in full_state.items():
             self.set_control_value(name, value)
 

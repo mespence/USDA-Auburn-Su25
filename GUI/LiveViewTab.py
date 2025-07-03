@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 
 from LiveDataWindow import LiveDataWindow
 from ConnectionIndicator import ConnectionIndicator
-from SliderPanel import SliderPanel
+from SliderPanel2 import SliderPanel
 from EPGSocket import SocketClient, SocketServer
 
 
@@ -226,9 +226,7 @@ class LiveViewTab(QWidget):
                     if message_type == 'data':
                         time = float(message['value'][0])
                         volt = float(message['value'][1])
-
-                        print(message['value'][1])
-
+                        
                         with self.datawindow.buffer_lock:
                             self.datawindow.buffer_data.append((time, volt))
                             
