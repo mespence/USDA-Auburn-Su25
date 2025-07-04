@@ -42,7 +42,7 @@ class DataWindow(PlotWidget):
 
     Also handles data loading, rendering, and downsampling for performance.
     """
-    def __init__(self, epgdata: EPGData) -> None:
+    def __init__(self, parent = None) -> None:
         """
         Initializes the DataWindow with plotting elements, UI overlays, and input handling.
 
@@ -50,7 +50,7 @@ class DataWindow(PlotWidget):
             epgdata (EPGData): The waveform and label data source.
         """
         # UI ITEMS
-        super().__init__(viewBox=PanZoomViewBox())
+        super().__init__(parent = parent, viewBox=PanZoomViewBox())
         self.plot_item: PlotItem = self.getPlotItem() # the plotting canvas (axes, grid, data, etc.)
         self.plot_item.hideButtons()
         self.viewbox: PanZoomViewBox = self.plot_item.getViewBox() # the plotting area (no axes, etc.)
@@ -59,7 +59,7 @@ class DataWindow(PlotWidget):
         self.viewbox.sigRangeChanged.connect(self.update_plot)  # update plot on viewbox change
 
         # DATA
-        self.epgdata: EPGData = epgdata
+        self.epgdata: EPGData = self.parent().parent().epgdata
         self.file: str = None
         self.prepost: str = "pre"
         self.df = None

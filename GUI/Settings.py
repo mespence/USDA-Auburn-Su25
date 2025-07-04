@@ -51,3 +51,4 @@ class Settings:
         Settings.show_labels = True
         Settings.show_durations = False
         Settings.show_comments = True
+        Settings.default_recording_directory = r'\recordings'

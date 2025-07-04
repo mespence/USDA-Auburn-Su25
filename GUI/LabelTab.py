@@ -25,13 +25,13 @@ class LabelTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.epgdata = EPGData()
+        #self.epgdata = EPGData()
         self.labeler = Labeler(parent=self)
 
-        file = self.epgdata.current_file
-        self.epgdata.load_data(file)
+        # file = self.epgdata.current_file
+        # self.epgdata.load_data(file)
 
-        self.datawindow = DataWindow(self.epgdata)
+        self.datawindow = DataWindow(self)
         self.datawindow.viewbox.sigRangeChanged.connect(self.sync_view_to_scroll)
 
         self.scrollbar = QScrollBar(Qt.Orientation.Horizontal)
@@ -74,6 +74,7 @@ class LabelTab(QWidget):
 
 
         QApplication.processEvents()
+        file = self.parent().epgdata.current_file
         self.datawindow.plot_recording(file, "pre")
         self.datawindow.plot_transitions(file)
         self.datawindow.plot_comments(file)

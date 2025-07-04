@@ -148,14 +148,21 @@ class PanZoomViewBox(ViewBox):
         """
         left_limit = -self.zoom_viewbox_limit * view_width 
 
-
         if self.datawindow:
             if hasattr(self.datawindow, "df"):
-                if self.datawindow.df is not None:
+                df = self.datawindow.df
+                if df is not None or df.shape[0] > 0:
                     data_max = self.datawindow.df["time"].iloc[-1]
+                    right_limit = data_max + self.zoom_viewbox_limit * view_width
+                else:
+                    right_limit = float("inf")
             else:
-                data_max = self.datawindow.xy_data[0][-1]    
-            right_limit = data_max + self.zoom_viewbox_limit * view_width
+                xy_data = self.datawindow.xy_data
+                if xy_data[0].shape[0] > 0:
+                    data_max = self.datawindow.xy_data[0][-1]    
+                    right_limit = data_max + self.zoom_viewbox_limit * view_width
+                else:
+                    right_limit = float("inf")
         else:
             right_limit = float("inf")  # fail open
 

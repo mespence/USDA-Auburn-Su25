@@ -20,6 +20,7 @@ from pyqtgraph import setConfigOptions
 from LoadingScreen import LoadingScreen
 from DataWindow import DataWindow
 from EPGData import EPGData
+from FileSelector import FileSelector
 from Labeler import Labeler
 from Settings import Settings
 
@@ -59,6 +60,14 @@ class MainWindow(QMainWindow):
                 "company.app.1"  # needed to set taskbar icon on windows
             )
         super().__init__()
+
+        self.epgdata = EPGData()
+        file = self.epgdata.current_file
+        self.epgdata.load_data(file)
+
+        self.live_view_tab = LiveViewTab(self)
+        self.label_tab = LabelTab(self)
+
         self.initUI()
 
     def initUI(self):
@@ -70,7 +79,9 @@ class MainWindow(QMainWindow):
         # === Menu Bar ===
         menubar = QMenuBar(self)
         file_menu = QMenu("File", self)
-        file_menu.addAction("Open")
+        file_open = file_menu.addAction("Open")
+        file_open.triggered.connect(lambda: FileSelector.load_new_data(self.epgdata, self.live_view_tab.datawindow))
+
         export_comment_csv = file_menu.addAction("Export Comments")
         export_comment_csv.triggered.connect(self.export_comments_from_current_tab)
         export_data = file_menu.addAction("Export Data")
@@ -104,14 +115,14 @@ class MainWindow(QMainWindow):
                 margin-right: 0px;
             }
             QTabBar::tab:selected {
-                background: #1D2934;
+                background: #404AA8FF;
                 padding-bottom: 8px;
                 border-bottom: 3px solid #4aa8ff;
             }
 
             QTabBar::tab:!selected {
-                background: #1e1e1e;
-                border-bottom: 1px solid #282828;
+                background: #33000000;
+                border-bottom: none;
             }
                                 
             QTabWidget::pane {
@@ -123,12 +134,8 @@ class MainWindow(QMainWindow):
         self.tabs.tabBar().setCursor(Qt.CursorShape.PointingHandCursor)
         self.setCentralWidget(self.tabs)
 
-        # First tab: Live View
-        self.live_view_tab = LiveViewTab()
-        self.tabs.addTab(self.live_view_tab, "Live View")
-
-        # Second tab: Labelling View
-        self.label_tab = LabelTab()
+        # Add tabs
+        self.tabs.addTab(self.live_view_tab, "Live View")       
         self.tabs.addTab(self.label_tab, "Label")
     
     def closeEvent(self, event):
@@ -249,6 +256,7 @@ def load_fonts():
 def main():
     Settings()
     app = QApplication([])
+    #app.setStyle("Fusion")
 
     load_fonts()
     splash = LoadingScreen()

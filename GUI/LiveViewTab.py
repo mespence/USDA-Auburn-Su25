@@ -33,7 +33,7 @@ class LiveViewTab(QWidget):
         self.receive_loop = threading.Thread(target=self._socket_recv_loop, daemon=True)
         self.receive_loop.start()
 
-        self.datawindow = LiveDataWindow()
+        self.datawindow = LiveDataWindow(self)
         self.datawindow.getPlotItem().hideButtons()
 
         self.pause_button = QPushButton("Pause Live View", self)
@@ -114,7 +114,7 @@ class LiveViewTab(QWidget):
             QToolButton {
                 outline: none;
             } QToolButton:disabled {
-                background-color: gray
+                background-color: gray;
             QToolButton:focus {
                 outline 3px solid #4aa8ff;
             }
@@ -206,6 +206,8 @@ class LiveViewTab(QWidget):
                     if raw_message.strip() == "ack":
                         acknowledged = True
                     continue
+
+                self.datawindow.live_mode = True
                 
                 # parse message into individual commands
                 if isinstance(raw_message, dict):
@@ -226,7 +228,7 @@ class LiveViewTab(QWidget):
                     if message_type == 'data':
                         time = float(message['value'][0])
                         volt = float(message['value'][1])
-                        
+
                         with self.datawindow.buffer_lock:
                             self.datawindow.buffer_data.append((time, volt))
                             
@@ -259,9 +261,11 @@ class LiveViewTab(QWidget):
                             Q_ARG(dict, value),
                         )
             except Empty:
+                self.datawindow.live_mode = False
                 continue  # restart the loop
 
             except Exception as e:
+                self.datawindow.live_mode = False
                 print("[CS RECIEVE LOOP ERROR]", e)
 
    
