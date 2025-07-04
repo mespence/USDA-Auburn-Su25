@@ -83,7 +83,7 @@ class LabelTab(QWidget):
         openDataButton.clicked.connect(lambda: FileSelector.load_new_data(self.epgdata, self.datawindow))
 
         self.modelChooser = QComboBox()
-        self.modelChooser.addItem("Select model...")
+        self.modelChooser.addItem("Select mosquito model...")
         self.modelChooser.setItemData(0, 0, Qt.ItemDataRole.UserRole - 1)  # Disable default item
         self.modelChooser.addItems([
             'UNet (Block)', 

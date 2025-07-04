@@ -73,7 +73,7 @@ class MainWindow(QMainWindow):
     def initUI(self):
         # Supervised Classification of Insect Data and Observations
         self.setWindowTitle("SCIDO EPG Labeler")
-        self.setWindowIcon(QIcon("SCIDO.png"))
+        self.setWindowIcon(QIcon("SCIDO.ico"))
         self.move(0,0)
 
         # === Menu Bar ===

@@ -51,6 +51,7 @@ class PanZoomViewBox(ViewBox):
             self.datawindow = self.parentItem().getViewWidget()
         
         delta = event.angleDelta().y()
+        x_delta = event.angleDelta().x()
         modifiers = event.modifiers()
         live = getattr(self.datawindow, "live_mode", False)
 
@@ -78,6 +79,21 @@ class PanZoomViewBox(ViewBox):
                 v_zoom_factor = 5e-4
                 dy = delta * v_zoom_factor * height
                 self.translateBy(y=dy)
+            elif abs(x_delta) > abs(delta):  # trackpad horizontal swipe
+                if not live:
+                    h_zoom_factor = 2e-4
+                    dx = -x_delta * h_zoom_factor * width  # note: negative for natural direction
+
+                    new_x_min = x_min + dx
+                    new_x_max = x_max + dx
+                    x_min_limit, x_max_limit = self.get_pan_limits(width)
+
+                    if new_x_min < x_min_limit:
+                        self.setXRange(x_min_limit, x_min_limit + width, padding=0)
+                    elif new_x_max > x_max_limit:
+                        self.setXRange(x_max_limit - width, x_max_limit, padding=0)
+                    else:
+                        self.translateBy(x=dx)
             else:
                 # x pan (disabled during live mode)
                 if not live:

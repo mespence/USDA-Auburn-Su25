@@ -115,6 +115,7 @@ class LiveViewTab(QWidget):
                 outline: none;
             } QToolButton:disabled {
                 background-color: gray;
+            }
             QToolButton:focus {
                 outline 3px solid #4aa8ff;
             }
