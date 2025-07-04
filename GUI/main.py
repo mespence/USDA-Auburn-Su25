@@ -53,12 +53,13 @@ class LabelingTask(QRunnable):
 class MainWindow(QMainWindow):
     start_labeling = pyqtSignal()
 
-    def __init__(self) -> None:
+    def __init__(self, settings = None) -> None:
         if os.name == "nt":  # windows
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
                 "company.app.1"  # needed to set taskbar icon on windows
             )
         super().__init__()
+        self.settings = settings
         self.initUI()
 
     def initUI(self):
@@ -246,29 +247,27 @@ def load_fonts():
         QFontDatabase.addApplicationFont(font)
 
 
-def main():
+def start_main_application(settings=None):
     Settings()
-    app = QApplication([])
 
     load_fonts()
     splash = LoadingScreen()
     splash.show()
-    QApplication.processEvents()
+    QApplication.processEvents() 
 
-    window = MainWindow()
+    window = MainWindow(settings=settings)
     
     # Display Focused
     window.showMaximized()
     window.raise_()
     window.activateWindow()
-    
-    tracker = GlobalMouseTracker(window)
-    app.installEventFilter(tracker)
+    QApplication.processEvents() 
 
     splash.close()
-    
-    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
-    main()
+    app = QApplication(sys.argv)
+    sys.exit(app.exec())
+
+    start_main_application()

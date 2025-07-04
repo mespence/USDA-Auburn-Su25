@@ -3,7 +3,8 @@ import sys
 
 # Import both your dialog and main window classes
 from NewRecordingDialog import NewRecordingDialog
-from main import MainWindow
+from main import start_main_application
+from SettingsWindow import SettingsWindow
 from Settings import Settings
 from PyQt6.QtWidgets import QApplication, QDialog, QHBoxLayout, QPushButton, QVBoxLayout, QLabel
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -46,7 +47,7 @@ class AppLauncherDialog(QDialog):
 
     def open_settings_dialog(self):
         # need to work on settings dialog
-        settings_dialog = Settings()
+        settings_dialog = SettingsWindow()
         settings_dialog.exec()
 
     def open_new_recording_dialog(self):
@@ -63,18 +64,24 @@ def launch_application():
 
     main_window_instance = None
 
-    def launch_main_window(settings):
-        main_window_instance = MainWindow(settings=settings)
-        main_window_instance.show()
+    def launch_main_window_with_settings(settings):
+        nonlocal main_window_instance
 
-    launcher_dialog.launchMainWindow.connect(launch_main_window)
+        main_window_instance = start_main_application(settings=settings)
+        launcher_dialog.accept() 
+
+    launcher_dialog.launchMainWindow.connect(launch_main_window_with_settings)
 
     result = launcher_dialog.exec()
 
-    if result == QDialog.accept:
-        sys.exit(app.exec())
+    if result == QDialog.DialogCode.Accepted:
+        pass
     else:
         sys.exit(0)
 
+    sys.exit(app.exec())
+
 if __name__ == "__main__":
     launch_application()
+
+    

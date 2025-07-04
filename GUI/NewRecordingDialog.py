@@ -146,7 +146,7 @@ def main():
             print(f"  {key}: {value}")
     else:
         print("User cancelled.")
-    sys.exit(0)
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
     main()
