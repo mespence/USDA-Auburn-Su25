@@ -12,6 +12,7 @@ dependencies = [
     "pandas>=2.2.3",
     "positional-encodings>=6.0.3",
     "pyarrow>=20.0.0",
+    "pyinstaller>=6.14.1",
     "pyqt6>=6.9.0",
     "pyqt6-charts>=6.9.0",
     "pyqtgraph>=0.13.7",

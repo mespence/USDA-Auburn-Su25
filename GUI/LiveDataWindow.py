@@ -13,7 +13,7 @@ import re
 from pyqtgraph import PlotWidget, PlotItem, ScatterPlotItem, PlotDataItem, mkPen, InfiniteLine
 
 from PyQt6.QtCore import QTimer, Qt, QPointF
-from PyQt6.QtGui import QWheelEvent, QMouseEvent, QCursor, QKeyEvent
+from PyQt6.QtGui import QWheelEvent, QMouseEvent, QCursor, QKeyEvent, QGuiApplication
 from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel, QDialogButtonBox, QMessageBox, QFileDialog
 
 from PanZoomViewBox import PanZoomViewBox
@@ -33,7 +33,7 @@ class LiveDataWindow(PlotWidget):
     - Periodic auto-backup of waveform and comments.
     - Export functionality for waveform data and comments.
     """
-    def __init__(self):
+    def __init__(self, parent = None):
         """
         Initializes the LiveDataWindow widget.
 
@@ -42,7 +42,7 @@ class LiveDataWindow(PlotWidget):
         periodiic auto-backup.
         """
         # --- GENERAL INIT ITEMS ---
-        super().__init__(viewBox=PanZoomViewBox(datawindow=self))
+        super().__init__(parent = parent, viewBox=PanZoomViewBox(datawindow=self))
 
         self.plot_item: PlotItem = self.getPlotItem()
         self.viewbox: PanZoomViewBox = self.plot_item.getViewBox() # the plotting area (no axes, etc.)
@@ -51,6 +51,7 @@ class LiveDataWindow(PlotWidget):
 
         # --- DATA STORAGE ---
         # holds all historical data
+        self.epgdata = self.parent().parent().epgdata
         self.xy_data: list[NDArray] = [np.array([]), np.array([])]
 
         # temporary buffer for incoming data, to be added to full xy_data every plot update
@@ -138,7 +139,7 @@ class LiveDataWindow(PlotWidget):
         self.viewbox.setYRange(self.init_min_volt, self.init_max_volt, padding=0)
 
         # Live mode button
-        self.live_mode = True
+        self.live_mode = False
         self.current_time = 0
         # for live view, follow only 10 seconds of visible data
         self.default_scroll_window = 10
@@ -734,6 +735,141 @@ class LiveDataWindow(PlotWidget):
 
         self.baseline_preview_enabled = False
         self.baseline_preview.setVisible(False)
+
+    def plot_recording(self, file: str, prepost: str = "post"):
+        """
+        Loads the time series and comments from a file and displays it.
+
+        Parameters:
+            file (str): File identifier.
+            prepost (str): Either "pre" or "post" to select pre/post rectifier data.
+        """
+        QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
+        self.file = file
+        self.prepost = prepost
+        times, volts = self.epgdata.get_recording(self.file, self.prepost)
+        self.xy_data[0] = times
+        self.xy_data[1] = volts
+        self.downsample_visible(self.xy_data)
+        #init_x, init_y = self.xy_data[0].copy(), self.xy_data[1].copy()
+        self.curve.setData(self.xy_data[0], self.xy_data[1])
+        #self.initial_downsampled_data = [init_x, init_y]
+        self.df = self.epgdata.dfs[file]  
+
+        self.viewbox.setRange(
+            xRange=(np.min(self.xy_data[0]), np.max(self.xy_data[0])), 
+            yRange=(np.min(self.xy_data[1]), np.max(self.xy_data[1])), 
+            padding=0
+        )
+
+        # create a comments column if doesn't yet exist in df
+        if 'comments' not in self.df.columns:
+            self.df['comments'] = None
+
+        self.current_time = self.df['time'].iloc[-1]
+        
+        self.update_plot()
+        self.plot_comments(file)
+        QGuiApplication.processEvents()
+        QGuiApplication.restoreOverrideCursor()
+
+
+    def plot_comments(self, file: str) -> None:
+        """
+        Adds existing comment markers from the data file to the viewbox.
+
+        Parameters:
+            file (str): File identifier.
+        """
+        if file is not None:
+            self.file = file
+
+        for marker in self.comments:
+            marker.remove()
+        self.comments.clear()
+        
+        comments_df = self.df[~self.df["comments"].isnull()]
+        for time, text in zip(comments_df["time"], comments_df["comments"]):
+            marker = CommentMarker(time, text, self, icon_path=r"message.svg")
+            self.comments[time] = marker
+        
+        return
+
+
+
+    def export_comments(self):
+        """
+        Exports all current comments to a CSV file. Prompts user to select
+        a file location and writes comment times and texts to the file.
+        Shows a message box if no comments exist.
+        """
+        
+        if not self.comments:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("No Comments")
+            msg_box.setText("There are no comments to export from this live viewing.")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.exec()
+            return
+
+        filename, _ = QFileDialog.getSaveFileName(
+            parent=self,
+            caption="Export Comments As",
+            filter="CSV Files (*.csv);;All Files (*)"
+        )
+
+        if filename:
+            with open(filename, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(['comment_time', 'comment_text'])
+                for time, marker in self.comments.items():
+                    writer.writerow([time, marker.text])
+        
+        return
+        
+    def export_df(self) -> bool:
+        """
+        Exports the current waveform data and associated comments to a
+        CSV file. Prompts the user to select a file location. If no
+        data is available, shows a message box informing the user.
+        """
+        self.integrate_buffer_to_np()
+
+        if not len(self.xy_data[0]) > 0:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("No Data")
+            msg_box.setText("There is no data to export from this live viewing.")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.exec()
+            return
+        
+        filename, _ = QFileDialog.getSaveFileName(
+            parent=self,
+            caption="Export Data As",
+            filter="CSV Files (*.csv);;All Files (*)"
+        )
+
+        if not filename:
+            return
+
+        times = self.xy_data[0]
+        volts = self.xy_data[1]
+        
+        df = DataFrame({
+            "time": times,
+            "voltages": volts, # may need to change based on what engineers plot
+            "comments": [None] * len(times)
+        })
+
+        # add current comments to df
+        for comment_time, comment in self.comments.items():
+            df.loc[df['time'] == comment_time, 'comments'] = comment.text
+
+        df.to_csv(filename)
+        self.data_modified = False
+        
+        return
+
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """
@@ -821,80 +957,7 @@ class LiveDataWindow(PlotWidget):
             else:
                 self.comment_preview.setVisible(False)
 
-        self.update_plot()
-        return
-
-    def export_comments(self):
-        """
-        Exports all current comments to a CSV file. Prompts user to select
-        a file location and writes comment times and texts to the file.
-        Shows a message box if no comments exist.
-        """
-        
-        if not self.comments:
-            msg_box = QMessageBox(self)
-            msg_box.setWindowTitle("No Comments")
-            msg_box.setText("There are no comments to export from this live viewing.")
-            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msg_box.exec()
-            return
-
-        filename, _ = QFileDialog.getSaveFileName(
-            parent=self,
-            caption="Export Comments As",
-            filter="CSV Files (*.csv);;All Files (*)"
-        )
-
-        if filename:
-            with open(filename, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow(['comment_time', 'comment_text'])
-                for time, marker in self.comments.items():
-                    writer.writerow([time, marker.text])
-        
-        return
-        
-    def export_df(self) -> bool:
-        """
-        Exports the current waveform data and associated comments to a
-        CSV file. Prompts the user to select a file location. If no
-        data is available, shows a message box informing the user.
-        """
-        self.integrate_buffer_to_np()
-
-        if not len(self.xy_data[0]) > 0:
-            msg_box = QMessageBox(self)
-            msg_box.setWindowTitle("No Data")
-            msg_box.setText("There is no data to export from this live viewing.")
-            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msg_box.exec()
-            return
-        
-        filename, _ = QFileDialog.getSaveFileName(
-            parent=self,
-            caption="Export Data As",
-            filter="CSV Files (*.csv);;All Files (*)"
-        )
-
-        if not filename:
-            return
-
-        times = self.xy_data[0]
-        volts = self.xy_data[1]
-        
-        df = DataFrame({
-            "time": times,
-            "voltages": volts, # may need to change based on what engineers plot
-            "comments": [None] * len(times)
-        })
-
-        # add current comments to df
-        for comment_time, comment in self.comments.items():
-            df.loc[df['time'] == comment_time, 'comments'] = comment.text
-
-        df.to_csv(filename)
-        self.data_modified = False
-        
+        #self.update_plot()
         return
 
     def wheelEvent(self, event: QWheelEvent) -> None:
@@ -908,8 +971,6 @@ class LiveDataWindow(PlotWidget):
         self.viewbox.wheelEvent(event)
         
 if __name__ == "__main__":
-
-
     app = QApplication([])
     window = LiveDataWindow()
     window.resize(1000, 500)
