@@ -172,8 +172,9 @@ class SocketServer:
                 if not chunk:
                     logging.info(f"[SOCKET] Client \"{client_id}\" disconnected")
                     break
-                
+
                 buffer += chunk.decode('utf-8')
+                
                 while "\n" in buffer:
                     line, buffer = buffer.split("\n", 1)
                     self._process_message(line.strip(), client_id)
@@ -230,11 +231,10 @@ class SocketServer:
                 self._current_time = time.perf_counter()
             return
 
-        data_list = data["value"].split(",")
         msg = {
             "source": "ENGR",
             "type": "data",
-            "value": (data_list[0], data_list[2]),  # (timestamp, voltage)
+            "value": (data["value"][0], data["value"][1]),  # (timestamp, voltage)
         }
         cs_sock.sendall((json.dumps(msg) + "\n").encode("utf-8"))
 
