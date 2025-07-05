@@ -1,0 +1,2 @@
+C:/EPG-Project/Summer/CS-Repository/GUI/test_mosquito.csv filter=lfs diff=lfs merge=lfs -text
+C:/EPG-Project/Summer/CS-Repository/GUI/test_sharpshooter.csv filter=lfs diff=lfs merge=lfs -text
