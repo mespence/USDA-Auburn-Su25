@@ -90,6 +90,13 @@ class SliderPanel(QWidget):
         self.ddsa_slider.setRange(-500, 1)
         self.slider_widgets_map["ddsa"] = self.ddsa_amplitude_widget
 
+        # Input Resistance
+        grid.addWidget(QLabel("Input Resistance"), 3, 0)
+        self.input_resistance = QComboBox()
+        self.input_resistance.addItems(["100K", "1M", "10M", "100M", "1G", "10G", "100G", "Mux:7"])
+        grid.addWidget(self.input_resistance, 3, 1)
+        grid.addWidget(QLabel("Ω"), 3, 2)
+
         self.sca_widgets = create_slider_row_widgets("Gain", "V")
         self.sca_slider = self.sca_widgets[1]
         self.sca_slider.setRange(1, 700)
@@ -109,6 +116,8 @@ class SliderPanel(QWidget):
             if unit_label:
                 grid.addWidget(unit_label, grid_row, 3)
             grid_row += 1
+            if grid_row == 3:
+                grid_row += 1 # skip row 3, for input resistance
 
         layout.addLayout(grid)
 
@@ -170,7 +179,9 @@ class SliderPanel(QWidget):
                 item.valueChanged.connect(lambda val, l=label: self.send_control_update(l, val))
             elif isinstance(item, QPushButton):
                 item.clicked.connect(lambda _, l=label: self.send_control_update(l, "clicked"))
-
+            elif isinstance(item, QComboBox):
+                item.currentTextChanged.connect(lambda text, l=label: self.send_control_update(l, text))
+                
     def on_mode_change(self, value: int):
 
         selected_mode = "DC" if value == 0 else "AC"
