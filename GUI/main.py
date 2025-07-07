@@ -263,8 +263,8 @@ def start_main_application(app_instance, settings=None):
     splash.show()
     app_instance.processEvents()
 
-    window = MainWindow(settings=settings)
-    
+    window = MainWindow()
+        
     # Display Focused
     window.showMaximized()
     window.raise_()
@@ -280,22 +280,7 @@ def start_main_application(app_instance, settings=None):
 if __name__ == "__main__":
     Settings()
     app = QApplication(sys.argv)
-    load_fonts()
-    splash = LoadingScreen()
-    splash.show()
-    app.processEvents() 
-
-    window = MainWindow(settings=None)
-    
-    # Display Focused
-    window.showMaximized()
-    window.raise_()
-    window.activateWindow()
-    # QApplication.processEvents() 
-
-    # splash.close()
-
     sys.exit(app.exec())
 
 
-    start_main_application()
+    

@@ -162,6 +162,7 @@ class SliderPanel(QWidget):
             "modeToggle": self.mode_toggle,
             "sca": self.sca_slider,
             "sco": self.sco_slider,
+            "inputResistance": self.input_resistance,
             "ddso": self.dds_slider,
             "ddsa": self.ddsa_slider,
             "on": self.on_button,
