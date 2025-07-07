@@ -256,7 +256,7 @@ def load_fonts():
 
 def start_main_application(settings=None):
     Settings()
-    app = QApplication([])
+    #app = QApplication([])
     #app.setStyle("Fusion")
 
     load_fonts()
@@ -264,8 +264,8 @@ def start_main_application(settings=None):
     splash.show()
     QApplication.processEvents() 
 
-    window = MainWindow(settings=settings)
-    
+    window = MainWindow()
+        
     # Display Focused
     window.showMaximized()
     window.raise_()
@@ -277,6 +277,7 @@ def start_main_application(settings=None):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    start_main_application()
     sys.exit(app.exec())
 
-    start_main_application()
+    
