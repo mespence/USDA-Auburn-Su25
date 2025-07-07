@@ -277,8 +277,24 @@ def start_main_application(app_instance, settings=None):
 
 
 if __name__ == "__main__":
+    Settings()
     app = QApplication(sys.argv)
-    start_main_application()
+
+    load_fonts()
+    splash = LoadingScreen()
+    splash.show()
+    app.processEvents()
+
+    window = MainWindow()
+        
+    # Display Focused
+    window.showMaximized()
+    window.raise_()
+    window.activateWindow()
+
+    app.processEvents()
+
+    splash.close()
     sys.exit(app.exec())
 
     
