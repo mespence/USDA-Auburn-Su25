@@ -51,7 +51,7 @@ class SettingsWindow(QWidget):
 
         # ComboBox
         self.label_combo_box = QComboBox()
-        self.label_combo_box.addItems(Settings.label_to_color.keys())
+        self.label_combo_box.addItems(Settings.label_colors.keys())
         self.label_combo_box.currentIndexChanged.connect(self.changed_label)
         # Edit colors
         self.label_color_button = QPushButton("Color...")
@@ -247,13 +247,14 @@ class SettingsWindow(QWidget):
         self.delete_baseline.emit()
 
     def set_show_label(self, label: str, state: Qt.CheckState):
-        # Checkbox click is agnostic to what state is being selected
-        if label not in Settings.label_to_color or label not in Settings.labels_to_show:
-            print(f"Cannot hide {label}: label does not exist")
-            return
-        value = state == Qt.CheckState.Checked.value
-        Settings.labels_to_show[label] = value
-        self.label_hidden.emit(label, value)
+        pass
+        # # Checkbox click is agnostic to what state is being selected
+        # if label not in Settings.label_colors: #or label not in Settings.labels_to_show:
+        #     print(f"Cannot hide {label}: label does not exist")
+        #     return
+        # value = state == Qt.CheckState.Checked.value
+        # Settings.labels_to_show[label] = value
+        # self.label_hidden.emit(label, value)
 
     def handle_toggle_duration_visibility(self, state: int):
         value = state == Qt.CheckState.Checked.value

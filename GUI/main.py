@@ -277,7 +277,6 @@ def start_main_application(app_instance, settings=None):
 
 
 if __name__ == "__main__":
-    Settings()
     app = QApplication(sys.argv)
     start_main_application()
     sys.exit(app.exec())

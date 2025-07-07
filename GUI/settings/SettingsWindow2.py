@@ -19,16 +19,20 @@ class AppearanceTab(QWidget):
         layout.addWidget(label)
 
 class SidebarButton(QToolButton):
-    def __init__(self, text: str, icon_path: str, index: int, parent=None):
+    def __init__(self, text: str, index: int, icon_path: str = None, parent=None):
         super().__init__(parent)
         self.index = index
         self.setText(text)
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setIcon(QIcon(icon_path))
-        self.setIconSize(QSize(32, 32))
-        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+        if icon_path:
+            self.setIcon(QIcon(icon_path))
+            self.setIconSize(QSize(32, 32))
+            self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        else:
+            self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
 
         self.setStyleSheet("""
             QToolButton {
@@ -59,29 +63,6 @@ class SidebarButton(QToolButton):
             self.clicked.emit()
         super().mouseReleaseEvent(event)
 
-class ColorDot(QToolButton):
-    def __init__(self, color: QColor, selected=False, parent=None):
-        super().__init__(parent)
-        self.color = color
-        self.selected = selected
-        self.setFixedSize(32, 32)
-        self.setCheckable(True)
-        self.setStyleSheet("border: none;")
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        if self.selected or self.isChecked():
-            pen = QPen(QColor("white"), 3)
-            painter.setPen(pen)
-        else:
-            painter.setPen(Qt.PenStyle.NoPen)
-
-        brush = QBrush(self.color)
-        painter.setBrush(brush)
-        rect = self.rect().adjusted(4, 4, -4, -4)
-        painter.drawEllipse(rect)
 
 class SettingsWindow(QWidget):
     def __init__(self):
@@ -101,13 +82,13 @@ class SettingsWindow(QWidget):
         self.sidebar_layout.setSpacing(0)
 
         button_info = [
-            ("   Appearance", "icons/eye.svg"),  # Use valid icon paths or leave empty
-            ("   Test", "icons/info-circle.svg")
+            ("   Appearance", None),  # Use valid icon paths or leave empty
+            ("   Test", None)
         ]
 
         self.buttons = []
         for index, (label, icon) in enumerate(button_info):
-            btn = SidebarButton(label, icon, index)
+            btn = SidebarButton(label, index, icon)
             btn.clicked.connect(lambda _, i=index: self.switch_tab(i))
             self.sidebar_layout.addWidget(btn)
             self.buttons.append(btn)
@@ -130,7 +111,7 @@ class SettingsWindow(QWidget):
     def _create_test_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        label = QLabel("Test Settings")
+        label = QLabel("EPG Settings")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(label)
         return tab

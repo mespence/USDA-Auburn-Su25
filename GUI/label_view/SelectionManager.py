@@ -159,7 +159,7 @@ class Selection:
             labels = self.datawindow.labels
             idx = labels.index(item)
 
-            item.area.setBrush(mkBrush(color=Settings.label_to_color[item.label]))
+            item.area.setBrush(mkBrush(color=Settings.get_label_color(item.label)))
             item.label_background.setBrush(mkBrush(item.get_background_color()))
             item.duration_background.setBrush(mkBrush(item.get_background_color()))
             item.label_text.setColor(self.default_style['text color'])
@@ -756,7 +756,7 @@ class Selection:
                     item.setPen(self.highlighted_style['transition line'])
 
             elif isinstance(item, LabelArea):
-                label_area_color = self.datawindow.composite_on_white(Settings.label_to_color[item.label])
+                label_area_color = self.datawindow.composite_on_white(Settings.get_label_color(item.label))
                 text_background_color = item.label_background.brush().color()
 
                 highlighted_area_color = self.get_highlighted_color(label_area_color)
@@ -796,7 +796,7 @@ class Selection:
             else:
                 item.setPen(self.default_style['transition line'])
         if isinstance(item, LabelArea):
-            item.area.setBrush(mkBrush(color=Settings.label_to_color[item.label]))
+            item.area.setBrush(mkBrush(color=Settings.get_label_color(item.label)))
             item.label_background.setBrush(mkBrush(color=item.get_background_color()))
             item.duration_background.setBrush(mkBrush(color=item.get_background_color()))
 

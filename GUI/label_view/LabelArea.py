@@ -101,7 +101,7 @@ class LabelArea:
         self.area = LinearRegionItem(
             values = (time, time + dur),
             orientation='vertical',
-            brush=mkBrush(color=Settings.label_to_color[self.label]),
+            brush=mkBrush(color=Settings.get_label_color(self.label)),
             hoverBrush=None,
             movable=False,
         )
@@ -120,7 +120,6 @@ class LabelArea:
         #QApplication.processEvents()
 
         self.set_duration_visible(Settings.show_durations)
-        #self.set_label_visible(Settings.show)
 
         #self.viewbox.sigTransformChanged.connect(self.update_label_area)   
 
@@ -247,7 +246,7 @@ class LabelArea:
         Returns:
             QColor: The background color.
         """
-        color = self.datawindow.composite_on_white(Settings.label_to_color[self.label]) 
+        color = self.datawindow.composite_on_white(Settings.get_label_color(self.label)) 
         color = color.darker(110) # 10% darker
         h, s, v, f = color.getHsvF()
         color = QColor.fromHsvF(h, s * 1.8, v, f) # 80% more saturated
@@ -273,7 +272,7 @@ class LabelArea:
         # update text and area if changed
         if self.label_text.toPlainText() != self.label:  # label changed
             self.label_text.setText(self.label)
-            self.area.setBrush(mkBrush(color=Settings.label_to_color[self.label]))
+            self.area.setBrush(mkBrush(color=Settings.get_label_color(self.label)))
             self.label_background.setBrush(mkBrush(color=self.get_background_color()))
             self.duration_background.setBrush(mkBrush(color=self.get_background_color()))
 

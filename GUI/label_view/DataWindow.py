@@ -65,7 +65,7 @@ class DataWindow(PlotWidget):
         self.df = None
         
         self.xy_data: list[NDArray] = [None, None]  # x and y data actually rendered to the screen
-        self.curve: PlotDataItem = PlotDataItem(antialias=False, pen = Settings.line_color) 
+        self.curve: PlotDataItem = PlotDataItem(antialias=False, pen = Settings.data_line_color) 
         self.scatter: ScatterPlotItem = ScatterPlotItem(
             symbol="o", size=4, brush="blue"
         )  # the discrete points shown at high zooms
@@ -150,7 +150,7 @@ class DataWindow(PlotWidget):
         self.viewbox.addItem(self.zero_line)
         self.plot_item.setLabel("bottom", "<b>Time [s]</b>", color="black")
         self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color="black")
-        self.plot_item.showGrid(x=Settings.show_grid, y=Settings.show_grid)
+        self.plot_item.showGrid(x=Settings.show_h_grid, y=Settings.show_v_grid)
         self.plot_item.layout.setContentsMargins(30, 30, 30, 20)
         self.plot_item.enableAutoRange(False)
 

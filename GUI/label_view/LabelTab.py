@@ -251,17 +251,3 @@ class LabelTab(QWidget):
         return super().eventFilter(obj, event)
 
 
-
-
-if __name__ == "__main__":
-    from PyQt6.QtWidgets import QApplication
-    import sys
-
-    Settings()
-    app = QApplication([])
-    tab = LabelTab()
-    tab.showMaximized()
-
-    sys.exit(app.exec())
-
-
