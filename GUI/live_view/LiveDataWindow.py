@@ -986,6 +986,10 @@ class LiveDataWindow(PlotWidget):
                 self.baseline_preview.setVisible(True)
                 y_pos = self.viewbox.mapSceneToView(self.mapToScene(self.mapFromGlobal(QCursor.pos()))).y()
                 self.baseline_preview.setPos(y_pos)
+        elif event.key() == Qt.Key.Key_Escape and self.baseline_preview_enabled:
+            self.baseline.setVisible(False)
+            self.baseline_preview_enabled = False
+            self.baseline_preview.setVisible(False)
         elif event.key() == Qt.Key.Key_Up or event.key() == Qt.Key.Key_Down or event.key() == Qt.Key.Key_Left or event.key() == Qt.Key.Key_Right:
             self.viewbox.keyPressEvent(event)
         elif event.key() == Qt.Key.Key_S and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
