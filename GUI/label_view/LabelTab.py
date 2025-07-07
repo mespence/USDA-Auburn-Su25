@@ -25,7 +25,7 @@ class LabelTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        #self.epgdata = EPGData()
+        self.epgdata = self.parent().epgdata
         self.labeler = Labeler(parent=self)
 
         # file = self.epgdata.current_file
@@ -80,7 +80,7 @@ class LabelTab(QWidget):
         self.datawindow.plot_comments(file)
 
         openDataButton = QPushButton("Open Data")
-        openDataButton.clicked.connect(lambda: FileSelector.load_new_data(self.epgdata, self.datawindow))
+        openDataButton.clicked.connect(lambda: FileSelector.load_new_data(self.parent().epgdata, self.datawindow))
 
         self.modelChooser = QComboBox()
         self.modelChooser.addItem("Select mosquito model...")

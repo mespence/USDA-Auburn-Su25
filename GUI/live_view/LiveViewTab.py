@@ -32,6 +32,8 @@ class LiveViewTab(QWidget):
         self.receive_loop = threading.Thread(target=self._socket_recv_loop, daemon=True)
         self.receive_loop.start()
 
+        self.initial_timestamp: float = None  # unix timestamp of the first data point in a recording
+
         self.datawindow = LiveDataWindow(self, settings=settings)
         self.datawindow.getPlotItem().hideButtons()
 
@@ -192,6 +194,7 @@ class LiveViewTab(QWidget):
 
         self.add_comment_button.setToolTip("Recording has ended")
         self.add_comment_button.setEnabled(False)
+        self.initial_timestamp = None
 
     def _socket_recv_loop(self):
 
@@ -223,7 +226,10 @@ class LiveViewTab(QWidget):
                     message_type = message['type']
 
                     if message_type == 'data':
-                        time = float(message['value'][0])
+                        if self.initial_timestamp is None:
+                            self.initial_timestamp = message['value'][0]
+
+                        time = float(message['value'][0]) - self.initial_timestamp
                         volt = float(message['value'][1])
 
                         with self.datawindow.buffer_lock:
@@ -236,6 +242,10 @@ class LiveViewTab(QWidget):
                         name = message["name"]
                         value = message["value"]
                         source = message.get("source")
+
+                        if name == "ddsa":
+                            # TODO: Formula from Pierce
+                            pass
 
                         # Workaround to get set_control_value to run in the GUI thread
                         # Might be cleaner to use signals, but this works for now
