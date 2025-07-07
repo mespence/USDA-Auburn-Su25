@@ -60,22 +60,18 @@ class LiveDataWindow(PlotWidget):
             self.viewbox.setYRange(self.min_voltage, self.max_voltage, padding=0)
 
             if self.recording_filename:
+                # remember saving directory
                 self.base_data_directory = os.path.dirname(self.recording_filename)
                 self.export_filename_stem = os.path.splitext(os.path.basename(self.recording_filename))[0]
         else:
-            self.viewbox.setYRange(-0.5, 1, padding=0)
-            self.recording_filename = None
+            self.viewbox.setYRange(-1, 1, padding=0)
             self.base_data_directory = os.getcwd()
-            self.export_filename_stem = "exported_data"
+            self.export_filename_stem = None
 
         # --- PERIODIC BACKUP SETTINGS ---
-        # for simplicity, save to subfolder in current working directory (GUI)
-        # TODO change when have initial program window where choose working directory
-        self.periodic_backup_dir = os.path.join(self.base_data_directory, "backups")
+        # backups stored wherever .exe opened
+        self.periodic_backup_dir = "backups"
         os.makedirs(self.periodic_backup_dir, exist_ok=True)
-
-        # assign from new rec window
-        self.save_path = None
 
         # base names for the backup files
         self.waveform_backup_base = "waveform_backup.csv"
@@ -247,7 +243,7 @@ class LiveDataWindow(PlotWidget):
             reply = msg_box.exec()
 
             if reply == QMessageBox.StandardButton.Save:
-                export_successful = self.export_df()
+                export_successful = self.save_df()
                 if not export_successful:
                     # export_df cancelled by the user, so cancel closing application
                     event.ignore()
@@ -256,8 +252,7 @@ class LiveDataWindow(PlotWidget):
             elif reply == QMessageBox.StandardButton.Cancel:
                 event.ignore()
                 return
-            
-        
+
 
         super().closeEvent(event)
 
@@ -887,6 +882,57 @@ class LiveDataWindow(PlotWidget):
         
         return True
 
+    def save_df(self) -> bool:
+        """
+        Saves the current waveform data and associated comments to a
+        CSV file. Prompts the user to select a file location. If no
+        data is available, shows a message box informing the user.
+        """
+        self.integrate_buffer_to_np()
+
+        if not self.recording_filename: # gave initial file save location
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Save Error")
+            msg_box.setText("No recording filename has been initialized. Please select Export Data.")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.exec()
+            return False
+
+        if not len(self.xy_data[0]) > 0:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("No Data")
+            msg_box.setText("There is no data to save from this live viewing.")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.exec()
+            return False
+
+        times = self.xy_data[0]
+        volts = self.xy_data[1]
+        
+        df = DataFrame({
+            "time": times,
+            "voltages": volts, # may need to change based on what engineers plot
+            "comments": [None] * len(times)
+        })
+
+        # add current comments to df
+        for comment_time, comment in self.comments.items():
+            df.loc[df['time'] == comment_time, 'comments'] = comment.text
+
+        try:
+            df.to_csv(self.recording_filename) 
+            self.data_modified = False
+            print(f"Data successfully saved to: {self.recording_filename}")
+            return True
+        except Exception as e:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Save Error")
+            msg_box.setText(f"An error occurred while saving the data: {e}")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.exec()
+            print(f"Error saving DataFrame: {e}")
+            return False
+
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """
@@ -942,7 +988,7 @@ class LiveDataWindow(PlotWidget):
         elif event.key() == Qt.Key.Key_Up or event.key() == Qt.Key.Key_Down or event.key() == Qt.Key.Key_Left or event.key() == Qt.Key.Key_Right:
             self.viewbox.keyPressEvent(event)
         elif event.key() == Qt.Key.Key_S and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            self.export_df()
+            self.save_df()
         
         self.viewbox.update()
 

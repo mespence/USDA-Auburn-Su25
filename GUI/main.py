@@ -86,7 +86,8 @@ class MainWindow(QMainWindow):
         export_comment_csv.triggered.connect(self.export_comments_from_current_tab)
         export_data = file_menu.addAction("Export Data")
         export_data.triggered.connect(self.export_data)
-        file_menu.addAction("Save")
+        save_data = file_menu.addAction("Save")
+        save_data.triggered.connect(self.save_data)
         file_menu.addSeparator()
         file_menu.addAction("Exit", self.close)
 
@@ -164,6 +165,17 @@ class MainWindow(QMainWindow):
             msg = QMessageBox(self)
             msg.setWindowTitle("Cannot Export Data")
             msg.setText("Current tab does not support exporting comments.")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.exec()
+    
+    def save_data(self):
+        current_widget = self.tabs.currentWidget()
+        if isinstance(current_widget, LiveViewTab):
+            current_widget.datawindow.save_df()
+        else:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Cannot Save Data")
+            msg.setText("Current tab does not support saving data.")
             msg.setStandardButtons(QMessageBox.StandardButton.Ok)
             msg.exec()
 
