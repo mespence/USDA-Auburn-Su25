@@ -262,7 +262,7 @@ def start_main_application(app_instance, settings=None):
     splash.show()
     app_instance.processEvents()
 
-    window = MainWindow()
+    window = MainWindow(settings=settings)
         
     # Display Focused
     window.showMaximized()
@@ -285,7 +285,7 @@ if __name__ == "__main__":
     splash.show()
     app.processEvents()
 
-    window = MainWindow()
+    window = MainWindow() # no settings
         
     # Display Focused
     window.showMaximized()

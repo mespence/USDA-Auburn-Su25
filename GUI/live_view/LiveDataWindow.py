@@ -855,7 +855,7 @@ class LiveDataWindow(PlotWidget):
             msg_box.setText("There is no data to export from this live viewing.")
             msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
             msg_box.exec()
-            return
+            return False
         
         filename, _ = QFileDialog.getSaveFileName(
             parent=self,
@@ -864,7 +864,7 @@ class LiveDataWindow(PlotWidget):
         )
 
         if not filename:
-            return
+            return False
 
         times = self.xy_data[0]
         volts = self.xy_data[1]
@@ -882,7 +882,7 @@ class LiveDataWindow(PlotWidget):
         df.to_csv(filename)
         self.data_modified = False
         
-        return
+        return True
 
     
     def mousePressEvent(self, event: QMouseEvent) -> None:

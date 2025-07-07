@@ -54,7 +54,6 @@ class AppLauncherDialog(QDialog):
         new_recording_dialog = NewRecordingDialog(self)
         if new_recording_dialog.exec(): # open modally
             recording_settings = new_recording_dialog.get_data()
-            # TODO somehow connect recording settings to main then to live data window
             self.launchMainWindow.emit(recording_settings)
             self.accept() # Accept and close the AppLauncherDialog
 

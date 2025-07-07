@@ -20,7 +20,6 @@ class LiveViewTab(QWidget):
     def __init__(self, parent=None, settings=None):
         super().__init__(parent)
         self.connection_indicator = ConnectionIndicator()
-
         # === Socket ===
         self.socket_server = SocketServer()
         self.socket_server.start()
