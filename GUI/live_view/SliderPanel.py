@@ -256,7 +256,6 @@ class SliderPanel(QWidget):
         if source == self.socket_client.client_id:
             return
         
-        print(f"NAME: {repr(name)}, {type(name)}")
         if name == "excitationFrequency":
             name = "modeToggle"
         

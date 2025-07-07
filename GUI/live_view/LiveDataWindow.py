@@ -252,9 +252,12 @@ class LiveDataWindow(PlotWidget):
                     # export_df cancelled by the user, so cancel closing application
                     event.ignore()
                     return
+                self.parent().socket_server.stop()
             elif reply == QMessageBox.StandardButton.Cancel:
                 event.ignore()
                 return
+            
+        
 
         super().closeEvent(event)
 

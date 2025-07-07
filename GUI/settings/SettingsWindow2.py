@@ -1,22 +1,95 @@
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
-    QFrame, QLabel, QToolButton, QSizePolicy
+   QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
+    QFrame, QLabel, QToolButton, QComboBox, QPushButton, QSizePolicy,
+    QSpinBox, QCheckBox, QColorDialog
 )
 from PyQt6.QtGui import (
     QColor, QBrush, QPen, QPainter,
     QIcon, QMouseEvent,
 )
 from PyQt6.QtCore import Qt, QSize
-import sys
 
-# === Dummy AppearanceTab for MWE ===
+from settings.Settings import Settings
+
 class AppearanceTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+
         layout = QVBoxLayout(self)
-        label = QLabel("Appearance Settings")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(label)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setSpacing(15)
+
+        # === Plot Theme ComboBox ===
+        theme_label = QLabel("Plot Theme:")
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(["Light", "Dark"])
+        self.theme_combo.setCurrentText(Settings.plot_theme["NAME"])
+        self.theme_combo.currentTextChanged.connect(self.on_theme_changed)
+
+        layout.addWidget(theme_label)
+        layout.addWidget(self.theme_combo)
+
+        # === Data Line Color Picker ===
+        color_label = QLabel("Data Line Color:")
+        self.color_button = QPushButton()
+        self.color_button.setText(Settings.data_line_color.name().upper())
+        self.color_button.setStyleSheet(f"background-color: {Settings.data_line_color.name()}")
+        self.color_button.clicked.connect(self.choose_color)
+
+        layout.addWidget(color_label)
+        layout.addWidget(self.color_button)
+
+        # === Data Line Width SpinBox ===
+        width_label = QLabel("Data Line Width:")
+        self.width_spinbox = QSpinBox()
+        self.width_spinbox.setRange(1, 5)
+        self.width_spinbox.setValue(Settings.data_line_width)
+        self.width_spinbox.valueChanged.connect(self.on_width_changed)
+
+        layout.addWidget(width_label)
+        layout.addWidget(self.width_spinbox)
+
+        # === Boolean Toggles ===
+        self.checkboxes = {}
+        bool_settings = {
+            "Show Horizontal Grid": "show_h_grid",
+            "Show Vertical Grid": "show_v_grid",
+            "Show Labels": "show_labels",
+            "Show Durations": "show_durations",
+            "Show Comments": "show_comments"
+        }
+
+        for label_text, attr in bool_settings.items():
+            checkbox = QCheckBox(label_text)
+            checkbox.setChecked(getattr(Settings, attr))
+            checkbox.toggled.connect(lambda state, a=attr: (print(getattr(Settings, attr)), setattr(Settings, a, state)))
+            print(getattr(Settings, attr))
+            self.checkboxes[attr] = checkbox
+            layout.addWidget(checkbox)
+
+    
+
+    def choose_color(self):
+        color = QColorDialog.getColor(initial=self.data_line_color, parent=self)
+        if color.isValid():
+            Settings.data_line_color = color
+            self.color_button.setText(color.name())
+            self.color_button.setStyleSheet(f"background-color: {color.name()}")
+            print("Data line color set to:", color.name())
+
+    def on_theme_changed(self, value: str):
+        Settings.plot_theme = value
+        print("Theme set to:", value)
+    def on_width_changed(self, value: int):
+        Settings.data_line_width = value
+        print("Data line width set to:", value)
+
+
+
+class EPGSettingsTab(QWidget):
+    pass
+
+
 
 class SidebarButton(QToolButton):
     def __init__(self, text: str, index: int, icon_path: str = None, parent=None):
@@ -82,8 +155,8 @@ class SettingsWindow(QWidget):
         self.sidebar_layout.setSpacing(0)
 
         button_info = [
-            ("   Appearance", None),  # Use valid icon paths or leave empty
-            ("   Test", None)
+            ("Appearance", None),  # Use valid icon paths or leave empty
+            ("Test", None)
         ]
 
         self.buttons = []
@@ -115,10 +188,3 @@ class SettingsWindow(QWidget):
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(label)
         return tab
-
-# === Entry Point ===
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = SettingsWindow()
-    window.show()
-    sys.exit(app.exec())

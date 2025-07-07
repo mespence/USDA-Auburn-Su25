@@ -139,8 +139,6 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.label_tab, "Label")
     
     def closeEvent(self, event):
-        self.live_view_tab.socket_server.stop()
-
         current_widget = self.tabs.currentWidget()
         if isinstance(current_widget, LiveViewTab):
             current_widget.datawindow.closeEvent(event)
