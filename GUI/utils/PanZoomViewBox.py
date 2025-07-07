@@ -275,7 +275,7 @@ class PanZoomViewBox(ViewBox):
         add_comment = QAction("Add Comment", menu)
 
         label_type_dropdown = QMenu("Change Waveform Type", menu)
-        label_names = list(Settings.label_to_color.keys())
+        label_names = list(Settings.label_colors.keys())
         for label in label_names:            
             action = QAction(label, menu)
             action.setCheckable(True)
