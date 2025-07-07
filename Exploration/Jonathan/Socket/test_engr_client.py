@@ -29,7 +29,7 @@ def device_simulation():
         # simulate sending data every 0.01s, 
         # taking into account execution time
         for row in reader:
-            data_row = f"{float(row[1]):.4f},DATA,{float(row[3]):.4f},0\n"
+            data_row = [float(row[1]), float(row[3])]
             data_dict = {"type":"data", "value":data_row, "source": "ENGR"}
             send_queue.put_nowait(data_dict)
             next_time += interval

@@ -230,7 +230,7 @@ class SocketServer:
                 logging.warning("[SOCKET] CS not connected, can't forward data.")
                 self._current_time = time.perf_counter()
             return
-
+        
         msg = {
             "source": "ENGR",
             "type": "data",
