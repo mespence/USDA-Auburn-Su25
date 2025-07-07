@@ -36,6 +36,7 @@ class SliderPanel(QWidget):
         self.mode_toggle = ACDCToggle()
         self.mode_toggle.toggled.connect(self.on_mode_change)
         grid.addWidget(self.mode_toggle, 0, 1)
+
         
         def sync_slider_and_entry(slider: QSlider, entry: QLineEdit, scale: float, precision: int):
             # (1) Slider → Entry
@@ -52,6 +53,7 @@ class SliderPanel(QWidget):
                     pass  # Ignore invalid input
 
             entry.textEdited.connect(on_text_edited)
+
 
         def create_slider_row_widgets(label_text, unit=None, scale = 1, precision = 0):
             """
@@ -80,26 +82,26 @@ class SliderPanel(QWidget):
 
         self.slider_widgets_map = {}
 
-        self.dds_offset_widget = create_slider_row_widgets("Excitation Voltage", "V", scale = 0.1, precision = 1)
+        self.dds_offset_widget = create_slider_row_widgets("Excitation Voltage", "V", scale = 0.01, precision = 1)
         self.dds_slider = self.dds_offset_widget[1]
-        self.dds_slider.setRange(-33, 33)
+        self.dds_slider.setRange(-330, 330)
         self.slider_widgets_map["ddso"] = self.dds_offset_widget
 
-        self.ddsa_amplitude_widget = create_slider_row_widgets("Excitation Voltage", "Vrms")
+        self.ddsa_amplitude_widget = create_slider_row_widgets("Excitation Voltage", "Vrms", scale = 0.01, precision=2)
         self.ddsa_slider = self.ddsa_amplitude_widget[1]
-        self.ddsa_slider.setRange(-500, 1)
+        self.ddsa_slider.setRange(-500, -1)
         self.slider_widgets_map["ddsa"] = self.ddsa_amplitude_widget
 
         # Input Resistance
         grid.addWidget(QLabel("Input Resistance"), 3, 0)
         self.input_resistance = QComboBox()
-        self.input_resistance.addItems(["100K", "1M", "10M", "100M", "1G", "10G", "100G", "Mux:7"])
+        self.input_resistance.addItems(["10^5", "10^6", "10^7", "10^8", "10^9", "10^10", "10^9 Loop Back"])
         grid.addWidget(self.input_resistance, 3, 1)
         grid.addWidget(QLabel("Ω"), 3, 2)
 
-        self.sca_widgets = create_slider_row_widgets("Gain", "V")
+        self.sca_widgets = create_slider_row_widgets("Gain", "\u2715")
         self.sca_slider = self.sca_widgets[1]
-        self.sca_slider.setRange(1, 700)
+        self.sca_slider.setRange(2, 7000)
         self.slider_widgets_map["sca"] = self.sca_widgets
 
         self.sco_widgets = create_slider_row_widgets("Offset", "V", scale = 0.1, precision = 1)
@@ -174,6 +176,16 @@ class SliderPanel(QWidget):
             "applyClose": self.apply_close_button
         }
 
+        self.resistance_map = {
+            "10^5": "100K",
+            "10^6": "1M",
+            "10^7": "10M",
+            "10^8": "100M",
+            "10^9": "1G",
+            "10^10": "10G",
+            "10^9 Loop Back": "Mux:7"
+        }
+
         # Connect all controls except AC/DC toggle
         for label, item in self.controls.items():
             if isinstance(item, QSlider):
@@ -201,14 +213,14 @@ class SliderPanel(QWidget):
                 widget.setVisible(True)
             for widget in self.slider_widgets_map["ddsa"]:
                 widget.setVisible(False)
-            self.ddsa_slider.setValue(1)
+            self.ddsa_slider.setValue(-1)
             #self.send_control_update("ddsa", 1)
 
             self.socket_client.send({
                 "source": self.socket_client.client_id,
                 "type": "control",
                 "name": "ddsa",
-                "value": "1"
+                "value": "-1"
             })
             self.socket_client.send({
                 "source": self.socket_client.client_id,
@@ -222,14 +234,14 @@ class SliderPanel(QWidget):
                 widget.setVisible(True)
             for widget in self.slider_widgets_map["ddso"]:
                 widget.setVisible(False)
-            self.dds_slider.setValue(-3)  # actually -0.3
+            self.dds_slider.setValue(-34)  # actually -0.34
             # self.send_control_update("ddso", -3)
 
             self.socket_client.send({
                 "source": self.socket_client.client_id,
                 "type": "control",
                 "name": "ddso",
-                "value": "-3"
+                "value": "-34"
             })
             self.socket_client.send({
                 "source": self.socket_client.client_id,
@@ -243,6 +255,9 @@ class SliderPanel(QWidget):
     def send_control_update(self, name, value):
         if self._suppress:
             return
+        
+        if name == "inputResistance":
+            value = self.resistance_map[value]
 
         self.socket_client.send({
             "source": self.socket_client.client_id,

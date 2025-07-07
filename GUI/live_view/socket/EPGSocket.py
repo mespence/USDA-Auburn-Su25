@@ -234,7 +234,7 @@ class SocketServer:
         msg = {
             "source": "ENGR",
             "type": "data",
-            "value": (data["value"][0], data["value"][1]),  # (timestamp, voltage)
+            "value": (data["value"][0], data["value"][1]),  # (unix timestamp, voltage)
         }
         cs_sock.sendall((json.dumps(msg) + "\n").encode("utf-8"))
 
