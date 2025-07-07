@@ -17,7 +17,7 @@ from EPGSocket import SocketClient, SocketServer
 
 
 class LiveViewTab(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, settings=None):
         super().__init__(parent)
         self.connection_indicator = ConnectionIndicator()
 
@@ -33,7 +33,7 @@ class LiveViewTab(QWidget):
         self.receive_loop = threading.Thread(target=self._socket_recv_loop, daemon=True)
         self.receive_loop.start()
 
-        self.datawindow = LiveDataWindow(self)
+        self.datawindow = LiveDataWindow(self, settings=settings)
         self.datawindow.getPlotItem().hideButtons()
 
         self.pause_button = QPushButton("Pause Live View", self)

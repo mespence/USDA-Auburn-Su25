@@ -65,10 +65,9 @@ class MainWindow(QMainWindow):
         file = self.epgdata.current_file
         self.epgdata.load_data(file)
 
-        self.live_view_tab = LiveViewTab(self)
+        self.live_view_tab = LiveViewTab(self, settings=settings)
         self.label_tab = LabelTab(self)
 
-        self.settings = settings
         self.initUI()
 
     def initUI(self):
@@ -254,15 +253,15 @@ def load_fonts():
         QFontDatabase.addApplicationFont(font)
 
 
-def start_main_application(settings=None):
+def start_main_application(app_instance, settings=None):
     Settings()
-    app = QApplication([])
+    # app = QApplication([])
     #app.setStyle("Fusion")
 
     load_fonts()
     splash = LoadingScreen()
     splash.show()
-    QApplication.processEvents() 
+    app_instance.processEvents()
 
     window = MainWindow(settings=settings)
     
@@ -270,13 +269,33 @@ def start_main_application(settings=None):
     window.showMaximized()
     window.raise_()
     window.activateWindow()
-    QApplication.processEvents() 
+    # QApplication.processEvents() 
+    app_instance.processEvents()
 
     splash.close()
 
+    return window
+
 
 if __name__ == "__main__":
+    Settings()
     app = QApplication(sys.argv)
+    load_fonts()
+    splash = LoadingScreen()
+    splash.show()
+    app.processEvents() 
+
+    window = MainWindow(settings=None)
+    
+    # Display Focused
+    window.showMaximized()
+    window.raise_()
+    window.activateWindow()
+    # QApplication.processEvents() 
+
+    # splash.close()
+
     sys.exit(app.exec())
+
 
     start_main_application()

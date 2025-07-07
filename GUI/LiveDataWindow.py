@@ -33,7 +33,7 @@ class LiveDataWindow(PlotWidget):
     - Periodic auto-backup of waveform and comments.
     - Export functionality for waveform data and comments.
     """
-    def __init__(self, parent = None):
+    def __init__(self, parent = None, settings=None):
         """
         Initializes the LiveDataWindow widget.
 
@@ -49,31 +49,29 @@ class LiveDataWindow(PlotWidget):
         self.viewbox.datawindow = self
         self.viewbox.menu = None  # disable default menu
 
-        # --- DATA STORAGE ---
-        # holds all historical data
-        self.epgdata = self.parent().parent().epgdata
-        self.xy_data: list[NDArray] = [np.array([]), np.array([])]
+        # --- INITIAL SETTINGS ---
+        self.settings = settings
 
-        # temporary buffer for incoming data, to be added to full xy_data every plot update
-        self.buffer_data: list[tuple[float, float]] = []
-        self.buffer_lock = threading.Lock() # lock to prevent data loss
+        if self.settings:
+            self.recording_filename = self.settings.get("filename")
+            self.min_voltage = self.settings.get("min_voltage")
+            self.max_voltage = self.settings.get("max_voltage")
 
-        # store currently rendered data (downsampled for display)
-        self.xy_rendered: list[NDArray] = [np.array([]), np.array([])]
+            self.viewbox.setYRange(self.min_voltage, self.max_voltage, padding=0)
 
-        # track last rendered state to optimize plot updates
-        self.last_rendered_x_range: tuple[float, float] = (0, 0)
-        
-        # timer for plot updates (~60 fps)
-        self.plot_update_timer = QTimer(self)
-        self.plot_update_timer.setInterval(int(1000/60))
-        self.plot_update_timer.timeout.connect(self.timed_plot_update)
-        self.plot_update_timer.start()
+            if self.recording_filename:
+                self.base_data_directory = os.path.dirname(self.recording_filename)
+                self.export_filename_stem = os.path.splitext(os.path.basename(self.recording_filename))[0]
+        else:
+            self.viewbox.setYRange(-0.5, 1, padding=0)
+            self.recording_filename = None
+            self.base_data_directory = os.getcwd()
+            self.export_filename_stem = "exported_data"
 
         # --- PERIODIC BACKUP SETTINGS ---
         # for simplicity, save to subfolder in current working directory (GUI)
         # TODO change when have initial program window where choose working directory
-        self.periodic_backup_dir = "backups"
+        self.periodic_backup_dir = os.path.join(self.base_data_directory, "backups")
         os.makedirs(self.periodic_backup_dir, exist_ok=True)
 
         # assign from new rec window
@@ -108,6 +106,28 @@ class LiveDataWindow(PlotWidget):
         self.save_timer.timeout.connect(self.trigger_periodic_save)
         self.save_timer.start()
 
+
+        # --- DATA STORAGE ---
+        # holds all historical data
+        self.epgdata = self.parent().parent().epgdata
+        self.xy_data: list[NDArray] = [np.array([]), np.array([])]
+
+        # temporary buffer for incoming data, to be added to full xy_data every plot update
+        self.buffer_data: list[tuple[float, float]] = []
+        self.buffer_lock = threading.Lock() # lock to prevent data loss
+
+        # store currently rendered data (downsampled for display)
+        self.xy_rendered: list[NDArray] = [np.array([]), np.array([])]
+
+        # track last rendered state to optimize plot updates
+        self.last_rendered_x_range: tuple[float, float] = (0, 0)
+        
+        # timer for plot updates (~60 fps)
+        self.plot_update_timer = QTimer(self)
+        self.plot_update_timer.setInterval(int(1000/60))
+        self.plot_update_timer.timeout.connect(self.timed_plot_update)
+        self.plot_update_timer.start()
+
         # --- UI ELEMENTS ---
         self.curve: PlotDataItem = PlotDataItem(pen=mkPen("blue", width=2))
         self.scatter: ScatterPlotItem = ScatterPlotItem(
@@ -131,12 +151,6 @@ class LiveDataWindow(PlotWidget):
 
         self.leading_line: InfiniteLine = InfiniteLine(pos=0, angle=90, movable=False, pen=mkPen("red", width=3))
         self.addItem(self.leading_line)
-
-        self.init_min_volt = -0.5
-        self.init_max_volt = 1
-
-        # TODO change once have initial loading page for researcher to set range
-        self.viewbox.setYRange(self.init_min_volt, self.init_max_volt, padding=0)
 
         # Live mode button
         self.live_mode = False

@@ -67,7 +67,7 @@ def launch_application():
     def launch_main_window_with_settings(settings):
         nonlocal main_window_instance
 
-        main_window_instance = start_main_application(settings=settings)
+        main_window_instance = start_main_application(app, settings=settings)
         launcher_dialog.accept() 
 
     launcher_dialog.launchMainWindow.connect(launch_main_window_with_settings)
