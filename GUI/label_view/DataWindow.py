@@ -20,13 +20,13 @@ from PyQt6.QtWidgets import (
 )
 
 from EPGData import EPGData
-from PanZoomViewBox import PanZoomViewBox
-from Settings import Settings
-from LabelArea import LabelArea
-from CommentMarker import CommentMarker
-from SelectionManager import Selection
-from AddLabelManager import AddLabelManager
-from TextEdit import TextEdit
+from utils.PanZoomViewBox import PanZoomViewBox
+from settings.Settings import Settings
+from label_view.LabelArea import LabelArea
+from utils.CommentMarker import CommentMarker
+from label_view.SelectionManager import Selection
+from label_view.AddLabelManager import AddLabelManager
+from utils.TextEdit import TextEdit
 
 class DataWindow(PlotWidget):
     """

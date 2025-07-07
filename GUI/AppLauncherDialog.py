@@ -4,8 +4,8 @@ import sys
 # Import both your dialog and main window classes
 from NewRecordingDialog import NewRecordingDialog
 from main import start_main_application
-from SettingsWindow import SettingsWindow
-from Settings import Settings
+from settings.SettingsWindow import SettingsWindow
+from settings.Settings import Settings
 from PyQt6.QtWidgets import QApplication, QDialog, QHBoxLayout, QPushButton, QVBoxLayout, QLabel
 from PyQt6.QtCore import Qt, pyqtSignal
 import sys

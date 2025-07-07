@@ -3,9 +3,9 @@ from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 
-from TextEdit import TextEdit
-from LabelArea import LabelArea
-from Settings import Settings
+from utils.TextEdit import TextEdit
+from label_view.LabelArea import LabelArea
+from settings.Settings import Settings
 
 
 class AddLabelManager:

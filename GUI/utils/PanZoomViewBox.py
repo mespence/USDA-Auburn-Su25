@@ -4,8 +4,8 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QWheelEvent, QAction, QKeyEvent, QKeySequence
 from PyQt6.QtWidgets import QMenu
 
-from Settings import Settings
-from LabelArea import LabelArea
+from settings.Settings import Settings
+from label_view.LabelArea import LabelArea
 
 class PanZoomViewBox(ViewBox):
     """

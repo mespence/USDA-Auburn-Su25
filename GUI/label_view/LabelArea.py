@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QGraphicsRectItem
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QFont, QFontMetricsF, QPen, QColor
 
-from Settings import Settings
+from settings.Settings import Settings
 
 class LabelArea:
     """

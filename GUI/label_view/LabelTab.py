@@ -7,12 +7,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
 
-from DataWindow import DataWindow
+from label_view.DataWindow import DataWindow
 from EPGData import EPGData
-from Labeler import Labeler
-from Settings import Settings
+from label_view.Labeler import Labeler
+from settings.Settings import Settings
 from FileSelector import FileSelector
-from SettingsWindow import SettingsWindow
+from settings.SettingsWindow import SettingsWindow
 
 
 

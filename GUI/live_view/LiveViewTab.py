@@ -10,10 +10,10 @@ from PyQt6.QtWidgets import (
     QWidget, QPushButton, QToolButton, QHBoxLayout, QVBoxLayout, QLabel
 )
 
-from LiveDataWindow import LiveDataWindow
-from ConnectionIndicator import ConnectionIndicator
-from SliderPanel2 import SliderPanel
-from EPGSocket import SocketClient, SocketServer
+from live_view.LiveDataWindow import LiveDataWindow
+from live_view.SliderPanel import SliderPanel
+from live_view.socket.ConnectionIndicator import ConnectionIndicator
+from live_view.socket.EPGSocket import SocketClient, SocketServer
 
 
 class LiveViewTab(QWidget):

@@ -18,17 +18,17 @@ from PyQt6.QtGui import QIcon, QFont, QFontDatabase, QAction
 from pyqtgraph import setConfigOptions
 
 from LoadingScreen import LoadingScreen
-from DataWindow import DataWindow
+from label_view.DataWindow import DataWindow
 from EPGData import EPGData
 from FileSelector import FileSelector
-from Labeler import Labeler
-from Settings import Settings
+from label_view.Labeler import Labeler
+from settings.Settings import Settings
 
 from FileSelector import FileSelector
-from SettingsWindow import SettingsWindow
+from settings.SettingsWindow import SettingsWindow
 
-from LiveViewTab import LiveViewTab
-from LabelTab import LabelTab
+from live_view.LiveViewTab import LiveViewTab
+from label_view.LabelTab import LabelTab
 
 # from ModelSelector import ModelSelector
 
@@ -255,8 +255,6 @@ def load_fonts():
 
 def start_main_application(app_instance, settings=None):
     Settings()
-    # app = QApplication([])
-    #app = QApplication([])
     #app.setStyle("Fusion")
 
     load_fonts()
@@ -270,7 +268,7 @@ def start_main_application(app_instance, settings=None):
     window.showMaximized()
     window.raise_()
     window.activateWindow()
-    # QApplication.processEvents() 
+
     app_instance.processEvents()
 
     splash.close()

@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot
 
-from ToggleSwitch import ACDCToggle
+from utils.ToggleSwitch import ACDCToggle
 import sys
 
 class SliderPanel(QWidget):

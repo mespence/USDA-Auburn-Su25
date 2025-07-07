@@ -6,8 +6,8 @@ from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtCore import Qt, QPointF, QTimer
 
-from TextEdit import TextEdit
-from HoverableSvgItem import HoverableSvgItem
+from utils.TextEdit import TextEdit
+from utils.HoverableSvgItem import HoverableSvgItem
 
 class CommentMarker():
     """

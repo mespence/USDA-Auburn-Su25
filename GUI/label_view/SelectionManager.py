@@ -5,8 +5,8 @@ from pyqtgraph import PlotWidget, InfiniteLine, mkPen, mkBrush
 from PyQt6.QtGui import QColor, QMouseEvent, QKeyEvent
 from PyQt6.QtCore import Qt, QPointF
 
-from LabelArea import LabelArea
-from Settings import Settings
+from label_view.LabelArea import LabelArea
+from settings.Settings import Settings
 
 
 # werid multi select bugs still, multi delete
