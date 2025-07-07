@@ -3,6 +3,7 @@ import sys
 
 # Import both your dialog and main window classes
 from NewRecordingDialog import NewRecordingDialog
+from UploadFileDialog import UploadFileDialog
 from main import start_main_application
 from settings.SettingsWindow import SettingsWindow
 from settings.Settings import Settings
@@ -11,7 +12,8 @@ from PyQt6.QtCore import Qt, pyqtSignal
 import sys
 
 class AppLauncherDialog(QDialog):
-    launchMainWindow = pyqtSignal(dict)
+    launchMainWindowSettings = pyqtSignal(dict)
+    launchMainWindowFile = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -37,6 +39,11 @@ class AppLauncherDialog(QDialog):
         self.new_recording_button.clicked.connect(self.open_new_recording_dialog)
         button_layout.addWidget(self.new_recording_button)
 
+        self.upload_button = QPushButton("Upload File")
+        self.upload_button.setMinimumHeight(40)
+        self.upload_button.clicked.connect(self.open_upload_dialog)
+        button_layout.addWidget(self.upload_button)
+
         main_layout.addLayout(button_layout)
 
         # Add a simple exit button for convenience if user doesn't want to proceed
@@ -44,17 +51,23 @@ class AppLauncherDialog(QDialog):
         exit_button.clicked.connect(self.reject) # Rejecting the dialog will close it
         main_layout.addWidget(exit_button, alignment=Qt.AlignmentFlag.AlignRight)
 
-
     def open_settings_dialog(self):
         # need to work on settings dialog
         settings_dialog = SettingsWindow()
         settings_dialog.exec()
 
     def open_new_recording_dialog(self):
-        new_recording_dialog = NewRecordingDialog(self)
+        new_recording_dialog = NewRecordingDialog()
         if new_recording_dialog.exec(): # open modally
             recording_settings = new_recording_dialog.get_data()
-            self.launchMainWindow.emit(recording_settings)
+            self.launchMainWindowSettings.emit(recording_settings)
+            self.accept() # Accept and close the AppLauncherDialog
+
+    def open_upload_dialog(self):
+        upload_dialog = UploadFileDialog()
+        if upload_dialog.exec(): # open modally
+            upload_file_path = upload_dialog.get_file_path()
+            self.launchMainWindowFile.emit(upload_file_path)
             self.accept() # Accept and close the AppLauncherDialog
 
 def launch_application():
@@ -69,7 +82,14 @@ def launch_application():
         main_window_instance = start_main_application(app, settings=settings)
         launcher_dialog.accept() 
 
-    launcher_dialog.launchMainWindow.connect(launch_main_window_with_settings)
+    def launch_main_window_with_file(file):
+        nonlocal main_window_instance
+
+        main_window_instance = start_main_application(app, file=file)
+        launcher_dialog.accept() 
+
+    launcher_dialog.launchMainWindowSettings.connect(launch_main_window_with_settings)
+    launcher_dialog.launchMainWindowFile.connect(launch_main_window_with_file)
 
     result = launcher_dialog.exec()
 

@@ -423,18 +423,12 @@ class DataWindow(PlotWidget):
         Parameters:
             file (str): File identifier.
         """
-        if file is not None:
-            self.file = file
-
-        for marker in self.comments:
-            marker.remove()
-        self.comments.clear()
         
         comments_df = self.df[~self.df["comments"].isnull()]
         for time, text in zip(comments_df["time"], comments_df["comments"]):
-            marker = CommentMarker(time, text, self, icon_path=r"message.svg")
+            marker = CommentMarker(time, text, self, icon_path=r"icons/message.svg")
             self.comments[time] = marker
-        
+
         return
 
     def add_comment_at_click(self, click_time: float) -> None:

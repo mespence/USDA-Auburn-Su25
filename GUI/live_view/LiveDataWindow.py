@@ -87,7 +87,7 @@ class LiveDataWindow(PlotWidget):
 
         # initialize CSV headers if files don't exist
         if not os.path.exists(self.waveform_backup_path):
-            pd.DataFrame(columns=['time', 'voltage']).to_csv(self.waveform_backup_path, index=False)
+            pd.DataFrame(columns=['time', 'post_rect']).to_csv(self.waveform_backup_path, index=False)
         if not os.path.exists(self.comments_backup_path):
             pd.DataFrame(columns=['time', 'comment']).to_csv(self.comments_backup_path, index=False)
 
@@ -149,7 +149,7 @@ class LiveDataWindow(PlotWidget):
         self.addItem(self.leading_line)
 
         # Live mode button
-        self.live_mode = False
+        self.live_mode = True
         self.current_time = 0
         # for live view, follow only 10 seconds of visible data
         self.default_scroll_window = 10
@@ -334,7 +334,7 @@ class LiveDataWindow(PlotWidget):
         
             try:
                 current_utc_time = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')
-                df_to_append = pd.DataFrame({'time': times[self.last_saved_data_index:], 'voltage': volts[self.last_saved_data_index:]})
+                df_to_append = pd.DataFrame({'time': times[self.last_saved_data_index:], 'post_rect': volts[self.last_saved_data_index:]})
                 comments_list = [{'time': t, 'comment': c.text} for t, c in comments.items()]
 
                 if not df_to_append.empty:
@@ -364,6 +364,7 @@ class LiveDataWindow(PlotWidget):
                 
             except Exception as e:
                 print(f"[PERIODIC SAVE ERROR] Could not save data: {e}")
+                print(len(times), len(volts))
             finally:
                 self.is_saving = False
 
@@ -869,7 +870,7 @@ class LiveDataWindow(PlotWidget):
         
         df = DataFrame({
             "time": times,
-            "voltages": volts, # may need to change based on what engineers plot
+            "post_rect": volts, # may need to change based on what engineers plot
             "comments": [None] * len(times)
         })
 
@@ -884,8 +885,8 @@ class LiveDataWindow(PlotWidget):
 
     def save_df(self) -> bool:
         """
-        Saves the current waveform data and associated comments to a
-        CSV file. Prompts the user to select a file location. If no
+        Saves the current waveform data and associated comments to
+        CSV file. Uses default file location selected for new recording. If no
         data is available, shows a message box informing the user.
         """
         self.integrate_buffer_to_np()
@@ -911,7 +912,7 @@ class LiveDataWindow(PlotWidget):
         
         df = DataFrame({
             "time": times,
-            "voltages": volts, # may need to change based on what engineers plot
+            "post_rect": volts, # may need to change based on what engineers plot
             "comments": [None] * len(times)
         })
 

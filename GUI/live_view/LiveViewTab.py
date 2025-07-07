@@ -64,7 +64,6 @@ class LiveViewTab(QWidget):
                 padding: 2px;
             }
         """)
-        self.pause_button.clicked.connect(self.toggle_live)
 
         self.add_comment_button = QPushButton("Add Comment", self)
         self.add_comment_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -206,8 +205,6 @@ class LiveViewTab(QWidget):
                     if raw_message.strip() == "ack":
                         acknowledged = True
                     continue
-
-                self.datawindow.live_mode = True
                 
                 # parse message into individual commands
                 if isinstance(raw_message, dict):
@@ -261,7 +258,6 @@ class LiveViewTab(QWidget):
                             Q_ARG(dict, value),
                         )
             except Empty:
-                self.datawindow.live_mode = False
                 continue  # restart the loop
 
             except Exception as e:

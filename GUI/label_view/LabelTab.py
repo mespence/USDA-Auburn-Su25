@@ -75,7 +75,7 @@ class LabelTab(QWidget):
 
         QApplication.processEvents()
         file = self.parent().epgdata.current_file
-        self.datawindow.plot_recording(file, "pre")
+        self.datawindow.plot_recording(file, "post")
         self.datawindow.plot_transitions(file)
         self.datawindow.plot_comments(file)
 
