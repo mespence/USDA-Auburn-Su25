@@ -361,6 +361,8 @@ class AppearanceTab(QWidget):
 
 
 class EPGSettingsTab(QWidget):
+    # default direc
+    # backup direc
     pass
 
 
@@ -412,8 +414,8 @@ class SidebarButton(QToolButton):
 
 
 class SettingsWindow(QWidget):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMaximumSize(600, 600)
 
@@ -442,8 +444,26 @@ class SettingsWindow(QWidget):
             self.sidebar_layout.addWidget(btn)
             self.buttons.append(btn)
 
-        self.sidebar_layout.addStretch()
         self.buttons[0].setChecked(True)
+
+        self.sidebar_layout.addStretch()
+
+        close_button = QPushButton("Close")
+        close_button.setStyleSheet("""
+            QPushButton {
+                background-color: #444;
+                color: white;
+                padding: 6px 10px 6px 10px;
+                border: none;
+                font-size: 10pt;
+                font-weight: normal;
+            }
+            QPushButton:hover {
+                background-color: #555;
+            }
+        """)
+        close_button.clicked.connect(self.close)
+        self.sidebar_layout.addWidget(close_button)
 
         self.stack = QStackedWidget()
 

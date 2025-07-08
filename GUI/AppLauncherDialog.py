@@ -5,7 +5,7 @@ import sys
 from NewRecordingDialog import NewRecordingDialog
 from UploadFileDialog import UploadFileDialog
 from main import start_main_application
-from settings.SettingsWindow import SettingsWindow
+from settings.SettingsWindow2 import SettingsWindow
 from settings.Settings import Settings
 from PyQt6.QtWidgets import QApplication, QDialog, QHBoxLayout, QPushButton, QVBoxLayout, QLabel
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -53,8 +53,12 @@ class AppLauncherDialog(QDialog):
 
     def open_settings_dialog(self):
         # need to work on settings dialog
-        settings_dialog = SettingsWindow()
-        settings_dialog.exec()
+        settings_window = SettingsWindow(self)
+        settings_window.setWindowFlag(Qt.WindowType.Window, True)
+        settings_window.setWindowModality(Qt.WindowModality.WindowModal)
+        settings_window.show()        # becomes visible
+        settings_window.raise_()      # put at top of stacking order
+        settings_window.activateWindow()
 
     def open_new_recording_dialog(self):
         new_recording_dialog = NewRecordingDialog()

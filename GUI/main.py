@@ -61,10 +61,12 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.epgdata = EPGData()
+        
         if file:
             self.epgdata.current_file = file
         else:
             file = self.epgdata.current_file
+        
         self.epgdata.load_data(file)
 
         self.live_view_tab = LiveViewTab(self, settings=settings)
