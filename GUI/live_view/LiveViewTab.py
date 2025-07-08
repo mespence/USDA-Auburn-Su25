@@ -229,7 +229,7 @@ class LiveViewTab(QWidget):
                         if self.initial_timestamp is None:
                             self.initial_timestamp = message['value'][0]
 
-                        time = float(message['value'][0]) - self.initial_timestamp
+                        time = round(float(message['value'][0]) - self.initial_timestamp, 4)
                         volt = float(message['value'][1])
 
                         with self.datawindow.buffer_lock:

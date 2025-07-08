@@ -434,8 +434,7 @@ class Selection:
             vb_x = lambda x: self.datawindow.viewbox_to_window(QPointF(x ,0)).x() 
             view_dist = abs(vb_x(left_end) - vb_x(right_start))
 
-            if abs(view_dist - SNAP_THRESHOLD) <= 1e-6:
-                print(2)
+            if view_dist - SNAP_THRESHOLD <= 1e-6:
                 # Snap
                 left.duration = right_start - left.start_time
                 left.set_transition_line("right", right_start)

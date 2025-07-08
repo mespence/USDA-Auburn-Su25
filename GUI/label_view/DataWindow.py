@@ -969,7 +969,7 @@ class DataWindow(PlotWidget):
         if event.key() == Qt.Key.Key_R:
             self.reset_view()  
         elif event.key() == Qt.Key.Key_L:
-            self.add_label_manager.start()
+            self.add_label_manager.toggle()
         elif event.key() == Qt.Key.Key_B:
             if self.baseline_preview_enabled:
                 # Turn it off

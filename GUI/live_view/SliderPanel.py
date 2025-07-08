@@ -95,7 +95,7 @@ class SliderPanel(QWidget):
         # Input Resistance
         grid.addWidget(QLabel("Input Resistance"), 3, 0)
         self.input_resistance = QComboBox()
-        self.input_resistance.addItems(["10^5", "10^6", "10^7", "10^8", "10^9", "10^10", "10^9 Loop Back"])
+        self.input_resistance.addItems(["10\u2075 (100K)", "10\u2076 (1M)", "10\u2077 (10M)", "10\u2078 (100M)", "10\u2079 (1G)", "10\u00b9\u2070 (10G)", "10\u2079 (1G) Loop Back"])
         grid.addWidget(self.input_resistance, 3, 1)
         grid.addWidget(QLabel("Ω"), 3, 2)
 
@@ -130,7 +130,7 @@ class SliderPanel(QWidget):
         self.cancel_button  = QPushButton("Cancel", self)
         self.revert_default_button  = QPushButton("Revert to Defaults", self)
         self.apply_button  = QPushButton("Apply", self)
-        self.apply_close_button  = QPushButton("Apply & Close", self)
+        self.apply_close_button  = QPushButton("Apply \u0026 Close", self)
 
         button_layout1 = QHBoxLayout()
         button_layout1.addWidget(self.on_button)
@@ -175,15 +175,15 @@ class SliderPanel(QWidget):
             "apply": self.apply_button,
             "applyClose": self.apply_close_button
         }
-
+        ["10\u2075 (100K)", "10\u2076 (1M)", "10\u2077 (10M)", "10\u2078 (100M)", "10\u2079 (1G)", "10\u00b9\u2070 (10G)", "10\u2079 (1G) Loop Back"]
         self.resistance_map = {
-            "10^5": "100K",
-            "10^6": "1M",
-            "10^7": "10M",
-            "10^8": "100M",
-            "10^9": "1G",
-            "10^10": "10G",
-            "10^9 Loop Back": "Mux:7"
+            "10\u2075 (100K)": "100K",
+            "10\u2076 (1M)": "1M",
+            "10\u2077 (10M)": "10M",
+            "10\u2078 (100M)": "100M",
+            "10\u2079 (1G)": "1G",
+            "10\u00b9\u2070 (10G)": "10G",
+            "10\u2079 (1G) Loop Back": "Mux:7"
         }
 
         # Connect all controls except AC/DC toggle

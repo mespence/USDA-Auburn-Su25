@@ -13,6 +13,7 @@ class AddLabelManager:
         self.dw = datawindow
         self.active = False
         self.first_time = None
+        self.second_click_pending = False
         self.dragging = False
 
         self.line1 = InfiniteLine(angle=90, movable=False, pen='b')
@@ -24,10 +25,21 @@ class AddLabelManager:
             movable=False
         )
 
+        self.fade_overlay = LinearRegionItem(
+            orientation='vertical',
+            movable=False,
+            brush=mkBrush(QColor(255, 255, 255, 120)),  # semi-transparent white
+            pen=None  # No border
+        )
+
         for item in [self.line1, self.line2, self.region]:
             item.setZValue(20)
             item.setVisible(False)
             self.dw.plot_item.addItem(item)
+
+        self.fade_overlay.setZValue(5)
+        self.fade_overlay.setVisible(False)
+        self.dw.plot_item.addItem(self.fade_overlay)
 
     def start(self):
         self.active = True
@@ -35,25 +47,46 @@ class AddLabelManager:
         self.dragging = False
         self.dw.selection.deselect_all()
 
+        # Span the full data range on x-axis
+        if self.dw.file in self.dw.epgdata.dfs:
+            df = self.dw.epgdata.dfs[self.dw.file]
+            if not df.empty:
+                x_min = df['time'].iloc[0]
+                x_max = df['time'].iloc[-1]
+                self.fade_overlay.setRegion((x_min, x_max))
+                self.fade_overlay.setVisible(True)
+
     def cancel(self):
         self.active = False
         self.first_time = None
         self.dragging = False
-        for item in [self.line1, self.line2, self.region]:
+        self.second_click_pending = False
+        for item in [self.line1, self.line2, self.region, self.fade_overlay]:
             item.setVisible(False)
+
+    def toggle(self):
+        if self.active:
+            self.cancel()
+        else:
+            self.start()
 
     def mouse_press(self, x: float):
         if not self.active:
             return
+
         if self.first_time is None:
+            # First click
             self.first_time = x
+            self.second_click_pending = True  # enable second-click finalization
+
             for item in [self.line1, self.line2, self.region]:
                 item.setVisible(True)
             self.line1.setValue(x)
             self.line2.setValue(x)
             self.region.setRegion((x, x))
-            self.dragging = True
-        else:
+
+        elif self.second_click_pending:
+            # Second click finalizes
             self.finalize_label(x)
 
     def mouse_release(self, x: float):
@@ -62,13 +95,11 @@ class AddLabelManager:
 
     def mouse_move(self, x: float):
         if self.active and self.first_time is not None:
+            self.dragging = True  # enable drag mode if movement happens
             self.line2.setValue(x)
             self.region.setRegion((min(self.first_time, x), max(self.first_time, x)))
 
     def finalize_label(self, second_time: float):
-        start, end = sorted([self.first_time, second_time])
-        duration = end - start
-
         # Prompt for label
         dialog = QDialog(self.dw)
         dialog.setWindowTitle("Waveform Label")
@@ -107,6 +138,10 @@ class AddLabelManager:
         for item in [self.line1, self.line2, self.region]:
             item.setVisible(False)
 
+        self.second_click_pending = False
+        start, end = sorted([self.first_time, second_time])
+        duration = end - start
+
         # Build updated label list
         new_labels = []
         inserted = False
@@ -123,7 +158,7 @@ class AddLabelManager:
                 continue
 
             elif s0 < start < e0 and s0 < end < e0:
-                # This label fully contained within an existing label - split it two
+                # New label fully contained within an existing label - split it two
                 left_dur = start - s0
                 right_dur = e0 - end
 
@@ -163,13 +198,20 @@ class AddLabelManager:
 
         if not inserted:
             new_label = LabelArea(start, duration, label, self.dw)
+
             new_labels.append(new_label)
+            new_labels.sort(key=lambda la: la.start_time)
+            idx = new_labels.index(new_label)
+
+            new_label.add_right_transition_line()
+
+            self.dw.selection._attempt_snap_and_merge(new_label.right_transition_line)
 
         new_labels.sort(key=lambda la: la.start_time)
         self.dw.labels = new_labels
 
         # Merge if needed
-        self.dw.selection.merge_adjacent_labels(new_label)
+        #self.dw.selection.merge_adjacent_labels(new_label)
 
         # Push to epgdata
         transitions = [(la.start_time, la.label) for la in self.dw.labels]
