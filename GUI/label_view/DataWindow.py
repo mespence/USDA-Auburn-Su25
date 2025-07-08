@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.typing import NDArray
-import os
+import pandas as pd
 import csv
 
 from pyqtgraph import (
@@ -89,7 +89,7 @@ class DataWindow(PlotWidget):
         self.zoom_text: TextItem = TextItem()
         #self.transitions: list[tuple[float, str]] = []   # the x-values of each label transition
         self.transition_mode: str = 'labels'
-        self.labels: list[LabelArea] = []  # the list of LabelAreas
+        self.labels: list = []  # the list of LabelAreas
 
         # SELECTION
         self.selection: Selection = Selection(self)
@@ -880,8 +880,39 @@ class DataWindow(PlotWidget):
         self.baseline_preview_enabled = False
         self.baseline_preview.setVisible(False)
 
-    def add_drop_transitions(self):
-        return
+    def update_labels_column(self) -> None:
+        """
+        Recomputes the 'labels' column in the DataFrame from the current LabelAreas.
+
+        Called automatically when `self.labels` changes.
+
+        Notes:
+            - Assigns each LabelArea's label to all times >= start and < end.
+            - If a time falls exactly on a right-side transition, it is excluded (reserved for the next label).
+        """
+        if self.df is None:
+            print("[update_labels_column] Skipped: df is None")
+            return
+
+        print(f"[update_labels_column] Updating labels from {len(self.labels)} LabelAreas")
+
+        times = self.df["time"].values
+        labels_array = np.full(len(times), np.nan, dtype=object)
+
+        for area in self.labels:
+            start_time = area.start_time
+            end_time = start_time + area.duration
+            label = area.label
+
+            in_range = (times >= start_time) & (times < end_time)
+            on_edge = np.isclose(times, end_time)
+
+            labels_array[in_range] = label
+            labels_array[on_edge] = np.nan  # exclude exact right transition
+
+        self.df["labels"] = labels_array
+
+    
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """

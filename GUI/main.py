@@ -289,7 +289,6 @@ def start_main_application(app_instance, settings=None, file=None):
 
 
 if __name__ == "__main__":
-    Settings()
     app = QApplication(sys.argv)
 
     load_fonts()
