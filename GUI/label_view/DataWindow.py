@@ -65,6 +65,7 @@ class DataWindow(PlotWidget):
         self.file: str = None
         self.prepost: str = "pre"
         self.df = None
+        self.init_df = None
         
         self.xy_data: list[NDArray] = [None, None]  # x and y data actually rendered to the screen
         self.curve: PlotDataItem = PlotDataItem(antialias=False, pen = Settings.data_line_color) 
@@ -202,7 +203,8 @@ class DataWindow(PlotWidget):
             event (QCloseEvent): The close event triggered by the window system.
         """
 
-        if self.data_modified: # check if any new data or modifications
+        self.update_labels_column()
+        if not self.init_df.equals(self.df): # check if any new data or modifications
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle("Unsaved Changes")
             msg_box.setText("You have unsaved changes. Do you want to save them before exiting?")
@@ -213,7 +215,7 @@ class DataWindow(PlotWidget):
             reply = msg_box.exec()
 
             if reply == QMessageBox.StandardButton.Save:
-                export_successful = self.save_df() # TODO how should save_df be written
+                export_successful = self.export_df() 
                 if not export_successful:
                     # export_df cancelled by the user, so cancel closing application
                     event.ignore()
@@ -436,6 +438,7 @@ class DataWindow(PlotWidget):
         init_x, init_y = self.xy_data[0].copy(), self.xy_data[1].copy()
         self.initial_downsampled_data = [init_x, init_y]
         self.df = self.epgdata.dfs[file]  
+        self.init_df = self.df.copy(deep = True)
 
         self.viewbox.setRange(
             xRange=(np.min(self.xy_data[0]), np.max(self.xy_data[0])), 
@@ -952,7 +955,7 @@ class DataWindow(PlotWidget):
         )
 
         df = self.df
-        df.to_csv(filename) # TODO double index 
+        df.to_csv(filename, index=False)
         return True
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
@@ -985,6 +988,8 @@ class DataWindow(PlotWidget):
             self.baseline.setVisible(False)
             self.baseline_preview_enabled = False
             self.baseline_preview.setVisible(False)
+        elif event.key() == Qt.Key.Key_S and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self.export_df()
         elif event.key() == Qt.Key.Key_Up or event.key() == Qt.Key.Key_Down or event.key() == Qt.Key.Key_Left or event.key() == Qt.Key.Key_Right:
             self.viewbox.keyPressEvent(event)
 

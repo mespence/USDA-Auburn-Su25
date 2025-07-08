@@ -87,7 +87,7 @@ class LiveDataWindow(PlotWidget):
 
         # initialize CSV headers if files don't exist
         if not os.path.exists(self.waveform_backup_path):
-            pd.DataFrame(columns=['time', 'post_rect']).to_csv(self.waveform_backup_path, index=False)
+            pd.DataFrame(columns=['time', 'voltage']).to_csv(self.waveform_backup_path, index=False)
         if not os.path.exists(self.comments_backup_path):
             pd.DataFrame(columns=['time', 'comment']).to_csv(self.comments_backup_path, index=False)
 
@@ -281,7 +281,6 @@ class LiveDataWindow(PlotWidget):
         with self.buffer_lock:
             if not self.buffer_data:
                 return
-            
             # create local copy of buffer and clear orig, to release lock
             data_to_process = self.buffer_data.copy()
             self.buffer_data.clear()
@@ -334,7 +333,7 @@ class LiveDataWindow(PlotWidget):
         
             try:
                 current_utc_time = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')
-                df_to_append = pd.DataFrame({'time': times[self.last_saved_data_index:], 'post_rect': volts[self.last_saved_data_index:]})
+                df_to_append = pd.DataFrame({'time': times[self.last_saved_data_index:], 'voltage': volts[self.last_saved_data_index:]})
                 comments_list = [{'time': t, 'comment': c.text} for t, c in comments.items()]
 
                 if not df_to_append.empty:
@@ -865,12 +864,12 @@ class LiveDataWindow(PlotWidget):
         if not filename:
             return False
 
-        times = self.xy_data[0]
+        times = np.round(self.xy_data[0], 4)
         volts = self.xy_data[1]
         
         df = DataFrame({
             "time": times,
-            "post_rect": volts, # may need to change based on what engineers plot
+            "voltage": volts, # may need to change based on what engineers plot
             "comments": [None] * len(times)
         })
 
@@ -912,12 +911,12 @@ class LiveDataWindow(PlotWidget):
 
             self.recording_filename = filename
         
-        times = self.xy_data[0]
+        times = np.round(self.xy_data[0], 4)
         volts = self.xy_data[1]
         
         df = DataFrame({
             "time": times,
-            "post_rect": volts, # may need to change based on what engineers plot
+            "voltage": volts, # may need to change based on what engineers plot
             "comments": [None] * len(times)
         })
 

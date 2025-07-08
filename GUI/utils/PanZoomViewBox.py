@@ -237,21 +237,23 @@ class PanZoomViewBox(ViewBox):
         if live:
             event.ignore()
             return
-
         
         scene_pos = event.scenePos()
         data_pos = self.mapSceneToView(scene_pos)
         x = data_pos.x()  
-        item = self.datawindow.selection.hovered_item
+        if hasattr(self.datawindow, "selection"):
+            item = self.datawindow.selection.hovered_item
 
-        if isinstance(item, InfiniteLine):
-            print('Right-clicked InfiniteLine')
-            return  # TODO: infinite line context menu not yet implemented
+            if isinstance(item, InfiniteLine):
+                print('Right-clicked InfiniteLine')
+                return  # TODO: infinite line context menu not yet implemented
 
-        elif isinstance(item, LabelArea):
-            self.label_area_menu(event, item, x)
-        
-        elif item is None:
+            elif isinstance(item, LabelArea):
+                self.label_area_menu(event, item, x)
+            
+            elif item is None:
+                self.default_menu(event, x)
+        else:
             self.default_menu(event, x)
 
 

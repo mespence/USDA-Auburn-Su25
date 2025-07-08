@@ -145,6 +145,8 @@ class MainWindow(QMainWindow):
         current_widget = self.tabs.currentWidget()
         if isinstance(current_widget, LiveViewTab):
             current_widget.datawindow.closeEvent(event)
+        elif isinstance(current_widget, LabelTab):
+            current_widget.datawindow.closeEvent(event)
 
         super().closeEvent(event)
 
@@ -177,6 +179,7 @@ class MainWindow(QMainWindow):
         if isinstance(current_widget, LiveViewTab):
             current_widget.datawindow.save_df()
         elif isinstance(current_widget, LabelTab):
+            # for now all saving is exporting
             current_widget.datawindow.export_df()
         else:
             msg = QMessageBox(self)

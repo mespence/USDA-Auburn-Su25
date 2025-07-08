@@ -14,13 +14,12 @@ class EPGData:
     def __init__(self):
         self.dfs = {}  # A dictionary of filename : pandas dataframe objects
         self.label_column = "labels"
-        self.probe_column = "probes"
         self.prepost_suffix = "_rect"
         self.dir_path = os.path.dirname(os.path.realpath(__file__))
         self.current_file = os.path.join(
             os.path.abspath(os.path.join(self.dir_path, "..")), # root dir
-            #r"/Users/cathy/coding/bugs2025/USDA-Auburn-Su25/GUI/test_mosquito.csv"
-            r"GUI\test_sharpshooter.csv"
+            # r"GUI\test_sharpshooter.csv"
+            "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/sharpshooter_a01_labeled.csv"
             #r"GUI\test_mosquito.csv"
             #r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
         )          
@@ -64,6 +63,9 @@ class EPGData:
             full_path = os.path.join(self.dir_path, file)
             try:
                 self.dfs[file] = read_csv(full_path, engine="pyarrow")
+                if 'post_rect' in self.dfs[file].columns:
+                    self.dfs[file] = self.dfs[file].rename(columns={'post_rect': 'voltage'})
+                    del self.dfs[file]['pre_rect']
 
             except FileNotFoundError:
                 print(f"Could not find {full_path}")
@@ -77,8 +79,6 @@ class EPGData:
         self.current_file = file
         if not self.label_column in self.dfs[file]:
             self.dfs[file][self.label_column] = np.nan
-        if not self.probe_column in self.dfs[file]:
-            self.dfs[file][self.probe_column] = np.nan
         return True
 
     def export_csv(self, file, destination):
@@ -183,7 +183,7 @@ class EPGData:
         
 
         df = self.dfs[file]
-        section_to_column = {"labels": self.label_column, "probes": self.probe_column}
+        section_to_column = {"labels": self.label_column}
         col = section_to_column[section_type]
 
         cleaned_transitions = [(round(t, 2), label) for t, label in transitions]
@@ -235,8 +235,6 @@ class EPGData:
 
         if section_type == "labels":
             values = df[self.label_column].values
-        elif section_type == "probes":
-            values = df[self.probe_column].values
         else:
             raise ValueError(f"Unknown section_type: {section_type}")
 
