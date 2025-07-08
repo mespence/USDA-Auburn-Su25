@@ -33,6 +33,20 @@ class Settings:
 
     default_recording_directory: str = None
 
+    saved_settings: dict = {  # name/type map of all settings to be actually saved 
+        "plot_theme": dict, 
+        "label_colors": dict, 
+        "data_line_color": QColor, 
+        "data_line_width": int,
+        "show_h_grid": bool, 
+        "show_v_grid": bool, 
+        "show_labels": bool, 
+        "show_durations": bool, 
+        "show_comments": bool,
+        "default_recording_directory": str        
+     } 
+
+
     @staticmethod
     def get_label_color(label: str) -> QColor:
         """
@@ -80,5 +94,13 @@ class Settings:
             "LIGHT": color.name() if Settings.plot_theme["NAME"] == "LIGHT" else QColor(*inverted_rgb).name(),
             "DARK":  color.name() if Settings.plot_theme["NAME"] == "DARK" else QColor(*inverted_rgb).name(),
         }
+
+    @staticmethod
+    def rename_label(old: str, new: str):
+        Settings.label_colors[new] = Settings.label_colors.pop(old)
+
+    @staticmethod
+    def delete_label(label: str):
+        Settings.label_colors.pop(label, None)
 
 
