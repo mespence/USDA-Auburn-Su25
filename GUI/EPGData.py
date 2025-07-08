@@ -14,14 +14,14 @@ class EPGData:
     def __init__(self):
         self.dfs = {}  # A dictionary of filename : pandas dataframe objects
         self.label_column = "labels"
-        self.prepost_suffix = "_rect"
+        #self.prepost_suffix = "_rect"
         self.dir_path = os.path.dirname(os.path.realpath(__file__))
         self.current_file = os.path.join(
             os.path.abspath(os.path.join(self.dir_path, "..")), # root dir
             # r"GUI\test_sharpshooter.csv"
-            "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/sharpshooter_a01_labeled.csv"
+            #"/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/sharpshooter_a01_labeled.csv"
             #r"GUI\test_mosquito.csv"
-            #r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
+            r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
         )          
 
     def load_data(self, file):
@@ -41,10 +41,14 @@ class EPGData:
             # TODO: don't hardcode channel count and names
             # TODO: add event markers as column
             df = DataFrame(
+                # {
+                #     "time": windaq_file.time(),
+                #     "pre_rect": windaq_file.data(1),
+                #     "post_rect": windaq_file.data(2),
+                # }
                 {
                     "time": windaq_file.time(),
-                    "pre_rect": windaq_file.data(1),
-                    "post_rect": windaq_file.data(2),
+                    "voltage": windaq_file.data(2),
                 }
             )
             # This will overwrite if there are multiple
@@ -119,29 +123,23 @@ class EPGData:
             for i, row in df.iloc[where].iterrows():
                 f.write(f'"{row["labels"]}"\n    {row["time"]:.02f}\n')
 
-    def get_recording(self, file, prepost):
+    def get_recording(self, file):
         """
         get_recording returns a tuple of numpy arrays containing time
         and voltage data only.
 
         Inputs:
                 file: string containing the key of the recording
-                prepost: string containing either "pre" or "post"
-                         for either pre or post rectification data
-
         Outputs:
                 A tuple of numpy arrays containing the time and voltage data.
         """
 
-        if not prepost in ["pre", "post"]:
-            raise Exception(f"{prepost} is not either 'pre' or 'post'")
-
-        elif not file in self.dfs:
+       
+        if not file in self.dfs:
             raise Exception(f"{file} is not a key in self.dfs")
-
         else:
             df = self.dfs[file]
-            return df["time"].values, df[f"{prepost}{self.prepost_suffix}"].values
+            return df["time"].values, df["voltage"].values
 
     def set_labels(self, file: str, labels) -> None:
         """
