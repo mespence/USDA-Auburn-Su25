@@ -20,6 +20,7 @@ def device_simulation():
     """
     #DATA_FILE = r"\Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
     DATA_FILE = r"C:\EPG-Project\Summer\CS-Repository\Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
+    #DATA_FILE = r"/Users/cathy/coding/bugs2025/USDA-Auburn-Su25/GUI/test_sharpshooter.csv"
     with open(DATA_FILE, newline="") as file:
         reader = csv.reader(file)
         next(reader)  # skip header row
@@ -30,6 +31,7 @@ def device_simulation():
         # taking into account execution time
         for row in reader:
             data_row = [float(row[1]), float(row[3])]
+            #data_row = [float(row[4]), float(row[6])]
             data_dict = {"type":"data", "value":data_row, "source": "ENGR"}
             send_queue.put_nowait(data_dict)
             next_time += interval

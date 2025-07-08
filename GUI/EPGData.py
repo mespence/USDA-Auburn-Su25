@@ -22,6 +22,7 @@ class EPGData:
             #"/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/sharpshooter_a01_labeled.csv"
             #r"GUI\test_mosquito.csv"
             r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
+            #r"/Users/cathy/coding/bugs2025/USDA-Auburn-Su25/GUI/test_sharpshooter.csv"
         )          
 
     def load_data(self, file):
