@@ -19,6 +19,7 @@ class EPGData:
         self.dir_path = os.path.dirname(os.path.realpath(__file__))
         self.current_file = os.path.join(
             os.path.abspath(os.path.join(self.dir_path, "..")), # root dir
+            #r"/Users/cathy/coding/bugs2025/USDA-Auburn-Su25/GUI/test_mosquito.csv"
             r"GUI\test_sharpshooter.csv"
             #r"GUI\test_mosquito.csv"
             #r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
