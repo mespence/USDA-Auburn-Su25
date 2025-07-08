@@ -62,11 +62,11 @@ class LiveDataWindow(PlotWidget):
             if self.recording_filename:
                 # remember saving directory
                 self.base_data_directory = os.path.dirname(self.recording_filename)
-                self.export_filename_stem = os.path.splitext(os.path.basename(self.recording_filename))[0]
         else:
+            # if no initial filename/path, use cwd
+            self.recording_filename = None
             self.viewbox.setYRange(-1, 1, padding=0)
             self.base_data_directory = os.getcwd()
-            self.export_filename_stem = None
 
         # --- PERIODIC BACKUP SETTINGS ---
         # backups stored wherever .exe opened
@@ -83,7 +83,7 @@ class LiveDataWindow(PlotWidget):
 
         self.backup_renamed = False
 
-        self.last_saved_data_index = 0 # track how much waveform data has been saved
+        self.last_saved_data_index = 0 # track how much waveform data has been saved for backup
 
         # initialize CSV headers if files don't exist
         if not os.path.exists(self.waveform_backup_path):
@@ -888,16 +888,9 @@ class LiveDataWindow(PlotWidget):
         Saves the current waveform data and associated comments to
         CSV file. Uses default file location selected for new recording. If no
         data is available, shows a message box informing the user.
+        Returns a bool if the save was successful.
         """
         self.integrate_buffer_to_np()
-
-        if not self.recording_filename: # gave initial file save location
-            msg_box = QMessageBox(self)
-            msg_box.setWindowTitle("Save Error")
-            msg_box.setText("No recording filename has been initialized. Please select Export Data.")
-            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msg_box.exec()
-            return False
 
         if not len(self.xy_data[0]) > 0:
             msg_box = QMessageBox(self)
@@ -907,6 +900,18 @@ class LiveDataWindow(PlotWidget):
             msg_box.exec()
             return False
 
+        if not self.recording_filename: # if no filename, prompt a filename and save loc
+            filename, _ = QFileDialog.getSaveFileName(
+            parent=self,
+            caption="Save Data As",
+            filter="CSV Files (*.csv);;All Files (*)"
+            )
+
+            if not filename:
+                return False
+
+            self.recording_filename = filename
+        
         times = self.xy_data[0]
         volts = self.xy_data[1]
         
@@ -934,7 +939,6 @@ class LiveDataWindow(PlotWidget):
             print(f"Error saving DataFrame: {e}")
             return False
 
-    
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """
         Handles mouse press events for interactions such as moving comments

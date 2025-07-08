@@ -2,6 +2,8 @@ import numpy as np
 from numpy.typing import NDArray
 import pandas as pd
 import csv
+import pandas as pd
+from pandas import DataFrame
 
 from pyqtgraph import (
     PlotWidget, ViewBox, PlotItem, setConfigOptions,
@@ -187,6 +189,40 @@ class DataWindow(PlotWidget):
 
         self.viewbox.setXRange(0,10)
 
+    def closeEvent(self, event):
+        """
+        Handles cleanup on window close.
+
+        Ensures all pending data in the buffer is integrated into the
+        full dataset, and saves a final backup of waveform and comment
+        data before closing if the user hasn't saved since new data 
+        was modified.
+
+        Parameters:
+            event (QCloseEvent): The close event triggered by the window system.
+        """
+
+        if self.data_modified: # check if any new data or modifications
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Unsaved Changes")
+            msg_box.setText("You have unsaved changes. Do you want to save them before exiting?")
+
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
+            msg_box.setDefaultButton(QMessageBox.StandardButton.Save)
+
+            reply = msg_box.exec()
+
+            if reply == QMessageBox.StandardButton.Save:
+                export_successful = self.save_df() # TODO how should save_df be written
+                if not export_successful:
+                    # export_df cancelled by the user, so cancel closing application
+                    event.ignore()
+                    return
+            elif reply == QMessageBox.StandardButton.Cancel:
+                event.ignore()
+                return
+
+        super().closeEvent(event)
 
     def resizeEvent(self, event) -> None:
         """
@@ -487,7 +523,6 @@ class DataWindow(PlotWidget):
             # new comment
             new_marker = CommentMarker(comment_time, text, self)
             self.comments[comment_time] = new_marker
-
         return
 
     def move_comment_helper(self, marker: CommentMarker):
@@ -521,7 +556,6 @@ class DataWindow(PlotWidget):
         marker.moving = False
         self.comment_preview_enabled = False
         self.comment_preview.setVisible(False)
-
         return
 
     def edit_comment(self, marker: CommentMarker, new_text: str) -> None:
@@ -535,7 +569,6 @@ class DataWindow(PlotWidget):
         time = marker.time
         marker = self.comments[time]
         marker.text = new_text
-
         return
 
     def delete_comment(self, time: float) -> None:
@@ -545,7 +578,6 @@ class DataWindow(PlotWidget):
         # update dict
         marker = self.comments.pop(time)
         marker.remove()
-
         return
 
     def find_nearest_idx_time(self, time: float) -> tuple[int, float]:
@@ -912,7 +944,16 @@ class DataWindow(PlotWidget):
 
         self.df["labels"] = labels_array
 
-    
+    def export_df(self) -> bool:
+        filename, _ = QFileDialog.getSaveFileName(
+            parent=self,
+            caption="Export Data As",
+            filter="CSV Files (*.csv);;All Files (*)"
+        )
+
+        df = self.df
+        df.to_csv(filename) # TODO double index 
+        return True
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """
@@ -940,6 +981,10 @@ class DataWindow(PlotWidget):
                 self.baseline_preview.setPos(y_pos)
             self.selection.deselect_all()
             self.selection.unhighlight_item(self.selection.hovered_item)
+        elif event.key() == Qt.Key.Key_Escape and self.baseline_preview_enabled:
+            self.baseline.setVisible(False)
+            self.baseline_preview_enabled = False
+            self.baseline_preview.setVisible(False)
         elif event.key() == Qt.Key.Key_Up or event.key() == Qt.Key.Key_Down or event.key() == Qt.Key.Key_Left or event.key() == Qt.Key.Key_Right:
             self.viewbox.keyPressEvent(event)
 

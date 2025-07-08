@@ -11,13 +11,13 @@ class FileSelector:
     def load_new_data(epgdata: EPGData, datawindow) -> None:
         datawindow.transition_mode = 'labels'
         file_dialog = QFileDialog()
+             
         file_path, _ = file_dialog.getOpenFileUrl()
         file_path = file_path.toLocalFile()
         if file_path:
-            if epgdata.load_data(file_path):
+            if epgdata.load_data(file_path) and isinstance(datawindow, DataWindow):
                 datawindow.plot_recording(file_path)
-                if isinstance(datawindow, DataWindow):
-                     datawindow.plot_transitions(file_path)
+                datawindow.plot_transitions(file_path)
                 #datawindow.mode = 'labels'
                 #datawindow.plot_comments(file_path)
 

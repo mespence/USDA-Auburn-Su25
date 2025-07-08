@@ -222,7 +222,6 @@ class Selection:
                     lines.append(item.right_transition_line)
         return lines
 
-
     def key_press_event(self, event: QKeyEvent) -> None:
         """
         Handles keyboard actions on selection.
