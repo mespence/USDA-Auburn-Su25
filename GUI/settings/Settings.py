@@ -1,5 +1,6 @@
 from PyQt6.QtGui import QColor
 from PyQt6.QtCore import QRandomGenerator
+import os
 
 class Settings:
     PLOT_LIGHT = {
@@ -31,7 +32,8 @@ class Settings:
     show_durations: bool = False
     show_comments: bool = True
 
-    default_recording_directory: str = None
+    default_recording_directory: str = os.getcwd()
+    backup_recording_directory: str = os.getcwd()
 
     saved_settings: dict = {  # name/type map of all settings to be actually saved 
         "plot_theme": dict, 
@@ -43,8 +45,9 @@ class Settings:
         "show_labels": bool, 
         "show_durations": bool, 
         "show_comments": bool,
-        "default_recording_directory": str        
-     } 
+        "default_recording_directory": str,
+        "backup_recording_directory":  str,        
+    } 
 
 
     @staticmethod

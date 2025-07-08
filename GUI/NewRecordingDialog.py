@@ -6,13 +6,15 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QSize
 import sys
+import os
 
 from main import MainWindow
+from settings.Settings import Settings
 
 class NewRecordingDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        
+
         self.setWindowTitle("Create New EPG Recording")
         self.setMinimumWidth(500)
         self.setModal(True)
@@ -116,11 +118,16 @@ class NewRecordingDialog(QDialog):
 
         initial_filename = self.filename_edit.text().strip()
 
+        if not initial_filename:
+            initial_filename = "Untitled.csv"
+
+        initial_path = os.path.join(Settings.default_recording_directory, initial_filename)
+
         # open file dialog
         save_path, _ = QFileDialog.getSaveFileName(
             parent=self,
             caption="Save As",
-            directory=initial_filename,
+            directory=initial_path,
             filter="CSV Files (*.csv);;All Files (*)"
         )
 

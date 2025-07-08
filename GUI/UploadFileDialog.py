@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 import os
 import sys
+from settings.Settings import Settings
 
 class UploadFileDialog(QDialog):
     def __init__(self, parent=None):
@@ -54,6 +55,8 @@ class UploadFileDialog(QDialog):
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile) # user must select an existing file
         file_dialog.setNameFilter("CSV Files (*.csv);;All Files (*)")
         file_dialog.setViewMode(QFileDialog.ViewMode.Detail)
+
+        file_dialog.setDirectory(Settings.default_recording_directory)
 
         if file_dialog.exec(): # Show the dialog
             selected_files = file_dialog.selectedFiles()

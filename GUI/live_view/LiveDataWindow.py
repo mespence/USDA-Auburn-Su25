@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel, QDialogB
 from utils.PanZoomViewBox import PanZoomViewBox
 from utils.CommentMarker import CommentMarker
 from utils.TextEdit import TextEdit
+from settings.Settings import Settings
 
 class LiveDataWindow(PlotWidget):
     """
@@ -66,11 +67,12 @@ class LiveDataWindow(PlotWidget):
             # if no initial filename/path, use cwd
             self.recording_filename = None
             self.viewbox.setYRange(-1, 1, padding=0)
-            self.base_data_directory = os.getcwd()
+            self.base_data_directory = Settings.default_recording_directory
 
         # --- PERIODIC BACKUP SETTINGS ---
         # backups stored wherever .exe opened
         self.periodic_backup_dir = "backups"
+        self.periodic_backup_dir = os.path.join(Settings.backup_recording_directory, self.periodic_backup_dir)
         os.makedirs(self.periodic_backup_dir, exist_ok=True)
 
         # base names for the backup files

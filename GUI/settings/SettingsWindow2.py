@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
    QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
     QFrame, QLabel, QToolButton, QComboBox, QPushButton, QSizePolicy,
     QSpinBox, QCheckBox, QColorDialog, QLineEdit, QMessageBox, 
-    QSpacerItem
+    QSpacerItem, QFileDialog
 )
 from PyQt6.QtGui import (
     QColor, QBrush, QPen, QPainter,
@@ -10,6 +10,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtCore import Qt, QSize, QSettings
 
+import os
 from settings.Settings import Settings
 
 class AppearanceTab(QWidget):
@@ -357,15 +358,91 @@ class AppearanceTab(QWidget):
                     self.rename_button.setCursor(Qt.CursorShape.PointingHandCursor)
         return super().eventFilter(obj, event)
 
+class FolderRow(QWidget):
+    """
+    Helper widget, one horizontal row: label, path display, folder button
+    """
+    def __init__(self, label_text: str, setting_attr: str, parent=None):
+        super().__init__(parent)
+        self.setting_attr = setting_attr
 
+        # --- left label ---
+        label = QLabel(label_text + ":")
+        label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
+        # --- center: read‑only path ---
+        self.path_edit = QLineEdit()
+        self.path_edit.setReadOnly(True)
+        self.path_edit.setText(str(getattr(Settings, setting_attr, "")))
+        self.path_edit.setMinimumWidth(400)
+        self.path_edit.setStyleSheet("""
+            QLineEdit {
+                background-color: #1f1f1f;
+                color: #dcdcdc;
+                border: none;
+                padding: 6px 8px;
+                border-radius: 4px;
+            }
+        """)
+
+        # --- right: browse button ---
+        browse_btn = QPushButton()
+        browse_btn.setIcon(QIcon.fromTheme("folder"))  # uses system theme icon
+        browse_btn.setFixedSize(QSize(32, 32))
+        browse_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3a3a3a;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #505050;
+            }
+        """)
+        browse_btn.clicked.connect(self.pick_directory)
+
+        # lay out row
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 4, 0, 4)
+        row.setSpacing(12)
+        row.addWidget(label)
+        row.addWidget(self.path_edit, 1)
+        row.addWidget(browse_btn)
+
+    def pick_directory(self):
+        start_dir = getattr(Settings, self.setting_attr, str(os.getcwd()))
+        path = QFileDialog.getExistingDirectory(
+            self, "Select Folder", start_dir,
+            QFileDialog.Option.ShowDirsOnly
+        )
+        if path:
+            self.path_edit.setText(path)
+            setattr(Settings, self.setting_attr, path)
 
 class EPGSettingsTab(QWidget):
-    # default direc
-    # backup direc
-    pass
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setSpacing(16)
+        layout.setContentsMargins(32, 24, 32, 24)
 
+        header = QLabel("Folders")
+        header_font = header.font()
+        header_font.setBold(True)
+        header.setFont(header_font)
+        layout.addWidget(header)
+
+        # --- rows ---
+        self.rows = []
+        self.rows.append(FolderRow("Default Directory", "default_recording_directory", self))
+        self.rows.append(FolderRow("Backup Directory", "backup_recording_directory", self))
+
+        for r in self.rows:
+            layout.addWidget(r)
+
+        layout.addStretch()
 
 class SidebarButton(QToolButton):
     def __init__(self, text: str, index: int, icon_path: str = None, parent=None):
@@ -470,7 +547,7 @@ class SettingsWindow(QWidget):
         self.appearance_tab = AppearanceTab(self.stack)
         self.stack.addWidget(self.appearance_tab)
 
-        self.stack.addWidget(self._create_test_tab())
+        self.stack.addWidget(EPGSettingsTab())
 
         main_layout.addWidget(self.sidebar_frame)
         main_layout.addWidget(self.stack)
