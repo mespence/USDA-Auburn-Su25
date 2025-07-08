@@ -1,6 +1,8 @@
 import os
+import re
 import sys
 import ctypes
+import datetime
 
 from PyQt6.QtWidgets import (
     QApplication,
@@ -13,8 +15,8 @@ from PyQt6.QtWidgets import (
     QTabWidget,
     QTabBar
 )
-from PyQt6.QtCore import QRunnable, pyqtSignal, QThreadPool, QObject, QEvent, Qt, QSize, QTimer
-from PyQt6.QtGui import QIcon, QFont, QFontDatabase, QAction
+from PyQt6.QtCore import QRunnable, pyqtSignal, QObject, QEvent, Qt, QTimer
+from PyQt6.QtGui import QIcon, QFontDatabase
 from pyqtgraph import setConfigOptions
 
 from LoadingScreen import LoadingScreen
@@ -93,15 +95,25 @@ class MainWindow(QMainWindow):
         save_data = file_menu.addAction("Save")
         save_data.triggered.connect(self.save_data)
         file_menu.addSeparator()
-        file_menu.addAction("Exit", self.close)
+        file_menu.addAction("Exit App", self.close)
+
+        edit_menu = QMenu("Edit", self)
+        placeholder = edit_menu.addAction("Nothing here yet!")
+        placeholder.setEnabled(False)
+
+        view_menu = QMenu("View", self)
+        placeholder = view_menu.addAction("Nothing here yet!")
+        placeholder.setEnabled(False)
+
 
         help_menu = QMenu("Help", self)
-        help_menu.addAction("About")
+        placeholder = help_menu.addAction("Nothing here yet!")
+        placeholder.setEnabled(False)
 
         # TODO add menu functionality
         menubar.addMenu(file_menu)
-        menubar.addMenu(QMenu("Edit", self))
-        menubar.addMenu(QMenu("View", self))
+        menubar.addMenu(edit_menu)
+        menubar.addMenu(view_menu)
         menubar.addMenu(help_menu)
 
         self.setMenuBar(menubar)
@@ -141,16 +153,16 @@ class MainWindow(QMainWindow):
 
         # Add tabs
         self.tabs.addTab(self.live_view_tab, "Live View")       
-        self.tabs.addTab(self.label_tab, "Label")
+        self.tabs.addTab(self.label_tab, "Label View")
     
-    def closeEvent(self, event):
-        current_widget = self.tabs.currentWidget()
-        if isinstance(current_widget, LiveViewTab):
-            current_widget.datawindow.closeEvent(event)
-        elif isinstance(current_widget, LabelTab):
-            current_widget.datawindow.closeEvent(event)
+    # def closeEvent(self, event):
+    #     current_widget = self.tabs.currentWidget()
+    #     if isinstance(current_widget, LiveViewTab):
+    #         current_widget.datawindow.closeEvent(event)
+    #     elif isinstance(current_widget, LabelTab):
+    #         current_widget.datawindow.closeEvent(event)
 
-        super().closeEvent(event)
+    #     super().closeEvent(event)
 
     def export_comments_from_current_tab(self):
         current_widget = self.tabs.currentWidget()
@@ -229,6 +241,98 @@ class MainWindow(QMainWindow):
     def openSliders(self):
         is_visible = self.slider_panel.isVisible()
         self.slider_panel.setVisible(not is_visible)
+
+    def closeEvent(self, event = None):
+        label_dw = self.label_tab.datawindow
+        live_dw = self.live_view_tab.datawindow
+
+        label_dw.update_labels_column()
+
+        label_view_unsaved = not label_dw.init_df.equals(label_dw.df)
+        live_view_unsaved = live_dw.data_modified
+
+        if label_view_unsaved:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Unsaved Changes in Label View")
+            msg_box.setText("You have unsaved changes in <b>Label View</b>. Do you want to save them before exiting?")
+
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
+            msg_box.setDefaultButton(QMessageBox.StandardButton.Save)
+
+            reply = msg_box.exec()
+
+            if reply == QMessageBox.StandardButton.Save:
+                export_successful = label_dw.export_df() 
+                if not export_successful:
+                    # export_df cancelled by the user, so cancel closing application
+                    event.ignore()
+                    return
+            elif reply == QMessageBox.StandardButton.Discard:
+                pass # proceed with closing w/o save
+            else:
+                event.ignore()
+                return
+        
+        if live_view_unsaved:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Unsaved Changes in Live View")
+            msg_box.setText("You have unsaved changes in <b>Live View</b>. Do you want to save them before exiting?")
+
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
+            msg_box.setDefaultButton(QMessageBox.StandardButton.Save)
+
+            reply = msg_box.exec()
+
+            if reply == QMessageBox.StandardButton.Save:
+                export_successful = live_dw.save_df()
+                if not export_successful:
+                    # export_df cancelled by the user, so cancel closing application
+                    event.ignore()
+                    return
+                self.parent().socket_server.stop()
+            elif reply == QMessageBox.StandardButton.Discard:
+                pass # proceed with closing w/o save
+            else:
+                event.ignore()
+                return
+            
+        if self.plot_update_timer.isActive():
+            self.plot_update_timer.stop()
+        if self.save_timer.isActive():
+            self.save_timer.stop()
+
+        if not self.backup_renamed:
+            # store the active filenames, updated after each save with utc time stamp
+            
+            # delete waveform and comments csv because no data uploaded
+            os.remove(self.waveform_backup_path)
+            os.remove(self.comments_backup_path)
+
+        three_days_ago_utc = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=3)
+        
+        # --- DELETE OLD BACKUPS --- 
+        if os.path.exists(self.periodic_backup_dir):
+            for fname in os.listdir(self.periodic_backup_dir):
+                fpath = os.path.join(self.periodic_backup_dir, fname)
+                if not os.path.isfile(fpath):
+                    continue
+
+                match = re.search(r'(\d{8}_\d{6})', fname)
+                if match:
+                    timestamp_str = match.group(1)
+                    file_utc_time = datetime.datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S").replace(tzinfo=datetime.timezone.utc)
+                            
+                    if file_utc_time < three_days_ago_utc: # Check if file time is BEFORE 3 days ago
+                        try:
+                            os.remove(fpath)
+                            print(f"DEBUG: Deleted old timestamped backup: {fpath} (Created: {file_utc_time})")
+                        except OSError as e:
+                            print(f"ERROR: Could not delete old {fpath}: {e}")
+        
+
+        super().closeEvent(event)
+
+
 
 
 class GlobalMouseTracker(QObject):

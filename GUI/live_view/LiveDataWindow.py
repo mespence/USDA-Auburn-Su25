@@ -748,18 +748,16 @@ class LiveDataWindow(PlotWidget):
         self.baseline_preview_enabled = False
         self.baseline_preview.setVisible(False)
 
-    def plot_recording(self, file: str, prepost: str = "post"):
+    def plot_recording(self, file: str):
         """
         Loads the time series and comments from a file and displays it.
 
         Parameters:
             file (str): File identifier.
-            prepost (str): Either "pre" or "post" to select pre/post rectifier data.
         """
         QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
         self.file = file
-        self.prepost = prepost
-        times, volts = self.epgdata.get_recording(self.file, self.prepost)
+        times, volts = self.epgdata.get_recording(self.file)
         self.xy_data[0] = times
         self.xy_data[1] = volts
         self.downsample_visible(self.xy_data)

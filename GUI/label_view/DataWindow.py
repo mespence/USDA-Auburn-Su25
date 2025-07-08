@@ -63,7 +63,6 @@ class DataWindow(PlotWidget):
         # DATA
         self.epgdata: EPGData = self.parent().parent().epgdata
         self.file: str = None
-        self.prepost: str = "pre"
         self.df = None
         self.init_df = None
         
@@ -205,9 +204,10 @@ class DataWindow(PlotWidget):
 
         self.update_labels_column()
         if not self.init_df.equals(self.df): # check if any new data or modifications
+
             msg_box = QMessageBox(self)
-            msg_box.setWindowTitle("Unsaved Changes")
-            msg_box.setText("You have unsaved changes. Do you want to save them before exiting?")
+            msg_box.setWindowTitle("Unsaved Changes in Label View")
+            msg_box.setText("You have unsaved changes in Label View. Do you want to save them before exiting?")
 
             msg_box.setStandardButtons(QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
             msg_box.setDefaultButton(QMessageBox.StandardButton.Save)
@@ -220,7 +220,9 @@ class DataWindow(PlotWidget):
                     # export_df cancelled by the user, so cancel closing application
                     event.ignore()
                     return
-            elif reply == QMessageBox.StandardButton.Cancel:
+            elif reply == QMessageBox.StandardButton.Discard:
+                pass # proceed with closing w/o save
+            else:
                 event.ignore()
                 return
 
@@ -412,13 +414,13 @@ class DataWindow(PlotWidget):
         value = int(value) if value >= 1 else value
         self.zoom_text.setText(f"Zoom: {value}%")
 
-    def plot_recording(self, file: str, prepost: str = "post") -> None:
+    def plot_recording(self, file: str) -> None:
         """
         Loads the time series and comments from a file and displays it.
 
         Parameters:
             file (str): File identifier.
-            prepost (str): Either "pre" or "post" to select pre/post rectifier data.
+
         """
         QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
 
@@ -428,8 +430,7 @@ class DataWindow(PlotWidget):
                 self.selection.delete_label_area(label_area)
 
         self.file = file
-        self.prepost = prepost
-        times, volts = self.epgdata.get_recording(self.file, self.prepost)
+        times, volts = self.epgdata.get_recording(self.file)
 
         self.xy_data[0] = times
         self.xy_data[1] = volts
@@ -438,6 +439,13 @@ class DataWindow(PlotWidget):
         init_x, init_y = self.xy_data[0].copy(), self.xy_data[1].copy()
         self.initial_downsampled_data = [init_x, init_y]
         self.df = self.epgdata.dfs[file]  
+    
+
+        # create a comments column if doesn't yet exist in df
+        if 'comments' not in self.df.columns:
+            self.df['comments'] = None
+        
+        
         self.init_df = self.df.copy(deep = True)
 
         self.viewbox.setRange(
@@ -446,10 +454,6 @@ class DataWindow(PlotWidget):
             padding=0
         )
 
-        # create a comments column if doesn't yet exist in df
-        if 'comments' not in self.df.columns:
-            self.df['comments'] = None
-        
         self.update_plot()
         self.plot_comments(file)
         QGuiApplication.processEvents()
@@ -633,7 +637,7 @@ class DataWindow(PlotWidget):
             `mean` averages each bin
             `peak` returns the min and max point of each bin (slowest, best looking)
         """
-        x, y = self.epgdata.get_recording(self.file, self.prepost)
+        x, y = self.epgdata.get_recording(self.file)
 
         # Filter to x_range if provided
         if x_range is not None:
@@ -710,7 +714,7 @@ class DataWindow(PlotWidget):
         self.labels = []
 
         # load data
-        times, _ = self.epgdata.get_recording(self.file, self.prepost)
+        times, _ = self.epgdata.get_recording(self.file)
         transitions = self.epgdata.get_transitions(self.file, self.transition_mode)
 
         # only continue if the label column contains labels
@@ -919,31 +923,35 @@ class DataWindow(PlotWidget):
         """
         Recomputes the 'labels' column in the DataFrame from the current LabelAreas.
 
-        Called automatically when `self.labels` changes.
+        Each LabelArea is assigned to all time rows >= start and < end,
+        except for the final LabelArea, which is inclusive of the end time.
 
-        Notes:
-            - Assigns each LabelArea's label to all times >= start and < end.
-            - If a time falls exactly on a right-side transition, it is excluded (reserved for the next label).
         """
         if self.df is None:
-            print("[update_labels_column] Skipped: df is None")
             return
-
-        print(f"[update_labels_column] Updating labels from {len(self.labels)} LabelAreas")
 
         times = self.df["time"].values
         labels_array = np.full(len(times), np.nan, dtype=object)
 
-        for area in self.labels:
+        for i, area in enumerate(self.labels):
             start_time = area.start_time
             end_time = start_time + area.duration
             label = area.label
 
-            in_range = (times >= start_time) & (times < end_time)
-            on_edge = np.isclose(times, end_time)
+            start_idx = np.searchsorted(times, start_time, side="left")
 
-            labels_array[in_range] = label
-            labels_array[on_edge] = np.nan  # exclude exact right transition
+            is_last_label = (i == len(self.labels) - 1)
+            if is_last_label:
+                end_idx = np.searchsorted(times, end_time, side="right")  # inclusive
+            else:
+                end_idx = np.searchsorted(times, end_time, side="left")   # exclusive
+
+            if start_idx < end_idx:
+                labels_array[start_idx:end_idx] = label
+
+            # Only clear exact edge on non-final labels
+            if not is_last_label and end_idx < len(times) and np.isclose(times[end_idx], end_time):
+                labels_array[end_idx] = np.nan
 
         self.df["labels"] = labels_array
 
@@ -953,9 +961,11 @@ class DataWindow(PlotWidget):
             caption="Export Data As",
             filter="CSV Files (*.csv);;All Files (*)"
         )
-
+        QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
+        self.init_df = self.df
         df = self.df
         df.to_csv(filename, index=False)
+        QGuiApplication.restoreOverrideCursor()
         return True
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
@@ -998,10 +1008,6 @@ class DataWindow(PlotWidget):
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         return
-        if event.key() == Qt.Key.Key_Shift:
-            self.vertical_mode = False
-        elif event.key() == Qt.Key.Key_Control:
-            self.zoom_mode = False
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """
