@@ -187,3 +187,5 @@ GUI/backups
 .DS_Store
 *.swp
 *.ipynb
+
+GUI/test_sharpshooter.csv
