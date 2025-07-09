@@ -18,10 +18,10 @@ class EPGData:
         self.dir_path = os.path.dirname(os.path.realpath(__file__))
         self.current_file = os.path.join(
             os.path.abspath(os.path.join(self.dir_path, "..")), # root dir
-            # r"GUI/test_sharpshooter.csv"
-            #"/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/sharpshooter_a01_labeled.csv"
-            #r"GUI/test_mosquito.csv"
-            r"Data/Sharpshooter Data - HPR 2017/sharpshooter_labeled/sharpshooter_a01_labeled.csv"
+            # r"GUI\test_sharpshooter.csv"
+            # "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/sharpshooter_a01_labeled.csv"
+            #r"GUI\test_mosquito.csv"
+            r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
             #r"/Users/cathy/coding/bugs2025/USDA-Auburn-Su25/GUI/test_sharpshooter.csv"
         )          
 
@@ -70,6 +70,7 @@ class EPGData:
                 self.dfs[file] = read_csv(full_path, engine="pyarrow")
                 if 'post_rect' in self.dfs[file].columns:
                     self.dfs[file] = self.dfs[file].rename(columns={'post_rect': 'voltage'})
+                if 'pre_rect' in self.dfs[file].columns:
                     del self.dfs[file]['pre_rect']
 
             except FileNotFoundError:

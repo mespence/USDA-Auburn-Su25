@@ -88,8 +88,8 @@ class MainWindow(QMainWindow):
         file_menu = QMenu("File", self)
         self.file_open = file_menu.addAction("Open")
         self.file_open.triggered.connect(
-            self.open_upload_dialog
-            #lambda: FileSelector.load_new_data(self.epgdata, self.live_view_tab.datawindow)
+            # self.open_upload_dialog
+            lambda: FileSelector.load_new_data(self.epgdata, self.label_tab.datawindow)
         )
         file_menu.addSeparator()
 
@@ -162,12 +162,12 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.label_tab, "Label View")
 
 
-    def open_upload_dialog(self):
-        upload_dialog = UploadFileDialog()
-        if upload_dialog.exec(): # open modally
-            upload_file_path = upload_dialog.get_file_path()
-            self.launchMainWindowFile.emit(upload_file_path)
-            self.accept() # Accept and close the AppLauncherDialog
+    # def open_upload_dialog(self):
+    #     upload_dialog = UploadFileDialog()
+    #     if upload_dialog.exec(): # open modally
+    #         upload_file_path = upload_dialog.get_file_path()
+    #         self.launchMainWindowFile.emit(upload_file_path)
+    #         self.accept() # Accept and close the AppLauncherDialog
 
     def export_comments_from_current_tab(self):
         current_widget = self.tabs.currentWidget()
@@ -257,9 +257,7 @@ class MainWindow(QMainWindow):
         label_dw = self.label_tab.datawindow
         live_dw = self.live_view_tab.datawindow
 
-        label_dw.update_labels_column()
-
-        label_view_unsaved = not label_dw.init_df.equals(label_dw.df)
+        label_view_unsaved = not label_dw.checkForUnsavedChanges()
         live_view_unsaved = live_dw.data_modified
 
         def confirm_exit_box(tab_name: str):
@@ -267,7 +265,7 @@ class MainWindow(QMainWindow):
             msg_box.setWindowTitle("SCIDO - Confirm Exit")
             msg_box.setIcon(QMessageBox.Icon.Warning)
             msg_box.setText(f'<b>Do you want to save changes to the <u>{tab_name}</u> before closing?</b>')
-            msg_box.setInformativeText("Your changes will be lost if you don’t save them.")
+            msg_box.setInformativeText("Your changes will be lost if you don't save them.")
 
             save_btn = QPushButton("Save")
             dont_save_btn = QPushButton("Don't save")

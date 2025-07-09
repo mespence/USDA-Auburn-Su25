@@ -2,13 +2,32 @@ import os
 import re
 #import sys
 
-from PyQt6.QtWidgets import QFileDialog
+from PyQt6.QtWidgets import QFileDialog,QMessageBox
 
 from label_view.DataWindow import DataWindow
 from EPGData import EPGData
 
 class FileSelector:
     def load_new_data(epgdata: EPGData, datawindow) -> None:
+        if not datawindow.checkForUnsavedChanges():
+            msg_box = QMessageBox(datawindow)
+            msg_box.setWindowTitle("Unsaved Changes in Label View")
+            msg_box.setText("You have unsaved changes in Label View. Do you want to save them before opening another file?")
+
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
+            msg_box.setDefaultButton(QMessageBox.StandardButton.Save)
+
+            reply = msg_box.exec()
+
+            if reply == QMessageBox.StandardButton.Save:
+                export_successful = datawindow.export_df() 
+                if not export_successful:
+                    return
+            elif reply == QMessageBox.StandardButton.Discard:
+                pass # proceed with opening new file w/o save
+            else:
+                # cancel opening new file
+                return
         datawindow.transition_mode = 'labels'
         file_dialog = QFileDialog()
              

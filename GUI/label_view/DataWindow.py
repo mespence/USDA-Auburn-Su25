@@ -189,7 +189,12 @@ class DataWindow(PlotWidget):
 
         self.viewbox.setXRange(0,10)
 
-    def closeEvent(self, event):
+    def checkForUnsavedChanges(self) -> bool:
+        self.update_labels_column()
+
+        return self.init_df.equals(self.df)
+
+    def closeEvent(self, event): # not using, use in main.py
         """
         Handles cleanup on window close.
 
@@ -202,9 +207,9 @@ class DataWindow(PlotWidget):
             event (QCloseEvent): The close event triggered by the window system.
         """
 
-        self.update_labels_column()
-        if not self.init_df.equals(self.df): # check if any new data or modifications
-
+        if not self.checkForUnsavedChanges(): # check if any new data or modifications
+            print("self.df (should be new file), ", self.df.head())
+            print("self.init_df (should be new file), ", self.init_df.head())
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle("Unsaved Changes in Label View")
             msg_box.setText("You have unsaved changes in Label View. Do you want to save them before exiting?")
