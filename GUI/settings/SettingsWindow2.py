@@ -2,11 +2,10 @@ from PyQt6.QtWidgets import (
    QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
     QFrame, QLabel, QToolButton, QComboBox, QPushButton, QSizePolicy,
     QSpinBox, QCheckBox, QColorDialog, QLineEdit, QMessageBox, 
-    QSpacerItem, QFileDialog
+    QSpacerItem, QFileDialog, QGridLayout, QGroupBox
 )
 from PyQt6.QtGui import (
-    QColor, QBrush, QPen, QPainter,
-    QIcon, QMouseEvent,
+    QColor, QIcon, QMouseEvent,
 )
 from PyQt6.QtCore import Qt, QSize, QSettings
 
@@ -19,13 +18,12 @@ class AppearanceTab(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setContentsMargins(32, 24, 32, 24)
         layout.setSpacing(15)
 
         # === Plot Theme ComboBox ===
         theme_label = QLabel("Plot Theme")
-        font = theme_label.font()
-        font.setBold(True)
-        theme_label.setFont(font)
+        theme_label.setStyleSheet("font-weight: bold;")
 
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(["Light", "Dark"])
@@ -36,36 +34,34 @@ class AppearanceTab(QWidget):
         theme_row.setSpacing(10)
         theme_row.addSpacing(20)
         theme_row.addWidget(self.theme_combo)
-        theme_row.addSpacing(1000)
+        theme_row.addStretch()
 
         layout.addWidget(theme_label)
         layout.addLayout(theme_row)
 
         # === Data Line Appearance ===
         data_line_label = QLabel("Data Line")
-        font = data_line_label.font()
-        font.setBold(True)
-        data_line_label.setFont(font)
+        data_line_label.setStyleSheet("font-weight: bold;")
 
         # Color Picker
         color_label = QLabel("Color:")
-        color_label.setFixedWidth(40)
+        color_label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
 
         self.data_line_color_button = QPushButton()
-        self.data_line_color_button.setFixedWidth(80)
+        self.data_line_color_button.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.data_line_color_button.clicked.connect(self.pick_line_color)
 
         self.set_data_line_color_button(Settings.data_line_color)
 
         # Width Spinner
         width_label = QLabel("Width:")
-        width_label.setFixedWidth(40)
+        width_label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
 
         self.width_spinbox = QSpinBox()
         self.width_spinbox.setRange(1, 5)
         self.width_spinbox.setValue(Settings.data_line_width)
         self.width_spinbox.setSuffix(" px")
-        self.width_spinbox.setFixedWidth(80)
+        self.width_spinbox.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.width_spinbox.valueChanged.connect(self.on_width_changed)
 
         # Horizontal layout with spacing
@@ -85,9 +81,7 @@ class AppearanceTab(QWidget):
 
         # === Boolean Toggles ===
         toggles_label = QLabel("Display Options")
-        font = toggles_label.font()
-        font.setBold(True)
-        toggles_label.setFont(font)
+        toggles_label.setStyleSheet("font-weight: bold;")
 
         layout.addWidget(toggles_label)
 
@@ -121,60 +115,63 @@ class AppearanceTab(QWidget):
 
         # === Waveform Labels ===
         waveform_label = QLabel("Waveform Labels")
-        font = waveform_label.font()
-        font.setBold(True)
-        waveform_label.setFont(font)
+        waveform_label.setStyleSheet("font-weight: bold;")
         layout.addWidget(waveform_label)
 
-        # Select Label row (label + combobox side by side)
+        # Grid layout 
+        label_grid = QGridLayout()
+        label_grid.setHorizontalSpacing(20)
+        label_grid.setVerticalSpacing(10)
+
+        # --- Label selection and delete button ---
         select_row = QHBoxLayout()
-        select_row.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        select_row.setSpacing(10)
 
         select_label = QLabel("Select Waveform:")
-        select_label.setFixedWidth(100)
-
         self.label_selector = QComboBox()
-        self.label_selector.setFixedWidth(80)
+        self.label_selector.setFixedWidth(60)
+        self.label_selector.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.label_selector.addItems(sorted(Settings.label_colors.keys()))
         self.label_selector.currentTextChanged.connect(self.load_label_info)
 
-        self.delete_button = QPushButton("Delete All Instances of Waveform")
-        self.delete_button.setFixedWidth(240)
-        self.delete_button.clicked.connect(self.delete_label)
-
         select_row.addWidget(select_label)
         select_row.addWidget(self.label_selector)
-        select_row.addSpacing(95)
-        select_row.addWidget(self.delete_button)
+        select_row.addStretch()
 
         layout.addLayout(select_row)
+    
 
-        # Rename + Color picker row (side-by-side)
-        edit_row = QHBoxLayout()
+        # === Grid for rename, color, delete (indented) ===
+        label_layout = QVBoxLayout()
+        label_layout.setSpacing(10)
 
-        # Rename section
+        # Row 0: Rename
+        name_layout = QHBoxLayout()
         name_label = QLabel("Waveform Name:")
-        name_label.setFixedWidth(100)
         self.name_edit = QLineEdit()
-        self.name_edit.setFixedWidth(80)
+        self.name_edit.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.name_edit.textChanged.connect(self.update_rename_button_state)
+
         self.rename_button = QPushButton("Rename")
-        self.rename_button.setFixedWidth(80)
+        self.rename_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.rename_button.clicked.connect(self.rename_label)
 
-        rename_layout = QHBoxLayout()
-        rename_layout.addWidget(name_label)
-        rename_layout.addWidget(self.name_edit)
-        rename_layout.addWidget(self.rename_button)
+        name_layout.addWidget(name_label)
+        name_layout.addWidget(self.name_edit)
+        name_layout.addWidget(self.rename_button)
+        name_layout.addStretch()
 
-        edit_row.addLayout(rename_layout)
+        label_layout.addLayout(name_layout)
 
-        # Color section
+        # label_layout.addWidget(name_label, 0, 0)
+        # label_layout.addWidget(self.name_edit, 0, 1)
+        # label_layout.addWidget(self.rename_button, 0, 2)
+
+        # Row 1: Color
+        color_layout = QHBoxLayout()
         label_color_label = QLabel("Color:")
-        label_color_label.setFixedWidth(50)
-
         self.label_color_button = QPushButton()
-        self.label_color_button.setFixedWidth(100)
+        self.label_color_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.label_color_button.clicked.connect(self.pick_label_color)
 
         self.label_color_wrapper = QFrame()
@@ -185,15 +182,43 @@ class AppearanceTab(QWidget):
         wrapper_layout.setContentsMargins(10, 10, 10, 10)
         wrapper_layout.addWidget(self.label_color_button)
 
-        color_row = QHBoxLayout()
-        color_row.addWidget(label_color_label)
-        color_row.addWidget(self.label_color_wrapper)
+        color_layout.addWidget(label_color_label)
+        color_layout.addWidget(self.label_color_wrapper)
+        color_layout.addStretch()
 
-        edit_row.addSpacing(40)
-        edit_row.addLayout(color_row)
-        edit_row.addStretch()
+        label_layout.addLayout(color_layout)
+        # label_grid.addWidget(label_color_label, 1, 0)
+        # label_grid.addWidget(self.label_color_wrapper, 1, 1)
 
-        layout.addLayout(edit_row)
+        # Row 2: Delete button
+        self.delete_button = QPushButton("Delete All Instances of Waveform")
+        self.delete_button.setStyleSheet("QPushButton {padding: 3px 12px;}")
+        self.delete_button.setContentsMargins(0, 0, 0, 0)
+        self.delete_button.setFixedWidth(200)
+        self.delete_button.clicked.connect(self.delete_label)
+
+        label_layout.addWidget(self.delete_button, alignment= Qt.AlignmentFlag.AlignLeft)
+
+        group = QGroupBox()
+        group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        group.setLayout(label_layout)
+        group.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #888;
+                border-radius: 6px;
+                margin-top: 6px;
+            }
+        """)
+        
+
+        # Wrap the grid in an HBox with indent
+        grid_wrapper = QHBoxLayout()
+        grid_wrapper.addSpacing(40)
+        grid_wrapper.addWidget(group)
+        grid_wrapper.addStretch()
+
+        layout.addLayout(grid_wrapper)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         # Static interactable widgets
         self.apply_interactive_cursor(self.theme_combo)
@@ -208,7 +233,6 @@ class AppearanceTab(QWidget):
             self.apply_interactive_cursor(checkbox)
 
         self.rename_button.installEventFilter(self)
-
         self.load_label_info(self.label_selector.currentText())
 
     def set_data_line_color_button(self, color: QColor):
@@ -429,9 +453,7 @@ class EPGSettingsTab(QWidget):
         layout.setContentsMargins(32, 24, 32, 24)
 
         header = QLabel("Folders")
-        header_font = header.font()
-        header_font.setBold(True)
-        header.setFont(header_font)
+        header.setStyleSheet("font-weight: bold;")
         layout.addWidget(header)
 
         # --- rows ---
@@ -464,7 +486,7 @@ class SidebarButton(QToolButton):
             QToolButton {
                 background-color: #2b2b2b;
                 color: white;
-                padding: 6px 10px 6px 10px;
+                padding: 12px 32px;
                 text-align: left;
                 border: none;
                 font-size: 10pt;
@@ -479,7 +501,7 @@ class SidebarButton(QToolButton):
             QToolButton:checked {
                 background-color: rgba(32, 147, 254, 0.25);
                 border-left: 4px solid #2093FE;
-                padding-left: 6px;
+                padding-left: 28px;
                 font-weight: 600;
             }
         """)
@@ -493,22 +515,23 @@ class SidebarButton(QToolButton):
 class SettingsWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Settings")
-        self.setMaximumSize(600, 600)
+        self.setWindowTitle("SCIDO Settings")
+        self.setMinimumSize(800, 600)
 
         self.settings = QSettings("USDA", "SCIDO")
 
+        # === Main Layout ===
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
+        # === Sidebar ===
         self.sidebar_frame = QFrame()
-        self.sidebar_frame.setFixedWidth(180)
         self.sidebar_frame.setStyleSheet("background-color: #2b2b2b;")
         self.sidebar_layout = QVBoxLayout(self.sidebar_frame)
-        self.sidebar_layout.setContentsMargins(0, 12, 0, 0)
+        self.sidebar_layout.setContentsMargins(0, 0, 0, 0)
         self.sidebar_layout.setSpacing(0)
-
+            
         button_info = [
             ("Appearance", None),  # Use valid icon paths or leave empty
             ("EPG Settings", None)
@@ -520,7 +543,6 @@ class SettingsWindow(QWidget):
             btn.clicked.connect(lambda _, i=index: self.switch_tab(i))
             self.sidebar_layout.addWidget(btn)
             self.buttons.append(btn)
-
         self.buttons[0].setChecked(True)
 
         self.sidebar_layout.addStretch()
@@ -542,15 +564,18 @@ class SettingsWindow(QWidget):
         close_button.clicked.connect(self.close)
         self.sidebar_layout.addWidget(close_button)
 
+        # === Stacked Content Area ===
         self.stack = QStackedWidget()
-
+        self.stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+    
         self.appearance_tab = AppearanceTab(self.stack)
         self.stack.addWidget(self.appearance_tab)
+        self.epg_tab = EPGSettingsTab()
+        self.stack.addWidget(self.epg_tab)
 
-        self.stack.addWidget(EPGSettingsTab())
-
-        main_layout.addWidget(self.sidebar_frame)
-        main_layout.addWidget(self.stack)
+         # === Final Layout Assembly ===
+        main_layout.addWidget(self.sidebar_frame, stretch=0)
+        main_layout.addWidget(self.stack, stretch=1)
 
     def switch_tab(self, index: int):
         self.stack.setCurrentIndex(index)
