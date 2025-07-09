@@ -34,7 +34,6 @@ class SliderPanel(QWidget):
 
         # DC/AC Toggle Switch
         self.mode_toggle = ACDCToggle()
-        self.mode_toggle.toggled.connect(self.on_mode_change)
         grid.addWidget(self.mode_toggle, 0, 1)
 
         
@@ -210,6 +209,8 @@ class SliderPanel(QWidget):
 
         # Connect all controls except AC/DC toggle
         for label, item in self.controls.items():
+            if isinstance(item, ACDCToggle):
+                item.toggled.connect(self.on_mode_change)
             if isinstance(item, QSlider):
                 item.valueChanged.connect(lambda val, l=label: self.send_control_update(l, val))
             elif isinstance(item, QPushButton):
@@ -225,9 +226,7 @@ class SliderPanel(QWidget):
 
                 
     def on_mode_change(self, value: int):
-
         selected_mode = "DC" if value == 0 else "AC"
-        self._suppress = True
         
         always_visible = ["sca", "sco"]
 
@@ -286,8 +285,10 @@ class SliderPanel(QWidget):
         if source == self.socket_client.client_id:
             return
         
+        
         if name == "excitationFrequency":
             name = "modeToggle"
+            value = 1 if value == "1000" else 0
         
         widget = self.controls.get(name)
         if widget is None:
@@ -295,6 +296,8 @@ class SliderPanel(QWidget):
             return
         
         self._suppress = True
+
+        print(name, value)
 
         if isinstance(widget, ACDCToggle):
             if widget.isChecked() != int(value):

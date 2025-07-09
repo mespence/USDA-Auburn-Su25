@@ -41,8 +41,6 @@ class LiveViewTab(QWidget):
 
         self.receive_loop = threading.Thread(target=self._socket_recv_loop, daemon=True)
         self.receive_loop.start()
-
-        
         
 
         self.pause_live_button = QPushButton("Pause Live View", self)
@@ -195,10 +193,12 @@ class LiveViewTab(QWidget):
         self.slider_panel.pause_button.setEnabled(True)
         self.slider_panel.stop_button.setEnabled(True)
 
+
         dw.xy_data = [np.array([]), np.array([])]
         dw.curve.clear()
         dw.scatter.clear()
         dw.buffer_data.clear()
+        self.socket_client.recv_queue.queue.clear()
 
         self.initial_timestamp = time.time()
         dw.plot_update_timer.start()
@@ -254,19 +254,16 @@ class LiveViewTab(QWidget):
 
 
     def _socket_recv_loop(self):
-
         acknowledged = False # whether the client has been acknowledged by the server
         while self.socket_client.connected:
-
             try:
-                raw_message = self.socket_client.recv_queue.get(timeout=1.0)
+                raw_message = self.socket_client.recv_queue.get(timeout=0.01)
 
                 # process server acknowledgement
                 if not acknowledged:
                     if isinstance(raw_message, str) and raw_message.strip() == "ack":
                         acknowledged = True 
                     continue                
-
 
             
                 # parse message into individual commands
@@ -280,7 +277,7 @@ class LiveViewTab(QWidget):
                         json.loads(s) for s in message_list if s.strip()
                     ]
             
-                # delegate message resposne
+                # delegate message response
                 for message in messages:
                     if message["source"] == self.socket_client.client_id:
                         continue # skip messages from this client
@@ -291,7 +288,6 @@ class LiveViewTab(QWidget):
                         # skip when not plotting
                         try:
                             if not self.datawindow.plot_update_timer.isActive():
-                                time.sleep(0.1)
                                 continue
                         except RuntimeError:
                             break  # app closed
@@ -318,7 +314,7 @@ class LiveViewTab(QWidget):
         Returns `None` if `continue` should be given to the while loop of _socket_recv_loop,
         returns `True` otherwise.
         """
-        if self.initial_timestamp is None or not self.datawindow.live_mode:
+        if self.initial_timestamp is None:
             return None
 
         device_time = float(message['value'][0])

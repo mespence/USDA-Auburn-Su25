@@ -3,7 +3,7 @@ import sys
 
 # Import both your dialog and main window classes
 from NewRecordingDialog import NewRecordingDialog
-from UploadFileDialog import UploadFileDialog
+from utils.UploadFileDialog import UploadFileDialog
 from main import start_main_application
 from settings.SettingsWindow2 import SettingsWindow
 from settings.Settings import Settings

@@ -27,6 +27,7 @@ from label_view.Labeler import Labeler
 from settings.Settings import Settings
 
 from FileSelector import FileSelector
+from utils.UploadFileDialog import UploadFileDialog
 from settings.SettingsWindow import SettingsWindow
 
 from live_view.LiveViewTab import LiveViewTab
@@ -85,15 +86,20 @@ class MainWindow(QMainWindow):
         # === Menu Bar ===
         menubar = QMenuBar(self)
         file_menu = QMenu("File", self)
-        file_open = file_menu.addAction("Open")
-        file_open.triggered.connect(lambda: FileSelector.load_new_data(self.epgdata, self.live_view_tab.datawindow))
+        self.file_open = file_menu.addAction("Open")
+        self.file_open.triggered.connect(
+            self.open_upload_dialog
+            #lambda: FileSelector.load_new_data(self.epgdata, self.live_view_tab.datawindow)
+        )
+        file_menu.addSeparator()
 
+        save_data = file_menu.addAction("Save As")
+        save_data.triggered.connect(self.save_data)
         export_comment_csv = file_menu.addAction("Export Comments")
         export_comment_csv.triggered.connect(self.export_comments_from_current_tab)
-        export_data = file_menu.addAction("Export Data")
-        export_data.triggered.connect(self.export_data)
-        save_data = file_menu.addAction("Save")
-        save_data.triggered.connect(self.save_data)
+        #export_data = file_menu.addAction("Export Data")
+        #export_data.triggered.connect(self.export_data)
+        
         file_menu.addSeparator()
         file_menu.addAction("Exit App", self.close)
 
@@ -107,7 +113,7 @@ class MainWindow(QMainWindow):
 
 
         help_menu = QMenu("Help", self)
-        placeholder = help_menu.addAction("Nothing here yet!")
+        placeholder = help_menu.addAction("Nothing here yet! (sorry!)")
         placeholder.setEnabled(False)
 
         # TODO add menu functionality
@@ -154,6 +160,14 @@ class MainWindow(QMainWindow):
         # Add tabs
         self.tabs.addTab(self.live_view_tab, "Live View")       
         self.tabs.addTab(self.label_tab, "Label View")
+
+
+    def open_upload_dialog(self):
+        upload_dialog = UploadFileDialog()
+        if upload_dialog.exec(): # open modally
+            upload_file_path = upload_dialog.get_file_path()
+            self.launchMainWindowFile.emit(upload_file_path)
+            self.accept() # Accept and close the AppLauncherDialog
 
     def export_comments_from_current_tab(self):
         current_widget = self.tabs.currentWidget()
@@ -202,10 +216,16 @@ class MainWindow(QMainWindow):
     
     def handle_tab_change(self, index: int):
         widget = self.tabs.widget(index)
+
+        # Set focus
+        if isinstance(widget, (LiveViewTab, LabelViewTab)):
+            widget.datawindow.setFocus()
+
+        # Enable/disable "Open" action
         if isinstance(widget, LiveViewTab):
-            widget.datawindow.setFocus()
-        elif isinstance(widget, LabelViewTab):
-            widget.datawindow.setFocus()
+            self.file_open.setEnabled(False)
+        else:
+            self.file_open.setEnabled(True)
     
     def start_labeling(self):
         task = LabelingTask(self.labeler, self.epgdata, self.datawindow)

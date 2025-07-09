@@ -53,7 +53,7 @@ class UploadFileDialog(QDialog):
         file_dialog = QFileDialog(self)
         file_dialog.setWindowTitle("Select EPG Recording File")
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile) # user must select an existing file
-        file_dialog.setNameFilter("CSV Files (*.csv);;All Files (*)")
+        file_dialog.setNameFilter("EPG Files (*.csv *.wdq *.daq);;All Files (*)")
         file_dialog.setViewMode(QFileDialog.ViewMode.Detail)
 
         file_dialog.setDirectory(Settings.default_recording_directory)

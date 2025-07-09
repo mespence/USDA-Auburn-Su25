@@ -874,7 +874,8 @@ class LiveDataWindow(PlotWidget):
 
         # add current comments to df
         for comment_time, comment in self.comments.items():
-            df.loc[df['time'] == comment_time, 'comments'] = comment.text
+            snapped_time = self.find_nearest_time(comment_time)
+            df.loc[df['time'] == snapped_time, 'comments'] = comment.text
 
         df.to_csv(filename)
         self.data_modified = False
@@ -921,7 +922,8 @@ class LiveDataWindow(PlotWidget):
 
         # add current comments to df
         for comment_time, comment in self.comments.items():
-            df.loc[df['time'] == comment_time, 'comments'] = comment.text
+            snapped_time = self.find_nearest_time(comment_time)
+            df.loc[df['time'] == snapped_time, 'comments'] = comment.text
 
         try:
             df.to_csv(self.recording_filename) 

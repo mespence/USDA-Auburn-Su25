@@ -432,8 +432,11 @@ class DataWindow(PlotWidget):
         self.file = file
         times, volts = self.epgdata.get_recording(self.file)
 
+        time, volt = self.epgdata.get_recording(self.epgdata.current_file)
+
         self.xy_data[0] = times
         self.xy_data[1] = volts
+
         self.downsample_visible()
         self.curve.setData(self.xy_data[0], self.xy_data[1])
         init_x, init_y = self.xy_data[0].copy(), self.xy_data[1].copy()
@@ -653,6 +656,7 @@ class DataWindow(PlotWidget):
   
             x = x[left_idx:right_idx]
             y = y[left_idx:right_idx]   
+
     
         num_points = len(x)
 
@@ -660,6 +664,7 @@ class DataWindow(PlotWidget):
             self.xy_data[0] = x
             self.xy_data[1] = y
             return
+        
 
         if method == 'subsampling': 
             stride = num_points // max_points
@@ -680,6 +685,7 @@ class DataWindow(PlotWidget):
             x_out = np.repeat(x_win, 2)  # repeated for (x, y_min), (x, y_max)
 
             y_reshaped = y[: num_windows * stride].reshape(num_windows, stride)
+
             y_out = np.empty(num_windows * 2)
             y_out[::2] = y_reshaped.max(axis=1)
             y_out[1::2] = y_reshaped.min(axis=1)
@@ -961,6 +967,9 @@ class DataWindow(PlotWidget):
             caption="Export Data As",
             filter="CSV Files (*.csv);;All Files (*)"
         )
+        if not filename:
+            return False
+        
         QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
         self.init_df = self.df
         df = self.df

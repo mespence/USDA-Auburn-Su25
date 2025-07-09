@@ -394,6 +394,8 @@ class SocketClient(QObject):
                         self.recv_queue.put_nowait(line)
                         continue
 
+                    
+
                     try:
                         msg = json.loads(line)
                     except json.JSONDecodeError:

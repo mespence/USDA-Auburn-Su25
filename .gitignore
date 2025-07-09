@@ -188,4 +188,4 @@ GUI/backups
 *.swp
 *.ipynb
 
-GUI/test_sharpshooter.csv
+GUI/*.csv
