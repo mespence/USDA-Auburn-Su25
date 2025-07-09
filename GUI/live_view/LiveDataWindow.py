@@ -124,7 +124,6 @@ class LiveDataWindow(PlotWidget):
         self.plot_update_timer = QTimer(self)
         self.plot_update_timer.setInterval(int(1000/60))
         self.plot_update_timer.timeout.connect(self.timed_plot_update)
-        self.plot_update_timer.start()
 
         # --- UI ELEMENTS ---
         self.curve: PlotDataItem = PlotDataItem(pen=mkPen("blue", width=2))

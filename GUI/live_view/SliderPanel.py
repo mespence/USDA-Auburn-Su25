@@ -82,12 +82,12 @@ class SliderPanel(QWidget):
 
         self.slider_widgets_map = {}
 
-        self.dds_offset_widget = create_slider_row_widgets("Excitation Voltage", "V", scale = 0.01, precision = 1)
+        self.dds_offset_widget = create_slider_row_widgets("Applied Voltage", "V", scale = 0.01, precision = 1)
         self.dds_slider = self.dds_offset_widget[1]
         self.dds_slider.setRange(-330, 330)
         self.slider_widgets_map["ddso"] = self.dds_offset_widget
 
-        self.ddsa_amplitude_widget = create_slider_row_widgets("Excitation Voltage", "Vrms", scale = 0.01, precision=2)
+        self.ddsa_amplitude_widget = create_slider_row_widgets("Applied Voltage", "Vrms", scale = 0.01, precision=2)
         self.ddsa_slider = self.ddsa_amplitude_widget[1]
         self.ddsa_slider.setRange(-500, -1)
         self.slider_widgets_map["ddsa"] = self.ddsa_amplitude_widget
@@ -123,28 +123,48 @@ class SliderPanel(QWidget):
 
         layout.addLayout(grid)
 
+        hr = QFrame()
+        hr.setFrameShape(QFrame.Shape.HLine)
+        hr.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(hr)
+
+        recording_label = QLabel("Recording")
+        recording_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        recording_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(recording_label)
+
         # Buttons
-        self.on_button = QPushButton("ON", self)
+        #self.on_button = QPushButton("ON", self)
         self.start_button = QPushButton("START", self)
-        self.off_button  = QPushButton("OFF", self)
-        self.cancel_button  = QPushButton("Cancel", self)
-        self.revert_default_button  = QPushButton("Revert to Defaults", self)
-        self.apply_button  = QPushButton("Apply", self)
-        self.apply_close_button  = QPushButton("Apply \u0026 Close", self)
+
+        self.pause_button = QPushButton("PAUSE", self)
+        self.pause_button.setCheckable(True)
+        self.pause_button.setEnabled(False)
+
+        self.stop_button = QPushButton("STOP", self)
+        self.stop_button.setEnabled(False)
+
+        # self.off_button  = QPushButton("OFF", self)
+        # self.cancel_button  = QPushButton("Cancel", self)
+        # self.revert_default_button  = QPushButton("Revert to Defaults", self)
+        # self.apply_button  = QPushButton("Apply", self)
+        # self.apply_close_button  = QPushButton("Apply \u0026 Close", self)
 
         button_layout1 = QHBoxLayout()
-        button_layout1.addWidget(self.on_button)
+        #button_layout1.addWidget(self.on_button)
         button_layout1.addWidget(self.start_button)
-        button_layout1.addWidget(self.off_button)
+        button_layout1.addWidget(self.pause_button)
+        button_layout1.addWidget(self.stop_button)
+        #button_layout1.addWidget(self.off_button)
         layout.addLayout(button_layout1)
 
-        button_layout2 = QGridLayout()
-        button_layout2.addWidget(self.cancel_button, 0, 0)
-        button_layout2.addWidget(self.revert_default_button, 0, 1)
-        button_layout2.addWidget(self.apply_button, 1, 0)
-        button_layout2.addWidget(self.apply_close_button, 1, 1)
+        # button_layout2 = QGridLayout()
+        # button_layout2.addWidget(self.cancel_button, 0, 0)
+        # button_layout2.addWidget(self.revert_default_button, 0, 1)
+        # button_layout2.addWidget(self.apply_button, 1, 0)
+        # button_layout2.addWidget(self.apply_close_button, 1, 1)
 
-        layout.addLayout(button_layout2)
+        #layout.addLayout(button_layout2)
 
         layout.addStretch(1)
         self.setLayout(layout)
@@ -167,13 +187,15 @@ class SliderPanel(QWidget):
             "inputResistance": self.input_resistance,
             "ddso": self.dds_slider,
             "ddsa": self.ddsa_slider,
-            "on": self.on_button,
+            #"on": self.on_button,
             "start": self.start_button,
-            "off": self.off_button,
-            "cancel": self.cancel_button,
-            "revert": self.revert_default_button,
-            "apply": self.apply_button,
-            "applyClose": self.apply_close_button
+            "pause": self.pause_button,
+            "stop": self.stop_button,
+            # "off": self.off_button,
+            # "cancel": self.cancel_button,
+            # "revert": self.revert_default_button,
+            # "apply": self.apply_button,
+            # "applyClose": self.apply_close_button
         }
         ["10\u2075 (100K)", "10\u2076 (1M)", "10\u2077 (10M)", "10\u2078 (100M)", "10\u2079 (1G)", "10\u00b9\u2070 (10G)", "10\u2079 (1G) Loop Back"]
         self.resistance_map = {
@@ -191,15 +213,20 @@ class SliderPanel(QWidget):
             if isinstance(item, QSlider):
                 item.valueChanged.connect(lambda val, l=label: self.send_control_update(l, val))
             elif isinstance(item, QPushButton):
-                item.clicked.connect(lambda _, l=label: self.send_control_update(l, "clicked"))
+                if item == self.start_button:
+                    item.clicked.connect(self.parent().start_recording)
+                elif item == self.pause_button:
+                    item.clicked.connect(self.toggle_pause_resume)
+                elif item == self.stop_button:
+                    item.clicked.connect(self.parent().stop_recording)
+                #item.clicked.connect(lambda _, l=label: self.send_control_update(l, "clicked"))
             elif isinstance(item, QComboBox):
                 item.currentTextChanged.connect(lambda text, l=label: self.send_control_update(l, text))
+
                 
     def on_mode_change(self, value: int):
 
         selected_mode = "DC" if value == 0 else "AC"
-        print("mode changed to:", selected_mode)
-
         self._suppress = True
         
         always_visible = ["sca", "sco"]
@@ -216,41 +243,29 @@ class SliderPanel(QWidget):
             self.ddsa_slider.setValue(-1)
             #self.send_control_update("ddsa", 1)
 
-            self.socket_client.send({
-                "source": self.socket_client.client_id,
-                "type": "control",
-                "name": "ddsa",
-                "value": "-1"
-            })
-            self.socket_client.send({
-                "source": self.socket_client.client_id,
-                "type": "control",
-                "name": "excitationFrequency",
-                "value": "0"
-            })
+            self.send_control_update("ddsa", "-1")
+            self.send_control_update("excitationFrequency", "0")
 
         elif selected_mode == "AC":
             for widget in self.slider_widgets_map["ddsa"]:
                 widget.setVisible(True)
             for widget in self.slider_widgets_map["ddso"]:
                 widget.setVisible(False)
-            self.dds_slider.setValue(-34)  # actually -0.34
-            # self.send_control_update("ddso", -3)
+            self.dds_slider.setValue(-34)  # actually -0.341
 
-            self.socket_client.send({
-                "source": self.socket_client.client_id,
-                "type": "control",
-                "name": "ddso",
-                "value": "-34"
-            })
-            self.socket_client.send({
-                "source": self.socket_client.client_id,
-                "type": "control",
-                "name": "excitationFrequency",
-                "value": "1000"
-            })
+            self.send_control_update("ddso", "-34")
+            self.send_control_update("excitationFrequency", "1000")
 
         QTimer.singleShot(0, lambda: setattr(self, "_suppress", False))
+
+
+    def toggle_pause_resume(self, checked: bool):
+        if checked:
+            self.pause_button.setText("RESUME")
+            self.parent().pause_recording()
+        else:
+            self.pause_button.setText("PAUSE")
+            self.parent().resume_recording()
 
     def send_control_update(self, name, value):
         if self._suppress:

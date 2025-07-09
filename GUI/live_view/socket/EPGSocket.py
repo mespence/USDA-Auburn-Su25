@@ -397,7 +397,6 @@ class SocketClient(QObject):
                     try:
                         msg = json.loads(line)
                     except json.JSONDecodeError:
-                       
                         # Fallback: non-JSON line, treat as plain message
                         print(f"JSON Decode Error: placing raw message in to queue: {line}")
                         self.recv_queue.put_nowait(line)
