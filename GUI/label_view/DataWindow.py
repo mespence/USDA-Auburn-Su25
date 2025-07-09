@@ -453,7 +453,6 @@ class DataWindow(PlotWidget):
         if 'comments' not in self.df.columns:
             self.df['comments'] = None
         
-        
         self.init_df = self.df.copy(deep = True)
 
         self.viewbox.setRange(
@@ -978,13 +977,18 @@ class DataWindow(PlotWidget):
         QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
         self.init_df = self.df
         df = self.df
-        df.to_csv(filename, index=False)
+
+        if isinstance(df.index, pd.RangeIndex):
+            df.to_csv(filename, index=True)
+        else:
+            df.to_csv(filename, index=False)
+
         QGuiApplication.restoreOverrideCursor()
         return True
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """
-        Handles key shortcuts for setting baseline ("B") or comment ("C").
+        Handles key shortcuts for setting baseline ("B").
         Also forwards key events to the selection manager.
 
         Parameters:

@@ -7,6 +7,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 import os
 import sys
 from settings.Settings import Settings
+from utils.WindaqFileDialog import WindaqFileDialog
 
 class UploadFileDialog(QDialog):
     def __init__(self, parent=None):
@@ -17,6 +18,8 @@ class UploadFileDialog(QDialog):
         self.setModal(True)
 
         self.selected_file_path = None
+        self.selected_file_ext = None
+        self.channel_idx = None
 
         # --- Widgets ---
         self.file_path_label = QLabel("Selected File:")
@@ -62,6 +65,7 @@ class UploadFileDialog(QDialog):
             selected_files = file_dialog.selectedFiles()
             if selected_files:
                 self.selected_file_path = selected_files[0]
+                self.selected_file_ext = os.path.splitext(self.selected_file_path)[1].lower()
                 self.file_path_display.setText(os.path.basename(self.selected_file_path)) # display just the filename
                 print(f"DEBUG: File selected: {self.selected_file_path}")
 
@@ -70,12 +74,22 @@ class UploadFileDialog(QDialog):
         Validates the selected file path and emits the signal if valid.
         """
         if self.selected_file_path and os.path.exists(self.selected_file_path):
+            if self.selected_file_ext in [".wdq", ".daq"]:
+                windaq_dialog = WindaqFileDialog(self.selected_file_path, self)
+                if windaq_dialog.exec() == QDialog.DialogCode.Accepted:
+                    self.channel_idx = windaq_dialog.get_selected_channel_index()
+                else:
+                    print("WinDAQ channel selection cancelled.")
+                    return
             self.accept() # close the dialog with Accepted result
         else:
             QMessageBox.warning(self, "No File Selected", "Please select a valid recording file to upload.")
     
     def get_file_path(self):
         return self.selected_file_path
+    
+    def get_channel_index(self):
+        return self.channel_idx
 
 def main():
     app = QApplication(sys.argv)

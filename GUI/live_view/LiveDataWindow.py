@@ -909,14 +909,14 @@ class LiveDataWindow(PlotWidget):
             if not filename:
                 return False
 
-            self.recording_filename = filename
+            self.recording_filename = filename # set filename so save only occurs once
         
         times = np.round(self.xy_data[0], 4)
         volts = self.xy_data[1]
         
         df = DataFrame({
             "time": times,
-            "voltage": volts, # may need to change based on what engineers plot
+            "voltage": volts,
             "comments": [None] * len(times)
         })
 

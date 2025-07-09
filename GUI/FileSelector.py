@@ -2,9 +2,10 @@ import os
 import re
 #import sys
 
-from PyQt6.QtWidgets import QFileDialog,QMessageBox
+from PyQt6.QtWidgets import QFileDialog,QMessageBox, QDialog
 
 from label_view.DataWindow import DataWindow
+from utils.WindaqFileDialog import WindaqFileDialog
 from EPGData import EPGData
 
 class FileSelector:
@@ -33,8 +34,16 @@ class FileSelector:
              
         file_path, _ = file_dialog.getOpenFileUrl()
         file_path = file_path.toLocalFile()
+        channel_idx = None
         if file_path:
-            if epgdata.load_data(file_path) and isinstance(datawindow, DataWindow):
+            if os.path.splitext(file_path)[1].lower() in [".wdq", ".daq"]:
+                windaq_dialog = WindaqFileDialog(file_path)
+                if windaq_dialog.exec() == QDialog.DialogCode.Accepted:
+                    channel_idx = windaq_dialog.get_selected_channel_index()
+                else:
+                    print("WinDAQ channel selection cancelled.")
+                    return
+            if epgdata.load_data(file_path, channel_idx) and isinstance(datawindow, DataWindow):
                 datawindow.plot_recording(file_path)
                 datawindow.plot_transitions(file_path)
                 #datawindow.mode = 'labels'

@@ -13,7 +13,7 @@ import sys
 
 class AppLauncherDialog(QDialog):
     launchMainWindowSettings = pyqtSignal(dict)
-    launchMainWindowFile = pyqtSignal(str)
+    launchMainWindowFile = pyqtSignal(str, int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -71,7 +71,8 @@ class AppLauncherDialog(QDialog):
         upload_dialog = UploadFileDialog()
         if upload_dialog.exec(): # open modally
             upload_file_path = upload_dialog.get_file_path()
-            self.launchMainWindowFile.emit(upload_file_path)
+            channel_idx = upload_dialog.get_channel_index()
+            self.launchMainWindowFile.emit(upload_file_path, channel_idx)
             self.accept() # Accept and close the AppLauncherDialog
 
 def launch_application():
@@ -86,10 +87,10 @@ def launch_application():
         main_window_instance = start_main_application(app, settings=settings)
         launcher_dialog.accept() 
 
-    def launch_main_window_with_file(file):
+    def launch_main_window_with_file(file, channel_index):
         nonlocal main_window_instance
 
-        main_window_instance = start_main_application(app, file=file)
+        main_window_instance = start_main_application(app, file=file, channel_index=channel_index)
         launcher_dialog.accept() 
 
     launcher_dialog.launchMainWindowSettings.connect(launch_main_window_with_settings)

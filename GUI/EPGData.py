@@ -14,18 +14,19 @@ class EPGData:
     def __init__(self):
         self.dfs = {}  # A dictionary of filename : pandas dataframe objects
         self.label_column = "labels"
+        self.probe_column = "probes"
         #self.prepost_suffix = "_rect"
         self.dir_path = os.path.dirname(os.path.realpath(__file__))
         self.current_file = os.path.join(
             os.path.abspath(os.path.join(self.dir_path, "..")), # root dir
             # r"GUI\test_sharpshooter.csv"
-            # "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/sharpshooter_a01_labeled.csv"
+            "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/export_Tes.csv"
             #r"GUI\test_mosquito.csv"
-            r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
+            # r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
             #r"/Users/cathy/coding/bugs2025/USDA-Auburn-Su25/GUI/test_sharpshooter.csv"
         )          
 
-    def load_data(self, file):
+    def load_data(self, file, channel_index: int = None):
         """
         load_data takes in either a Windaq or CSV file, converts it
         into a pandas dataframe, and makes it available for use
@@ -49,35 +50,60 @@ class EPGData:
                 # }
                 {
                     "time": windaq_file.time(),
-                    "voltage": windaq_file.data(2),
+                    "voltage": windaq_file.data(channel_index),
                 }
             )
             # This will overwrite if there are multiple
             # markers pointing to the same index
             comments = [None for i in range(len(df))]
-            for event in windaq_file.eventmarkers:
-                if "comment" in event:
-                    comments[event["index"]] = event["comment"]
-                elif "timestamp" in event:
-                    comments[event["index"]] = event["timestamp"]
-                else:
-                    comments[event["index"]] = ""
+            # for event in windaq_file.eventmarkers:
+            #     if "comment" in event:
+            #         comments[event["index"]] = event["comment"]
+            #     elif "timestamp" in event:
+            #         comments[event["index"]] = event["timestamp"]
+            #     else:
+            #         comments[event["index"]] = ""
             df["comments"] = comments
+
+            labels = [None for i in range(len(df))]
+            df["labels"] = labels
             self.dfs[file] = df
         elif re.search(r"\.csv$", file, re.IGNORECASE):
             full_path = os.path.join(self.dir_path, file)
             try:
-                self.dfs[file] = read_csv(full_path, engine="pyarrow")
-                if 'post_rect' in self.dfs[file].columns:
-                    self.dfs[file] = self.dfs[file].rename(columns={'post_rect': 'voltage'})
-                if 'pre_rect' in self.dfs[file].columns:
-                    del self.dfs[file]['pre_rect']
+                # self.dfs[file]
+                orig_df = read_csv(full_path, engine="pyarrow")
+                self.dfs[file] = pd.DataFrame(columns=["time", "voltage", "labels", "comments"])
+
+                if 'time' not in orig_df.columns:
+                    raise ValueError("No Time Data")
+                else:
+                    self.dfs[file]['time'] = orig_df['time']
+                
+                if 'voltage' not in orig_df.columns:
+                    if 'pre_rect' in orig_df.columns:
+                        self.dfs[file]['voltage'] = orig_df['pre_rect']
+                    else:
+                        raise ValueError("No Voltage Data")
+                else:
+                    self.dfs[file]['voltage'] = orig_df['voltage']
+                
+                if 'labels' in orig_df.columns:
+                    self.dfs[file]['labels'] = orig_df['labels']
+                else:
+                    self.dfs[file]['labels'] = np.nan
+
+                if 'comments' in orig_df.columns:
+                    self.dfs[file]['comments'] = orig_df['comments']
+                else:
+                    self.dfs[file]['comments'] = np.nan
 
             except FileNotFoundError:
                 print(f"Could not find {full_path}")
                 return False
         else:
             # unknown file extension
+            print(f"Unknown file extension for: {file}")
             return False
     
         print(f"Data loaded in {time.perf_counter() - start_time:.4f}s")
@@ -235,6 +261,8 @@ class EPGData:
 
         if section_type == "labels":
             values = df[self.label_column].values
+        elif section_type == "probes":
+            values = df[self.probe_column].values
         else:
             raise ValueError(f"Unknown section_type: {section_type}")
 
