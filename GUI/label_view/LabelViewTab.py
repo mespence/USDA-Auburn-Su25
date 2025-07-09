@@ -2,7 +2,8 @@
 # LabelTab.py
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
-    QProgressBar, QScrollBar, QApplication
+    QProgressBar, QScrollBar, QApplication, QSizePolicy,
+    QSpacerItem
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
@@ -74,13 +75,14 @@ class LabelViewTab(QWidget):
 
 
         QApplication.processEvents()
+        # TODO: remove default plotting
         file = self.parent().epgdata.current_file
         self.datawindow.plot_recording(file)
         self.datawindow.plot_transitions(file)
         self.datawindow.plot_comments(file)
 
-        openDataButton = QPushButton("Open Data")
-        openDataButton.clicked.connect(lambda: FileSelector.load_new_data(self.parent().epgdata, self.datawindow))
+        # openDataButton = QPushButton("Open Data")
+        # openDataButton.clicked.connect(lambda: FileSelector.load_new_data(self.parent().epgdata, self.datawindow))
 
         self.modelChooser = QComboBox()
         self.modelChooser.addItem("Select mosquito model...")
@@ -101,17 +103,20 @@ class LabelViewTab(QWidget):
         startLabelingButton = QPushButton("Start Automated Labeling")
         startLabelingButton.clicked.connect(lambda: self.labeler.start_labeling(self.epgdata, self.datawindow))
 
-        saveDataButton = QPushButton("Save Labeled Data")
-        saveDataButton.clicked.connect(lambda: FileSelector.export_labeled_data(self.epgdata, self.epgdata.current_file))
+        # saveDataButton = QPushButton("Save Labeled Data")
+        # saveDataButton.clicked.connect(lambda: FileSelector.export_labeled_data(self.epgdata, self.epgdata.current_file))
 
         self.progressBar = QProgressBar()
         self.progressBar.setRange(0, 100)
         self.progressBar.setMaximumSize(400, 100)
+        #self.progressBar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.progressBar.setStyleSheet("")
+        self.progressBar.setFixedHeight(16)
         self.labeler.start_labeling_progress.connect(self.update_progress)
         self.labeler.stopped_labeling.connect(lambda: self.update_progress(0, 100))
 
-        self.baselineCursorButton = QPushButton("Change to Baseline Cursor")
-        self.baselineCursorButton.clicked.connect(self.switch_cursor_state)
+        # self.baselineCursorButton = QPushButton("Change to Baseline Cursor")
+        # self.baselineCursorButton.clicked.connect(self.switch_cursor_state)
 
         # A (not great) solution to stopping labeling. Clicking sets a stop flag, the process checks before
         # altering plots (i.e. changing the state) of the GUI. If clicked after, it does nothing. Not superb,
@@ -128,12 +133,14 @@ class LabelViewTab(QWidget):
         settingsButton.clicked.connect(self.openSettings)
 
         resetButton = QPushButton("Reset Zoom (R)")
+        resetButton.setMinimumWidth(100)
         resetButton.clicked.connect(self.datawindow.reset_view)
 
         # Top layout
         top_controls = QHBoxLayout()
-        top_controls.addWidget(settingsButton)
-        top_controls.addWidget(self.modelChooser)
+        #top_controls.addWidget(settingsButton)
+        
+        top_controls.addStretch(1)
         top_controls.addWidget(resetButton)
 
         # Plot Layout
@@ -143,22 +150,26 @@ class LabelViewTab(QWidget):
 
         # Bottom layout
         bottom_controls = QHBoxLayout()
-        bottom_controls.addWidget(openDataButton)
+        #bottom_controls.addWidget(openDataButton)
+       
+        bottom_controls.addWidget(self.modelChooser)
         bottom_controls.addWidget(startSplittingButton)
         bottom_controls.addWidget(startLabelingButton)
-        bottom_controls.addWidget(saveDataButton)
+        bottom_controls.addWidget(stopLabelingButton)
+        bottom_controls.addWidget(self.progressBar)
+        
 
-        bottom_controls_2 = QHBoxLayout()
-        bottom_controls_2.addWidget(self.progressBar)
-        bottom_controls_2.addWidget(stopLabelingButton)
-        bottom_controls_2.addWidget(self.baselineCursorButton)
+        #bottom_controls.addWidget(saveDataButton)
+
+        #bottom_controls_2 = QHBoxLayout()
+        #bottom_controls_2.addWidget(self.baselineCursorButton)
 
         # Main layout
         main_layout = QVBoxLayout()
         main_layout.addLayout(top_controls)
         main_layout.addLayout(plot_layout) 
         main_layout.addLayout(bottom_controls)
-        main_layout.addLayout(bottom_controls_2)
+        #main_layout.addLayout(bottom_controls_2)
 
 
         self.setLayout(main_layout)

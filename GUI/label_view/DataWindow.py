@@ -384,40 +384,40 @@ class DataWindow(PlotWidget):
         else:
             compression_str = round(self.compression, 1)
         
-        self.compression_text.setText(f"Compression Level: {compression_str}")
+        self.compression_text.setText(f"Compression Level: {compression_str}")  
 
 
     def update_zoom(self) -> None:
         """
         Updates the displayed zoom percentage based on current vs full-scale width.
         """
-        # plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
+        plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
 
-        # (x_min, x_max), _ = self.viewbox.viewRange()
-        # time_span = x_max - x_min
+        (x_min, x_max), _ = self.viewbox.viewRange()
+        time_span = x_max - x_min
 
-        # pix_per_second = plot_width / time_span
+        pix_per_second = plot_width / time_span
 
-        # if time_span == 0:
-        #     return float("inf")  # Avoid division by zero
+        if time_span == 0:
+            return float("inf")  # Avoid division by zero
 
-        # file_length_sec = self.df["time"].iloc[-1]
-        # default_pix_per_second = plot_width / file_length_sec
+        file_length_sec = self.df["time"].iloc[-1]
+        default_pix_per_second = plot_width / file_length_sec
 
-        # self.zoom_level = pix_per_second / default_pix_per_second
-        # self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .0f}%")
+        self.zoom_level = pix_per_second / default_pix_per_second
+        self.zoom_text.setText(f"Zoom: {self.zoom_level * 100: .0f}%")
 
-        self.zoom_level = 1 / float(self.compression) if self.compression != 0 else 1
-        if self.zoom_level < 0.5:
-            precision = 2
-        if self.zoom_level < 1:
-            precision = 1
-        else:
-            precision = 3
+        # self.zoom_level = 1 / float(self.compression) if self.compression != 0 else 1
+        # if self.zoom_level < 0.5:
+        #     precision = 2
+        # if self.zoom_level < 1:
+        #     precision = 1
+        # else:
+        #     precision = 3
 
-        value = round(self.zoom_level * 100, precision)
-        value = int(value) if value >= 1 else value
-        self.zoom_text.setText(f"Zoom: {value}%")
+        # value = round(self.zoom_level * 100, precision)
+        # value = int(value) if value >= 1 else value
+        # self.zoom_text.setText(f"Zoom: {value}%")
 
     def plot_recording(self, file: str) -> None:
         """

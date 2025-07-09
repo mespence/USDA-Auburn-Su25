@@ -101,6 +101,8 @@ class MainWindow(QMainWindow):
         #export_data.triggered.connect(self.export_data)
         
         file_menu.addSeparator()
+        file_menu.addAction("Settings", self.open_settings)
+        file_menu.addSeparator()
         file_menu.addAction("Exit App", self.close)
 
         edit_menu = QMenu("Edit", self)
@@ -168,6 +170,10 @@ class MainWindow(QMainWindow):
     #         upload_file_path = upload_dialog.get_file_path()
     #         self.launchMainWindowFile.emit(upload_file_path)
     #         self.accept() # Accept and close the AppLauncherDialog
+
+
+    def open_settings(self):
+        pass # TODO: write
 
     def export_comments_from_current_tab(self):
         current_widget = self.tabs.currentWidget()
