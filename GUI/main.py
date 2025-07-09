@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QMenuBar,
     QMenu,
     QTabWidget,
-    QTabBar
+    QPushButton
 )
 from PyQt6.QtCore import QRunnable, pyqtSignal, QObject, QEvent, Qt, QTimer
 from PyQt6.QtGui import QIcon, QFontDatabase
@@ -30,7 +30,7 @@ from FileSelector import FileSelector
 from settings.SettingsWindow import SettingsWindow
 
 from live_view.LiveViewTab import LiveViewTab
-from label_view.LabelTab import LabelTab
+from label_view.LabelViewTab import LabelViewTab
 
 # from ModelSelector import ModelSelector
 
@@ -72,7 +72,7 @@ class MainWindow(QMainWindow):
         self.epgdata.load_data(file)
 
         self.live_view_tab = LiveViewTab(self, settings=settings)
-        self.label_tab = LabelTab(self)
+        self.label_tab = LabelViewTab(self)
 
         self.initUI()
 
@@ -154,19 +154,10 @@ class MainWindow(QMainWindow):
         # Add tabs
         self.tabs.addTab(self.live_view_tab, "Live View")       
         self.tabs.addTab(self.label_tab, "Label View")
-    
-    # def closeEvent(self, event):
-    #     current_widget = self.tabs.currentWidget()
-    #     if isinstance(current_widget, LiveViewTab):
-    #         current_widget.datawindow.closeEvent(event)
-    #     elif isinstance(current_widget, LabelTab):
-    #         current_widget.datawindow.closeEvent(event)
-
-    #     super().closeEvent(event)
 
     def export_comments_from_current_tab(self):
         current_widget = self.tabs.currentWidget()
-        if isinstance(current_widget, LiveViewTab) or isinstance(current_widget, LabelTab):
+        if isinstance(current_widget, LiveViewTab) or isinstance(current_widget, LabelViewTab):
             current_widget.datawindow.export_comments()
         else:
             msg = QMessageBox(self)
@@ -179,7 +170,7 @@ class MainWindow(QMainWindow):
         current_widget = self.tabs.currentWidget()
         if isinstance(current_widget, LiveViewTab):
             current_widget.datawindow.export_df()
-        elif isinstance(current_widget, LabelTab):
+        elif isinstance(current_widget, LabelViewTab):
             current_widget.datawindow.export_df()
         else:
             msg = QMessageBox(self)
@@ -192,7 +183,7 @@ class MainWindow(QMainWindow):
         current_widget = self.tabs.currentWidget()
         if isinstance(current_widget, LiveViewTab):
             current_widget.datawindow.save_df()
-        elif isinstance(current_widget, LabelTab):
+        elif isinstance(current_widget, LabelViewTab):
             # for now all saving is exporting
             current_widget.datawindow.export_df()
         else:
@@ -206,14 +197,14 @@ class MainWindow(QMainWindow):
         current_widget = self.tabs.currentWidget()
         if isinstance(current_widget, LiveViewTab):
             current_widget.datawindow.setFocus()
-        elif isinstance(current_widget, LabelTab):
+        elif isinstance(current_widget, LabelViewTab):
             current_widget.datawindow.setFocus()
     
     def handle_tab_change(self, index: int):
         widget = self.tabs.widget(index)
         if isinstance(widget, LiveViewTab):
             widget.datawindow.setFocus()
-        elif isinstance(widget, LabelTab):
+        elif isinstance(widget, LabelViewTab):
             widget.datawindow.setFocus()
     
     def start_labeling(self):
@@ -251,69 +242,62 @@ class MainWindow(QMainWindow):
         label_view_unsaved = not label_dw.init_df.equals(label_dw.df)
         live_view_unsaved = live_dw.data_modified
 
-        if label_view_unsaved:
+        def confirm_exit_box(tab_name: str):
             msg_box = QMessageBox(self)
-            msg_box.setWindowTitle("Unsaved Changes in Label View")
-            msg_box.setText("You have unsaved changes in <b>Label View</b>. Do you want to save them before exiting?")
+            msg_box.setWindowTitle("SCIDO - Confirm Exit")
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setText(f'<b>Do you want to save changes to the <u>{tab_name}</u> before closing?</b>')
+            msg_box.setInformativeText("Your changes will be lost if you don’t save them.")
 
-            msg_box.setStandardButtons(QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
-            msg_box.setDefaultButton(QMessageBox.StandardButton.Save)
+            save_btn = QPushButton("Save")
+            dont_save_btn = QPushButton("Don't save")
+            cancel_btn = QPushButton("Cancel")
+
+            save_btn.setStyleSheet("font-weight: bold;")
+
+            msg_box.addButton(save_btn, QMessageBox.ButtonRole.AcceptRole)
+            msg_box.addButton(dont_save_btn, QMessageBox.ButtonRole.DestructiveRole)
+            msg_box.addButton(cancel_btn, QMessageBox.ButtonRole.RejectRole)
+            msg_box.setDefaultButton(save_btn)
 
             reply = msg_box.exec()
 
-            if reply == QMessageBox.StandardButton.Save:
+            if msg_box.clickedButton() == save_btn:
                 export_successful = label_dw.export_df() 
                 if not export_successful:
                     # export_df cancelled by the user, so cancel closing application
                     event.ignore()
                     return
-            elif reply == QMessageBox.StandardButton.Discard:
+            elif msg_box.clickedButton() == dont_save_btn:
                 pass # proceed with closing w/o save
             else:
                 event.ignore()
                 return
-        
+
+        if label_view_unsaved:
+            confirm_exit_box("Label View")
         if live_view_unsaved:
-            msg_box = QMessageBox(self)
-            msg_box.setWindowTitle("Unsaved Changes in Live View")
-            msg_box.setText("You have unsaved changes in <b>Live View</b>. Do you want to save them before exiting?")
+            confirm_exit_box("LIve View")
+  
+           
+        if live_dw.plot_update_timer.isActive():
+            live_dw.plot_update_timer.stop()
+        if live_dw.save_timer.isActive():
+            live_dw.save_timer.stop()
 
-            msg_box.setStandardButtons(QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
-            msg_box.setDefaultButton(QMessageBox.StandardButton.Save)
-
-            reply = msg_box.exec()
-
-            if reply == QMessageBox.StandardButton.Save:
-                export_successful = live_dw.save_df()
-                if not export_successful:
-                    # export_df cancelled by the user, so cancel closing application
-                    event.ignore()
-                    return
-                self.parent().socket_server.stop()
-            elif reply == QMessageBox.StandardButton.Discard:
-                pass # proceed with closing w/o save
-            else:
-                event.ignore()
-                return
-            
-        if self.plot_update_timer.isActive():
-            self.plot_update_timer.stop()
-        if self.save_timer.isActive():
-            self.save_timer.stop()
-
-        if not self.backup_renamed:
+        if not live_dw.backup_renamed:
             # store the active filenames, updated after each save with utc time stamp
             
             # delete waveform and comments csv because no data uploaded
-            os.remove(self.waveform_backup_path)
-            os.remove(self.comments_backup_path)
+            os.remove(live_dw.waveform_backup_path)
+            os.remove(live_dw.comments_backup_path)
 
         three_days_ago_utc = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=3)
         
         # --- DELETE OLD BACKUPS --- 
-        if os.path.exists(self.periodic_backup_dir):
-            for fname in os.listdir(self.periodic_backup_dir):
-                fpath = os.path.join(self.periodic_backup_dir, fname)
+        if os.path.exists(live_dw.periodic_backup_dir):
+            for fname in os.listdir(live_dw.periodic_backup_dir):
+                fpath = os.path.join(live_dw.periodic_backup_dir, fname)
                 if not os.path.isfile(fpath):
                     continue
 

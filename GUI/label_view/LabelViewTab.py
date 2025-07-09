@@ -21,7 +21,7 @@ import warnings
 warnings.filterwarnings('ignore', module="torch", message="enable_nested_tensor is True.*")
 
 
-class LabelTab(QWidget):
+class LabelViewTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
