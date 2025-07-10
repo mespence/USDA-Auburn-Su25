@@ -10,7 +10,7 @@ from PyQt6.QtGui import QIcon
 
 from label_view.DataWindow import DataWindow
 from EPGData import EPGData
-from label_view.Labeler import Labeler
+#from label_view.Labeler import Labeler
 from FileSelector import FileSelector
 
 
@@ -24,7 +24,7 @@ class LabelViewTab(QWidget):
         super().__init__(parent)
 
         self.epgdata = self.parent().epgdata
-        self.labeler = Labeler(parent=self)
+        #self.labeler = Labeler(parent=self)
 
         # file = self.epgdata.current_file
         # self.epgdata.load_data(file)
@@ -81,36 +81,36 @@ class LabelViewTab(QWidget):
         # openDataButton = QPushButton("Open Data")
         # openDataButton.clicked.connect(lambda: FileSelector.load_new_data(self.parent().epgdata, self.datawindow))
 
-        self.modelChooser = QComboBox()
-        self.modelChooser.addItem("Select mosquito model...")
-        self.modelChooser.setItemData(0, 0, Qt.ItemDataRole.UserRole - 1)  # Disable default item
-        self.modelChooser.addItems([
-            'UNet (Block)', 
-            'UNet (Attention)',
-            'SegTransformer', 
-            'TCN', 
-            'Random Forests (CSVs only)'
-        ])
-        self.modelChooser.currentTextChanged.connect(self.labeler.load_model)
-        #self.labeler.load_model("UNet (Block)")
+        # self.modelChooser = QComboBox()
+        # self.modelChooser.addItem("Select mosquito model...")
+        # self.modelChooser.setItemData(0, 0, Qt.ItemDataRole.UserRole - 1)  # Disable default item
+        # self.modelChooser.addItems([
+        #     'UNet (Block)', 
+        #     'UNet (Attention)',
+        #     'SegTransformer', 
+        #     'TCN', 
+        #     'Random Forests (CSVs only)'
+        # ])
+        # self.modelChooser.currentTextChanged.connect(self.labeler.load_model)
+        # #self.labeler.load_model("UNet (Block)")
 
-        startSplittingButton = QPushButton("Start Probe Splitter")
-        startSplittingButton.clicked.connect(lambda: self.labeler.start_probe_splitting(self.epgdata, self.datawindow))
+        # startSplittingButton = QPushButton("Start Probe Splitter")
+        # startSplittingButton.clicked.connect(lambda: self.labeler.start_probe_splitting(self.epgdata, self.datawindow))
 
-        startLabelingButton = QPushButton("Start Automated Labeling")
-        startLabelingButton.clicked.connect(lambda: self.labeler.start_labeling(self.epgdata, self.datawindow))
+        # startLabelingButton = QPushButton("Start Automated Labeling")
+        # startLabelingButton.clicked.connect(lambda: self.labeler.start_labeling(self.epgdata, self.datawindow))
 
         # saveDataButton = QPushButton("Save Labeled Data")
         # saveDataButton.clicked.connect(lambda: FileSelector.export_labeled_data(self.epgdata, self.epgdata.current_file))
 
-        self.progressBar = QProgressBar()
-        self.progressBar.setRange(0, 100)
-        self.progressBar.setMaximumSize(400, 100)
-        #self.progressBar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.progressBar.setStyleSheet("")
-        self.progressBar.setFixedHeight(16)
-        self.labeler.start_labeling_progress.connect(self.update_progress)
-        self.labeler.stopped_labeling.connect(lambda: self.update_progress(0, 100))
+        # self.progressBar = QProgressBar()
+        # self.progressBar.setRange(0, 100)
+        # self.progressBar.setMaximumSize(400, 100)
+        # #self.progressBar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        # self.progressBar.setStyleSheet("")
+        # self.progressBar.setFixedHeight(16)
+        # self.labeler.start_labeling_progress.connect(self.update_progress)
+        # self.labeler.stopped_labeling.connect(lambda: self.update_progress(0, 100))
 
         # self.baselineCursorButton = QPushButton("Change to Baseline Cursor")
         # self.baselineCursorButton.clicked.connect(self.switch_cursor_state)
@@ -118,8 +118,8 @@ class LabelViewTab(QWidget):
         # A (not great) solution to stopping labeling. Clicking sets a stop flag, the process checks before
         # altering plots (i.e. changing the state) of the GUI. If clicked after, it does nothing. Not superb,
         # but unless we inject some stop signaling way down in the ML code, this is the best as far as I see.
-        stopLabelingButton = QPushButton("Stop Labeling")
-        stopLabelingButton.clicked.connect(self.labeler.stop_labeling)
+        # stopLabelingButton = QPushButton("Stop Labeling")
+        # stopLabelingButton.clicked.connect(self.labeler.stop_labeling)
 
         settingsButton = QPushButton()
         settingsIcon = QIcon.fromTheme("applications-utilities")
@@ -157,11 +157,11 @@ class LabelViewTab(QWidget):
         bottom_controls = QHBoxLayout()
         #bottom_controls.addWidget(openDataButton)
        
-        bottom_controls.addWidget(self.modelChooser)
-        bottom_controls.addWidget(startSplittingButton)
-        bottom_controls.addWidget(startLabelingButton)
-        bottom_controls.addWidget(stopLabelingButton)
-        bottom_controls.addWidget(self.progressBar)
+        # bottom_controls.addWidget(self.modelChooser)
+        # bottom_controls.addWidget(startSplittingButton)
+        # bottom_controls.addWidget(startLabelingButton)
+        # bottom_controls.addWidget(stopLabelingButton)
+        # bottom_controls.addWidget(self.progressBar)
 
         #bottom_controls.addWidget(saveDataButton)
 

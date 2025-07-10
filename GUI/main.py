@@ -23,11 +23,11 @@ from LoadingScreen import LoadingScreen
 from label_view.DataWindow import DataWindow
 from EPGData import EPGData
 from FileSelector import FileSelector
-from label_view.Labeler import Labeler
+#from label_view.Labeler import Labeler
 from settings import settings
 
 from FileSelector import FileSelector
-from utils.UploadFileDialog import UploadFileDialog
+#from utils.UploadFileDialog import UploadFileDialog
 from settings.SettingsWindow2 import SettingsWindow
 
 from live_view.LiveViewTab import LiveViewTab
@@ -41,20 +41,20 @@ if os.name == "nt":
     setConfigOptions(useOpenGL = True)
 
 
-class LabelingTask(QRunnable):
-    def __init__(
-        self, labeler: Labeler, epgdata: EPGData, datawindow: DataWindow
-    ) -> None:
-        super().__init__()
-        self.labeler: Labeler = labeler
-        self.epgdata: EPGData = epgdata
-        self.datawindow: DataWindow = datawindow
+# class LabelingTask(QRunnable):
+#     def __init__(
+#         self, labeler: Labeler, epgdata: EPGData, datawindow: DataWindow
+#     ) -> None:
+#         super().__init__()
+#         self.labeler: Labeler = labeler
+#         self.epgdata: EPGData = epgdata
+#         self.datawindow: DataWindow = datawindow
 
-    def run(self) -> None:
-        self.labeler.start_labeling(self.epgdata, self.datawindow)
+#     def run(self) -> None:
+#         self.labeler.start_labeling(self.epgdata, self.datawindow)
 
 class MainWindow(QMainWindow):
-    start_labeling = pyqtSignal()
+    #start_labeling = pyqtSignal()
 
     def __init__(self, file = None, channel_index = None) -> None:
         if os.name == "nt":  # windows
@@ -243,22 +243,22 @@ class MainWindow(QMainWindow):
         else:
             self.file_open.setEnabled(True)
     
-    def start_labeling(self):
-        task = LabelingTask(self.labeler, self.epgdata, self.datawindow)
-        self.threadpool.start(task)
+    # def start_labeling(self):
+    #     task = LabelingTask(self.labeler, self.epgdata, self.datawindow)
+    #     self.threadpool.start(task)
 
     # To stop labeling, the labeling cannot run in the same thread as the GUI, which it currently this.
     # This resolves that, but does introduce the possibility of multithreading bugs.
-    def update_progress(self, current, total):
-        percentage = int((current / total) * 100)
-        self.progressBar.setValue(percentage)
+    # def update_progress(self, current, total):
+    #     percentage = int((current / total) * 100)
+    #     self.progressBar.setValue(percentage)
 
-    def switch_cursor_state(self):
-        self.datawindow.cursor_state = not self.datawindow.cursor_state
-        if self.datawindow.cursor_state == 0:
-            self.baselineCursorButton.setText("Change to Baseline Cursor")
-        elif self.datawindow.cursor_state == 1:
-            self.baselineCursorButton.setText("Change to Normal Cursor")
+    # def switch_cursor_state(self):
+    #     self.datawindow.cursor_state = not self.datawindow.cursor_state
+    #     if self.datawindow.cursor_state == 0:
+    #         self.baselineCursorButton.setText("Change to Baseline Cursor")
+    #     elif self.datawindow.cursor_state == 1:
+    #         self.baselineCursorButton.setText("Change to Normal Cursor")
 
     def openSliders(self):
         is_visible = self.slider_panel.isVisible()
