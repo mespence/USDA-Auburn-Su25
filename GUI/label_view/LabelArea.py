@@ -91,7 +91,7 @@ class LabelArea:
         self.transition_line = InfiniteLine(
             pos=time,
             angle=90,  # vertical
-            pen=mkPen(color=settings.get("plot_theme")["TRANSITION_LINE_COLOR"], width=),
+            pen=mkPen(color=settings.get("plot_theme")["TRANSITION_LINE_COLOR"], width=2),
             hoverPen=None,
             movable=False,
         )
