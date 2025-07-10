@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel, QComboBox, 
     QSlider, QLineEdit, QPushButton, QVBoxLayout, 
-    QHBoxLayout, QGridLayout, QFrame
+    QHBoxLayout, QGridLayout, QFrame, QDoubleSpinBox
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot
 
@@ -31,28 +31,39 @@ class SliderPanel(QWidget):
         layout.addWidget(hr)
 
         grid = QGridLayout()
+        grid.setHorizontalSpacing(0)
 
         # DC/AC Toggle Switch
         self.mode_toggle = ACDCToggle()
         grid.addWidget(self.mode_toggle, 0, 1)
 
         
-        def sync_slider_and_entry(slider: QSlider, entry: QLineEdit, scale: float, precision: int):
-            # (1) Slider → Entry
-            slider.valueChanged.connect(lambda val: entry.setText(f"{val * scale:.{precision}f}"))
+        def sync_slider_and_entry(slider: QSlider, spinbox: QDoubleSpinBox, scale: float, precision: int):
+            syncing = {"active": False}  # mutable container to persist across closures
 
-            # (2) Entry → Slider
-            def on_text_edited(text):
+            def slider_to_spinbox(val):
+                if syncing["active"]:
+                    return
+                syncing["active"] = True
+                spinbox.setValue(round(val * scale, precision))
+                syncing["active"] = False
+
+            def spinbox_to_slider():
+                if syncing["active"]:
+                    return
+                syncing["active"] = True
                 try:
-                    val = int(text) // scale
-                    val = max(slider.minimum(), min(val, slider.maximum()))  # clamp
+                    val = int(round(spinbox.value() / scale))
+                    val = max(slider.minimum(), min(val, slider.maximum()))
                     if slider.value() != val:
                         slider.setValue(val)
                 except ValueError:
-                    pass  # Ignore invalid input
+                    pass
+                syncing["active"] = False
 
-            entry.textEdited.connect(on_text_edited)
-
+            slider.valueChanged.connect(slider_to_spinbox)
+            spinbox.editingFinished.connect(spinbox_to_slider)
+            spinbox.valueChanged.connect(spinbox_to_slider)
 
         def create_slider_row_widgets(label_text, unit=None, scale = 1, precision = 0):
             """
@@ -64,48 +75,61 @@ class SliderPanel(QWidget):
             slider = QSlider(Qt.Orientation.Horizontal)
             slider.setFixedWidth(150)
             self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-            entry = QLineEdit("0.0")
-            entry.setFixedWidth(50)
+            spinbox = QDoubleSpinBox()
+            spinbox.setDecimals(precision)
+            spinbox.setFixedWidth(80)
 
             unit_label = QLabel(unit) if unit else None
             if unit_label:
                 unit_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                
+
                 # Prevent width changes when unit changes
-                unit_label.setMinimumWidth(40)  # Or .setFixedWidth(40) if units never change
-                unit_label.setStyleSheet("padding-left: 6px;")  # Optional spacing
+                unit_label.setMinimumWidth(40)
+                unit_label.setStyleSheet("padding-left: 6px;")
 
-            sync_slider_and_entry(slider, entry, scale, precision)    
+            sync_slider_and_entry(slider, spinbox, scale, precision)    
 
-            return label, slider, entry, unit_label
+            return label, slider, spinbox, unit_label
 
         self.slider_widgets_map = {}
 
-        self.dds_offset_widget = create_slider_row_widgets("Applied Voltage", "V", scale = 0.01, precision = 1)
+        self.dds_offset_widget = create_slider_row_widgets("Applied Voltage", "mV", scale = 10, precision = 0)
         self.dds_slider = self.dds_offset_widget[1]
-        self.dds_slider.setRange(-330, 330)
+        self.dds_slider.setRange(-100, 100)
+        dds_spinbox = self.dds_offset_widget[2]
+        dds_spinbox.setRange(-1000, 1000)
+        dds_spinbox.setSingleStep(10)
         self.slider_widgets_map["ddso"] = self.dds_offset_widget
 
-        self.ddsa_amplitude_widget = create_slider_row_widgets("Applied Voltage", "Vrms", scale = 0.01, precision=2)
+        self.ddsa_amplitude_widget = create_slider_row_widgets("Applied Voltage", "mV RMS", scale = 1, precision=0)
         self.ddsa_slider = self.ddsa_amplitude_widget[1]
-        self.ddsa_slider.setRange(-500, -1)
+        self.ddsa_slider.setRange(7, 1000)
+        ddsa_spinbox = self.ddsa_amplitude_widget[2]
+        ddsa_spinbox.setRange(7, 1000)
+        ddsa_spinbox.setSingleStep(10)
         self.slider_widgets_map["ddsa"] = self.ddsa_amplitude_widget
 
         # Input Resistance
         grid.addWidget(QLabel("Input Resistance"), 3, 0)
         self.input_resistance = QComboBox()
-        self.input_resistance.addItems(["10\u2075 (100K)", "10\u2076 (1M)", "10\u2077 (10M)", "10\u2078 (100M)", "10\u2079 (1G)", "10\u00b9\u2070 (10G)", "10\u2079 (1G) Loop Back"])
+        self.input_resistance.addItems(["10\u2075 (100K)", "10\u2076 (1M)", "10\u2077 (10M)", "10\u2078 (100M)", "10\u2079 (1G)", "10\u00b9\u2070 (10G)", "10\u2079 (1G) Loopback"])
         grid.addWidget(self.input_resistance, 3, 1)
         grid.addWidget(QLabel("Ω"), 3, 2)
 
         self.sca_widgets = create_slider_row_widgets("Gain", "\u2715")
         self.sca_slider = self.sca_widgets[1]
         self.sca_slider.setRange(2, 7000)
+        sca_spinbox = self.sca_widgets[2]
+        sca_spinbox.setRange(2,7000)
+
         self.slider_widgets_map["sca"] = self.sca_widgets
 
-        self.sco_widgets = create_slider_row_widgets("Offset", "V", scale = 0.1, precision = 1)
+        self.sco_widgets = create_slider_row_widgets("Offset", "V", scale = 0.01, precision = 1)
         self.sco_slider = self.sco_widgets[1]
-        self.sco_slider.setRange(-33, 33)
+        self.sco_slider.setRange(-330, 330)
+        sco_spinbox = self.sco_widgets[2]
+        sco_spinbox.setRange(-3.3, 3.3)
+        sco_spinbox.setSingleStep(0.1)
         self.slider_widgets_map["sco"] = self.sco_widgets
 
         grid_row = 1
@@ -196,7 +220,7 @@ class SliderPanel(QWidget):
             # "apply": self.apply_button,
             # "applyClose": self.apply_close_button
         }
-        ["10\u2075 (100K)", "10\u2076 (1M)", "10\u2077 (10M)", "10\u2078 (100M)", "10\u2079 (1G)", "10\u00b9\u2070 (10G)", "10\u2079 (1G) Loop Back"]
+
         self.resistance_map = {
             "10\u2075 (100K)": "100K",
             "10\u2076 (1M)": "1M",
@@ -204,7 +228,7 @@ class SliderPanel(QWidget):
             "10\u2078 (100M)": "100M",
             "10\u2079 (1G)": "1G",
             "10\u00b9\u2070 (10G)": "10G",
-            "10\u2079 (1G) Loop Back": "Mux:7"
+            "10\u2079 (1G) Loopback": "1G Loopback"
         }
 
         # Connect all controls except AC/DC toggle
@@ -220,7 +244,6 @@ class SliderPanel(QWidget):
                     item.clicked.connect(self.toggle_pause_resume)
                 elif item == self.stop_button:
                     item.clicked.connect(self.parent().stop_recording)
-                #item.clicked.connect(lambda _, l=label: self.send_control_update(l, "clicked"))
             elif isinstance(item, QComboBox):
                 item.currentTextChanged.connect(lambda text, l=label: self.send_control_update(l, text))
 
@@ -243,7 +266,7 @@ class SliderPanel(QWidget):
             #self.send_control_update("ddsa", 1)
 
             self.send_control_update("ddsa", "-1")
-            self.send_control_update("excitationFrequency", "0")
+            self.send_control_update("excita\tionFrequency", "0")
 
         elif selected_mode == "AC":
             for widget in self.slider_widgets_map["ddsa"]:
@@ -273,6 +296,13 @@ class SliderPanel(QWidget):
         if name == "inputResistance":
             value = self.resistance_map[value]
 
+        if name == "sco":
+            value = value // 10
+
+        if name == "ddsa": # send to d0 w/ conversion formula
+            name = "d0"
+            value = int((float(value) - 1075.51) / -4.207)
+
         self.socket_client.send({
             "source": self.socket_client.client_id,
             "type": "control",
@@ -288,16 +318,18 @@ class SliderPanel(QWidget):
         
         if name == "excitationFrequency":
             name = "modeToggle"
-            value = 1 if value == "1000" else 0
+            if value == "1":
+                return # ignore the debug setting
+            value = 1 if value == "1000" else 0 # 0/1 for toggle index
         
         widget = self.controls.get(name)
         if widget is None:
             print(f"[CS] Unknown control name: {name}")
             return
-        
+          
         self._suppress = True
 
-        print(name, value)
+
 
         if isinstance(widget, ACDCToggle):
             if widget.isChecked() != int(value):
@@ -306,7 +338,10 @@ class SliderPanel(QWidget):
             value = int(value)
             if widget.value() != value:
                 widget.setValue(value)
-        if isinstance(widget, QComboBox):
+        if isinstance(widget, QComboBox): # input resistance
+            value = next((k for k, v in self.resistance_map.items() if v == value), None)
+            #key_list = list(self.resistance_map.keys())
+            #value = key_list[list(self.resistance_map.values()).index(value)]
             index = widget.findText(value)
             if index != -1 and widget.currentIndex() != index:
                 widget.setCurrentIndex(index)

@@ -113,7 +113,8 @@ class LiveViewTab(QWidget):
             QToolButton {
                 outline: none;
             } QToolButton:disabled {
-                background-color: gray;
+                color: gray;               
+                qproperty-icon: none;
             }
             QToolButton:focus {
                 outline 3px solid #4aa8ff;
@@ -168,7 +169,7 @@ class LiveViewTab(QWidget):
     def toggle_live(self):
         live_mode = self.pause_live_button.isChecked()
 
-        self.pause_live_button.setText("Pause Live View" if live_mode else "Live View")
+        self.pause_live_button.setText("Pause Live View" if live_mode else "Resume Live View")
         self.datawindow.set_live_mode(live_mode)
 
     def call_add_comment(self):
@@ -329,9 +330,12 @@ class LiveViewTab(QWidget):
         value = message["value"]
         source = message.get("source")
 
-        if name == "ddsa":
-            # TODO: Formula from Pierce
-            pass
+        if name == "ddsa": # ignore, use d0 value instead
+            return
+        if name == "d0":
+            name = "ddsa"
+            value = -4.207 * float(value) + 1075.51 # Formula from Pierce
+
 
         # Workaround to get set_control_value to run in the GUI thread
         # Might be cleaner to use signals, but this works for now
