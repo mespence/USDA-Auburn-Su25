@@ -47,20 +47,14 @@ class LiveViewTab(QWidget):
         self.pause_live_button.setCheckable(True)
         self.pause_live_button.setChecked(True)
         self.pause_live_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        # TODO: CHANGE COLOR OF BUTTONS
         self.pause_live_button.setStyleSheet("""
             QPushButton {
-                background-color: #379acc;
+                background-color: #49a6fe;
                 color: white;
                 border-radius: 3px;
                 padding: 5px;
                 outline: none;
-            } QPushButton:checked {
-                background-color: gray;
-                color: white;
-                border-radius: 3px;
-                padding: 5px;
-                outline: none;
+                width: 100px;
             } QPushButton:disabled {
                 background-color: gray;
                 color: white;
@@ -76,14 +70,14 @@ class LiveViewTab(QWidget):
         self.add_comment_button = QPushButton("Add Comment", self)
         self.add_comment_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.add_comment_button.setToolTip("Add Comment at Current Time")
-        # TODO: CHANGE COLOR OF BUTTONS
         self.add_comment_button.setStyleSheet("""
             QPushButton {
-                background-color: gray;
+                background-color: #49a6fe;
                 color: white;
                 border-radius: 3px;
                 padding: 5px;
                 outline: none;
+                width: 100px;
             } QPushButton:disabled {
                 background-color: gray;
                 color: white;
@@ -115,7 +109,6 @@ class LiveViewTab(QWidget):
         self.slider_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.slider_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.slider_button.clicked.connect(self.toggleSliders)
-        # TODO: CHANGE COLOR OF BUTTONS
         self.slider_button.setStyleSheet("""
             QToolButton {
                 outline: none;
