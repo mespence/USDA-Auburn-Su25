@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel, QDialogB
 from utils.PanZoomViewBox import PanZoomViewBox
 from utils.CommentMarker import CommentMarker
 from utils.TextEdit import TextEdit
+from utils.ResourcePath import resource_path
 from settings import settings
 
 class LiveDataWindow(PlotWidget):
@@ -868,9 +869,9 @@ class LiveDataWindow(PlotWidget):
         self.comments.clear()
         
         comments_df = self.df[~self.df["comments"].isnull()]
+        icon_path = resource_path("icons/message.svg")
         for time, text in zip(comments_df["time"], comments_df["comments"]):
-            marker = CommentMarker(time, text, self, icon_path=r"message.svg")
-            
+            marker = CommentMarker(time, text, self, icon_path=icon_path)
             self.comments[time] = marker
         
         return

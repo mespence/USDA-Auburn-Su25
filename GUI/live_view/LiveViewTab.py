@@ -15,6 +15,7 @@ from live_view.LiveDataWindow import LiveDataWindow
 from live_view.SliderPanel import SliderPanel
 from live_view.socket.ConnectionIndicator import ConnectionIndicator
 from live_view.socket.EPGSocket import SocketClient, SocketServer
+from utils.ResourcePath import resource_path
 
 
 class LiveViewTab(QWidget):
@@ -102,7 +103,8 @@ class LiveViewTab(QWidget):
         #self.slider_panel.off_button.clicked.connect(self.end_recording)
         self.slider_button = QToolButton(parent=self)
         self.slider_button.setText("EPG Controls")
-        self.slider_button.setIcon(QIcon("icons/sliders.svg"))
+        icon_path = resource_path("icons/sliders.svg")
+        self.slider_button.setIcon(QIcon(icon_path))
         self.slider_button.setIconSize(QSize(24, 24))
         self.slider_button.setToolTip("Open control sliders")
         self.slider_button.setAutoRaise(True)

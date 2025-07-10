@@ -168,7 +168,7 @@ class PanZoomViewBox(ViewBox):
         if self.datawindow:
             if hasattr(self.datawindow, "df"):
                 df = self.datawindow.df
-                if df is not None or df.shape[0] > 0:
+                if df is not None and df.shape[0] > 0:
                     data_max = self.datawindow.df["time"].iloc[-1]
                     right_limit = data_max + self.zoom_viewbox_limit * view_width
                 else:
@@ -267,7 +267,6 @@ class PanZoomViewBox(ViewBox):
         selected_action = menu.exec(event.screenPos())           
         if selected_action == add_comment:
             self.datawindow.add_comment_at_click(x)
-            print("add comment")
         else:
             pass
     
@@ -319,7 +318,7 @@ class PanZoomViewBox(ViewBox):
             if abs(right_start - this_end) < 1e-4:
                 right_touching = True
         else:
-            right_start = self.datawindow.df['time'].iloc[-1] if not self.df.empty else None # end of data
+            right_start = self.datawindow.df['time'].iloc[-1] if not self.datawindow.df.empty else None # end of data
 
         snap_left.setEnabled(not left_touching)
         snap_right.setEnabled(not right_touching)
@@ -334,7 +333,6 @@ class PanZoomViewBox(ViewBox):
             print("label drop")
         elif selected_action == add_comment:
             self.datawindow.add_comment_at_click(x)
-            print("add comment")
         elif selected_action == snap_left:
             label_area.set_transition_line("left", left_end)
             self.datawindow.selection._attempt_snap_and_merge(label_area.transition_line)

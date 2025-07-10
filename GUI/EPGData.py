@@ -16,15 +16,16 @@ class EPGData:
         self.label_column = "labels"
         self.probe_column = "probes"
         #self.prepost_suffix = "_rect"
+        self.current_file = None
         self.dir_path = os.path.dirname(os.path.realpath(__file__))
-        self.current_file = os.path.join(
-            os.path.abspath(os.path.join(self.dir_path, "..")), # root dir
-            # r"GUI\test_sharpshooter.csv"
-            #"/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/export_Tes.csv"
-            #r"GUI\test_mosquito.csv"
-            r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
-            #r"/Users/cole/coding/bugs2025/USDA-Auburn-Su25/GUI/test_sharpshooter.csv"
-        )          
+        # self.current_file = os.path.join(
+        #     os.path.abspath(os.path.join(self.dir_path, "..")), # root dir
+        #     # r"GUI\test_sharpshooter.csv"
+        #     #"/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/export_Tes.csv"
+        #     #r"GUI\test_mosquito.csv"
+        #     r"Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
+        #     #r"/Users/cole/coding/bugs2025/USDA-Auburn-Su25/GUI/test_sharpshooter.csv"
+        # )          
 
     def load_data(self, file, channel_index: int = None):
         """

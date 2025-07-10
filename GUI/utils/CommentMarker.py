@@ -9,6 +9,8 @@ from PyQt6.QtCore import Qt, QPointF, QTimer
 from settings import settings
 from utils.TextEdit import TextEdit
 from utils.HoverableSvgItem import HoverableSvgItem
+from utils.ResourcePath import resource_path
+
 
 
 class CommentMarker:
@@ -25,7 +27,7 @@ class CommentMarker:
     zoom, pan, and user interactions in the waveform editor.
     """
     def __init__(self, time: float, text: str, datawindow: PlotWidget,
-                 icon_path: str = "icons/message.svg"):
+                 icon_path: str = resource_path("icons/message.svg")):
         """
         Initializes the comment marker with a vertical line and icon.
 

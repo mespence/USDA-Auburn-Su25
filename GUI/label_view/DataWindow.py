@@ -29,6 +29,7 @@ from utils.CommentMarker import CommentMarker
 from label_view.SelectionManager import Selection
 from label_view.AddLabelManager import AddLabelManager
 from utils.TextEdit import TextEdit
+from utils.ResourcePath import resource_path
 
 class DataWindow(PlotWidget):
     """
@@ -253,7 +254,8 @@ class DataWindow(PlotWidget):
 
     def checkForUnsavedChanges(self) -> bool:
         self.update_labels_column()
-
+        if self.init_df is None:
+            return True
         return self.init_df.equals(self.df)
 
     def closeEvent(self, event): # not using, use in main.py
@@ -339,6 +341,12 @@ class DataWindow(PlotWidget):
         Resets the plot to the full initial view, undoing all zoom/pan changes.
         """
         QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
+        
+        if self.df is None:
+            self.viewbox.setRange(xRange=(0,10))
+            QGuiApplication.restoreOverrideCursor()
+            return
+
 
         self.xy_data = [
             self.initial_downsampled_data[0].copy(), 
@@ -514,6 +522,7 @@ class DataWindow(PlotWidget):
         # create a comments column if doesn't yet exist in df
         if 'comments' not in self.df.columns:
             self.df['comments'] = None
+            self.df['comments'] = self.df['comments'].astype(object)
         
         self.init_df = self.df.copy(deep = True)
 
@@ -524,6 +533,7 @@ class DataWindow(PlotWidget):
         )
 
         self.update_plot()
+        self.plot_transitions(file)
         self.plot_comments(file)
         QGuiApplication.processEvents()
         QGuiApplication.restoreOverrideCursor()
@@ -537,8 +547,9 @@ class DataWindow(PlotWidget):
         """
         
         comments_df = self.df[~self.df["comments"].isnull()]
+        icon_path = resource_path("icons/message.svg")
         for time, text in zip(comments_df["time"], comments_df["comments"]):
-            marker = CommentMarker(time, text, self, icon_path=r"icons/message.svg")
+            marker = CommentMarker(time, text, self, icon_path=icon_path)
             self.comments[time] = marker
 
         return

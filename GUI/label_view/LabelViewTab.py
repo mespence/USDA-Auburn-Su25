@@ -72,11 +72,11 @@ class LabelViewTab(QWidget):
 
 
         QApplication.processEvents()
-        # TODO: remove default plotting
         file = self.parent().epgdata.current_file
-        self.datawindow.plot_recording(file)
-        self.datawindow.plot_transitions(file)
-        self.datawindow.plot_comments(file)
+        if file is not None:
+            self.datawindow.plot_recording(file)
+        # self.datawindow.plot_transitions(file)
+        # self.datawindow.plot_comments(file)
 
         # openDataButton = QPushButton("Open Data")
         # openDataButton.clicked.connect(lambda: FileSelector.load_new_data(self.parent().epgdata, self.datawindow))

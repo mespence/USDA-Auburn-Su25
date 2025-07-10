@@ -4,6 +4,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QPixmap, QFont
 from PyQt6.QtCore import Qt
 
+from utils.ResourcePath import resource_path
+
 import sys
 
 
@@ -51,7 +53,8 @@ class LoadingScreen(QWidget):
         version.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         logo = QLabel()
-        pixmap = QPixmap(r"SCIDO.png")
+        img_path = resource_path("SCIDO.png")
+        pixmap = QPixmap(img_path)
         logo.setPixmap(pixmap.scaledToHeight(300, Qt.TransformationMode.SmoothTransformation))
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
