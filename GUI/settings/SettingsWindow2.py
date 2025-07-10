@@ -506,7 +506,7 @@ class FolderRow(QWidget):
             QFileDialog.Option.ShowDirsOnly
         )
         if path:
-            settings.save(self.setting_attr, path)
+            settings.set(self.setting_attr, path)
             self.path_edit.setText(path)
 
 class EPGSettingsTab(QWidget):

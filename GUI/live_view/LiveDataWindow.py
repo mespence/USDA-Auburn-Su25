@@ -120,7 +120,7 @@ class LiveDataWindow(PlotWidget):
         self.plot_update_timer.timeout.connect(self.timed_plot_update)
 
         # --- UI ELEMENTS ---
-        self.curve: PlotDataItem = PlotDataItem(pen=mkPen("blue", width=2))
+        self.curve: PlotDataItem = PlotDataItem(pen=mkPen(settings.get("data_line_color"), width=2))
         self.scatter: ScatterPlotItem = ScatterPlotItem(
             symbol="o", size=4, brush="blue"
         )  # the discrete points shown at high zooms
@@ -213,12 +213,12 @@ class LiveDataWindow(PlotWidget):
                 comment.set_visible(value)
         elif key == "plot_theme":
             self.update_plot_theme()
-        elif key == "data_line_color":
-            self.curve.setPen(mkPen(color=value))
-            self.scatter.setPen(mkPen(color=value))
-        elif key == "data_line_width":
-            self.curve.setPen(mkPen(width=value))
-            self.scatter.setPen(mkPen(width=value))
+        elif key in ("data_line_color", "data_line_width"):
+            color = settings.get("data_line_color")
+            width = settings.get("data_line_width")
+            pen = mkPen(color=color, width=width)
+            self.curve.setPen(pen)
+            self.scatter.setPen(pen)
 
 
     def closeEvent(self, event):

@@ -79,6 +79,7 @@ class Settings(QObject):
         stored = self._prepare_for_storage(value, key)
         self._qsettings.setValue(key, stored)
         self._qsettings.sync()
+        print(key, value)
 
     def save_all(self):
         for key in self.SETTINGS_TYPE_MAP:
