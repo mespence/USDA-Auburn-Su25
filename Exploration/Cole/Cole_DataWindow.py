@@ -1,5 +1,5 @@
 import sys
-sys.path.append("/Users/cathy/coding/bugs2025/USDA-Auburn-Su25/GUI")
+sys.path.append("/Users/cole/coding/bugs2025/USDA-Auburn-Su25/GUI")
 import numpy as np
 from numpy.typing import NDArray
 

@@ -20,7 +20,7 @@ def device_simulation():
     """
     #DATA_FILE = r"\Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
     DATA_FILE = r"C:\EPG-Project\Summer\CS-Repository\Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_a01_labeled.csv"
-    #DATA_FILE = r"/Users/cathy/coding/bugs2025/USDA-Auburn-Su25/GUI/test_sharpshooter.csv"
+    #DATA_FILE = r"/Users/cole/coding/bugs2025/USDA-Auburn-Su25/GUI/test_sharpshooter.csv"
     with open(DATA_FILE, newline="") as file:
         reader = csv.reader(file)
         next(reader)  # skip header row
