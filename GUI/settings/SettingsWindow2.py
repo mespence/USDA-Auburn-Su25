@@ -1,8 +1,8 @@
 from PyQt6.QtWidgets import (
-   QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
     QFrame, QLabel, QToolButton, QComboBox, QPushButton, QSizePolicy,
     QSpinBox, QCheckBox, QColorDialog, QLineEdit, QMessageBox, 
-    QSpacerItem, QFileDialog, QGridLayout, QGroupBox
+    QFileDialog, QGridLayout, QGroupBox
 )
 from PyQt6.QtGui import (
     QColor, QIcon, QMouseEvent,
@@ -10,6 +10,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtCore import Qt, QSize, QSettings
 
 import os
+import json
 from settings.Settings import Settings
 
 class AppearanceTab(QWidget):
@@ -199,16 +200,24 @@ class AppearanceTab(QWidget):
 
         label_layout.addWidget(self.delete_button, alignment= Qt.AlignmentFlag.AlignLeft)
 
+        self.label_edit_panel = QWidget()
+        self.label_edit_panel.setLayout(label_layout)
+
         group = QGroupBox()
-        group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        group.setLayout(label_layout)
+        group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         group.setStyleSheet("""
             QGroupBox {
                 border: 1px solid #888;
                 border-radius: 6px;
                 margin-top: 6px;
+                background-color: transparent;
             }
         """)
+
+        group_layout = QVBoxLayout(group)
+        group_layout.setContentsMargins(0, 0, 0, 0)
+        group_layout.addWidget(self.label_edit_panel)
+        
 
         # Wrap the grid in an HBox with indent
         grid_wrapper = QHBoxLayout()
@@ -217,6 +226,7 @@ class AppearanceTab(QWidget):
         grid_wrapper.addStretch()
 
         layout.addLayout(grid_wrapper)
+        layout.addStretch()
         layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         # Static interactable widgets
@@ -253,12 +263,14 @@ class AppearanceTab(QWidget):
             )
 
     def sync_ui_from_settings(self):
-        self.theme_combo.setCurrentText(Settings.plot_theme["NAME"])
+        self.theme_combo.setCurrentText(Settings.plot_theme["NAME"].title())
         self.set_data_line_color_button(Settings.data_line_color)
         self.width_spinbox.setValue(Settings.data_line_width)
 
         for attr, checkbox in self.checkboxes.items():
+            checkbox.blockSignals(True)
             checkbox.setChecked(getattr(Settings, attr))
+            checkbox.blockSignals(False)
 
         # Update label selector
         self.label_selector.blockSignals(True)
@@ -281,23 +293,23 @@ class AppearanceTab(QWidget):
             f"background-color: {color.name()}; color: {text_color};"
         )
 
-    def on_theme_changed(self, value: str):
-        #Settings.plot_theme = Settings.PLOT_LIGHT if value == "Light" else Settings.PLOT_DARK
+    def on_theme_changed(self):
         self.update_label_color_wrapper_style()
         self.refresh_label_color_preview()
-        #self.parent().parent().save_setting("plot_theme", Settings.plot_theme)
 
-    # def on_width_changed(self, value: int):
-    #     Settings.data_line_width = value
-    #     self.parent().parent().save_setting("data_line_with", value)
-
-    # def on_checkbox_toggled(self, attr_name: str, value: bool):
-    #     setattr(Settings, attr_name, value)
-    #     self.parent().parent().save_setting(attr_name, value)
 
     def load_label_info(self, label: str):
+        visible = bool(label and label in Settings.label_colors)
+        self.label_edit_panel.setVisible(visible)
+        if not visible:
+            return
+
+        self.label_color_wrapper.setVisible(True)
+        self.name_edit.setVisible(True)
+        self.rename_button.setVisible(True)
+        self.delete_button.setVisible(True)
         self.name_edit.setText(label)
-        color = Settings.get_label_color(label)
+        color = QColor(Settings.label_colors[label][Settings.plot_theme["NAME"]])
         self.label_color_button.setText(color.name().upper())
         text_color = self.get_contrasting_text_color(color)
         border_color = Settings.plot_theme["TRANSITION_LINE_COLOR"]
@@ -310,10 +322,12 @@ class AppearanceTab(QWidget):
                 padding: 4px 12px;
             }}
             QPushButton:hover {{
-                background-color: {color.lighter(120).name()};
+                background-color: #8C8C8C;
+                color: #FFFFFF;
             }}
             QPushButton:pressed {{
-                background-color: {color.darker(120).name()};
+                background-color: #1E1E1E;
+                color: #FFFFFF;
             }}
         """)
         self.update_rename_button_state()
@@ -338,15 +352,14 @@ class AppearanceTab(QWidget):
         if new_color.isValid():
             Settings.set_label_color(label, new_color)
             self.load_label_info(label)
-            self.parent().save_setting("label_colors", Settings.label_colors)
+            self.parent().parent().parent().save_setting("label_colors", Settings.label_colors)
                 
 
     def pick_line_color(self):
         color = QColorDialog.getColor(initial=Settings.data_line_color, parent=self)
         if color.isValid():
             self.set_data_line_color_button(color)
-            #print("data_line_color set to:", color.name())
-            self.parent().parent().save_setting("data_line_color", color)
+            self.parent().parent().parent().save_setting("data_line_color", color)
 
     def rename_label(self):
         old_name = self.label_selector.currentText()
@@ -404,8 +417,7 @@ class AppearanceTab(QWidget):
 
     def refresh_label_color_preview(self):
         current_label = self.label_selector.currentText()
-        if current_label:
-            self.load_label_info(current_label)
+        self.load_label_info(current_label)
 
     def get_contrasting_text_color(self, bg_color: QColor) -> str:
         r, g, b = bg_color.red(), bg_color.green(), bg_color.blue()
@@ -482,7 +494,8 @@ class FolderRow(QWidget):
             QFileDialog.Option.ShowDirsOnly
         )
         if path:
-            self.parent().parent().parent().save_setting(self.setting_attr, path)
+            self.parent().parent().parent().parent().save_setting(self.setting_attr, path)
+            self.path_edit.setText(path)
 
 class EPGSettingsTab(QWidget):
     def __init__(self, parent=None):
@@ -558,16 +571,18 @@ class SidebarButton(QToolButton):
         super().mouseReleaseEvent(event)
 
 
-class SettingsWindow(QWidget):
+class SettingsWindow(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("SCIDO Settings")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(700, 700)
 
         self.settings = QSettings("USDA", "SCIDO")
+        self.load_settings(init = True)
 
         # === Main Layout ===
-        main_layout = QHBoxLayout(self)
+        central = QWidget()
+        main_layout = QHBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
@@ -593,41 +608,6 @@ class SettingsWindow(QWidget):
 
         self.sidebar_layout.addStretch()
 
-        reset_button = QPushButton("Reset Settings")
-        reset_button.setStyleSheet("""
-            QPushButton {
-                background-color: #3a3a3a;
-                color: white;
-                padding: 6px 10px 6px 10px;
-                border: none;
-                font-size: 10pt;
-                font-weight: normal;
-            }
-            QPushButton:hover {
-                background-color: #4a4a4a;
-            }
-        """)
-        reset_button.clicked.connect(self.reset_settings)
-        self.sidebar_layout.addWidget(reset_button)
-
-
-        close_button = QPushButton("Close")
-        close_button.setStyleSheet("""
-            QPushButton {
-                background-color: #444;
-                color: white;
-                padding: 6px 10px 6px 10px;
-                border: none;
-                font-size: 10pt;
-                font-weight: normal;
-            }
-            QPushButton:hover {
-                background-color: #555;
-            }
-        """)
-        close_button.clicked.connect(self.close)
-        self.sidebar_layout.addWidget(close_button)
-
         # === Stacked Content Area ===
         self.stack = QStackedWidget(parent=self)
         self.stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -640,6 +620,63 @@ class SettingsWindow(QWidget):
          # === Final Layout Assembly ===
         main_layout.addWidget(self.sidebar_frame, stretch=0)
         main_layout.addWidget(self.stack, stretch=1)
+
+            # === Footer ===
+        footer = QFrame()
+        footer.setStyleSheet("background-color: #2c2c2c; border-top: 1px solid palette(light);")
+        footer.setFixedHeight(60)
+
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(20, 10, 20, 10)
+        footer_layout.setSpacing(10)
+
+        # Left: Reset Button
+        reset_button = QPushButton("Reset Settings")
+        reset_button.setStyleSheet("""
+            QPushButton {
+                background-color: #444;
+                color: white;
+                padding: 8px 20px;
+                border: none;
+                font-weight: normal;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #555;
+            }
+        """)
+        reset_button.clicked.connect(self.reset_settings)
+        reset_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        footer_layout.addWidget(reset_button)
+        footer_layout.addStretch()
+
+        # Right: OK Button
+        ok_button = QPushButton("OK")
+        ok_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        ok_button.setStyleSheet("""
+            QPushButton {
+                background-color: #0078D7;
+                color: white;
+                padding: 8px 32px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #2093FE;
+            }
+        """)
+        ok_button.clicked.connect(self.close)
+        footer_layout.addWidget(ok_button)
+
+        # Wrap main + footer in a vertical layout
+        wrapper = QVBoxLayout()
+        wrapper.setContentsMargins(0, 0, 0, 0)
+        wrapper.setSpacing(0)
+        wrapper.addLayout(main_layout, stretch=1)
+        wrapper.addWidget(footer)
+
+        central.setLayout(wrapper)
+        self.setCentralWidget(central)
 
     def switch_tab(self, index: int):
         self.stack.setCurrentIndex(index)
@@ -656,10 +693,12 @@ class SettingsWindow(QWidget):
             self.save_setting(key, val)
 
         getter_signal.connect(update)
-        update() # call on init to ensure sync
+        #update() # call on init to ensure sync
 
     
     def save_setting(self, key: str, value):
+        import traceback
+        print(f"[save_setting] {key} = {value} (during init: {'AppearanceTab' in ''.join(traceback.format_stack())})")
         setattr(Settings, key, value)
 
         if isinstance(value, QColor):
@@ -673,51 +712,79 @@ class SettingsWindow(QWidget):
         else:
             value_to_store = value
 
-        print(f"Setting {key} to {value_to_store}.")
         self.settings.setValue(key, value_to_store)
+        self.settings.sync()
 
     def save_settings(self):
         for key in Settings.saved_settings.keys():
             self.save_setting(key, getattr(Settings, key))
-        self.settings.sync()   
+        self.settings.sync()
+        print("Saving all settings")   
         
-    def load_settings(self, log: bool = False):
-        if not self.settings.allKeys() and log:
-            print("No settings file found, using default values.")
-            return
-        
+    def load_settings(self, log: bool = False, init = False):
+        use_defaults = not self.settings.allKeys()
+
+        if use_defaults:
+            if log:
+                print("No settings file found, loading defaults from JSON.")
+            defaults_path = os.path.join(os.path.dirname(__file__), "default_settings.json")
+            with open(defaults_path, "r", encoding="utf-8") as f:
+                defaults = json.load(f)
+        else:
+            defaults = {}
+
         for key, expected_type in Settings.saved_settings.items():
+            # Load from QSettings or fallback to default
+            if self.settings.contains(key):
+                raw_val = self.settings.value(key)
+            else:
+                raw_val = defaults.get(key, getattr(Settings, key))
+
+            # Handle type casting appropriately
+            if expected_type is bool:
+                # Fix string->bool issues
+                if isinstance(raw_val, str):
+                    value = raw_val.lower() in ("true", "1", "yes")
+                else:
+                    value = bool(raw_val)
             if expected_type is QColor:
-                color_str = self.settings.value(key, getattr(Settings, key).name())
-                value = QColor(color_str)
+                value = QColor(raw_val)
             elif key == "label_colors":
-                raw_dict = self.settings.value(key, {})
+                # Regenerate random colors for currently plotted labels
+                value = {}
+                try:
+                    datawindow = self.parent().label_tab.datawindow
+                    current_labels = sorted({label_area.label for label_area in datawindow.labels})
+                    for label in current_labels:
+                        value[label] = Settings.generate_label_color_dict()
+                except AttributeError:
+                    value = {}  # fallback    
+            elif key == "plot_theme":
                 value = {
-                    label: {
-                        "LIGHT": v.get("LIGHT", "#000000"), # fallback to black
-                        "DARK": v.get("DARK", "#000000"),
-                    }
-                    for label, v in raw_dict.items()
+                    k: raw_val.get(k, Settings.PLOT_LIGHT[k])
+                    for k in Settings.PLOT_LIGHT
                 }
             else:
-                value = self.settings.value(key, getattr(Settings, key), type=expected_type)
+                value = expected_type(raw_val)
 
             setattr(Settings, key, value)
 
-        self.appearance_tab.sync_ui_from_settings()
-        self.epg_tab.sync_ui_from_settings()
+        if not init:
+            self.appearance_tab.sync_ui_from_settings()
+            self.epg_tab.sync_ui_from_settings()
         
     def reset_settings(self):
         reply = QMessageBox.question(
             self,
             "Reset Settings",
-            "Are you sure you want to reset all settings to defaults?",
+            "Are you sure you want to reset all settings to defaults?\nThis includes all waveform colors.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.Yes:
             self.settings.clear()
             self.settings.sync()
             self.load_settings()
+            self.appearance_tab.refresh_label_color_preview()
     
     def closeEvent(self, event):
         self.save_settings()

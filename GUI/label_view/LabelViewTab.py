@@ -181,7 +181,7 @@ class LabelViewTab(QWidget):
         self.settings_window.line_color_changed.connect(self.datawindow.change_line_color)
         self.settings_window.duration_toggled.connect(self.datawindow.set_durations_visible)
         self.settings_window.destroyed.connect(lambda: setattr(self, 'settings_window', None))
-        self.settings_window.load_settings()
+        #self.settings_window.load_settings()
 
         #self.openSettings()
 

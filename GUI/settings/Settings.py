@@ -57,27 +57,12 @@ class Settings:
         If not yet defined, generates a light and dark variant automatically.
         """
         label = label.upper()
-        #theme_labels = Settings.label_colors[Settings.theme_name]
+
         if label not in Settings.label_colors:
-            # Generate new color for label
-            hue = QRandomGenerator.global_().bounded(0, 360)
-            saturation_light = QRandomGenerator.global_().bounded(150, 256)
-            saturation_dark = saturation_light - 60
-            lightness_light = 220
-            lightness_dark = 30
+            Settings.label_colors[label] = Settings.generate_label_color_dict()
 
-            light_color = QColor()
-            light_color.setHsl(hue, saturation_light, lightness_light)
-
-            dark_color = QColor()
-            dark_color.setHsl(hue, saturation_dark, lightness_dark)
-
-            Settings.label_colors[label] = {
-                "LIGHT": light_color.name(),
-                "DARK":  dark_color.name(),
-            }
-
-        return QColor(Settings.label_colors[label][Settings.plot_theme["NAME"]])
+        theme = Settings.plot_theme["NAME"]
+        return QColor(Settings.label_colors[label][theme])
 
     @staticmethod
     def set_label_color(label: str, color: QColor) -> None:
@@ -97,6 +82,39 @@ class Settings:
             "LIGHT": color.name() if Settings.plot_theme["NAME"] == "LIGHT" else QColor(*inverted_rgb).name(),
             "DARK":  color.name() if Settings.plot_theme["NAME"] == "DARK" else QColor(*inverted_rgb).name(),
         }
+    @staticmethod
+    def generate_label_color_dict():
+        """
+        Generate a random color pair (LIGHT and DARK theme) for a waveform label.
+
+        Colors are based on a shared hue but with different saturation and lightness:
+        - LIGHT theme uses high lightness and saturation.
+        - DARK theme uses lower lightness and slightly reduced saturation.
+
+        Returns:
+            dict: A dictionary with keys "LIGHT" and "DARK", each mapping to a hex string:
+                {
+                    "LIGHT": "#A1B2C3",
+                    "DARK": "#102030"
+                }
+        """
+        hue = QRandomGenerator.global_().bounded(0, 360)
+        saturation_light = QRandomGenerator.global_().bounded(150, 256)
+        saturation_dark = max(0, saturation_light - 60)
+        lightness_light = 220
+        lightness_dark = 30
+
+        light_color = QColor()
+        light_color.setHsl(hue, saturation_light, lightness_light)
+
+        dark_color = QColor()
+        dark_color.setHsl(hue, saturation_dark, lightness_dark)
+
+        return {
+            "LIGHT": light_color.name(),
+            "DARK": dark_color.name()
+        }
+
 
     @staticmethod
     def rename_label(old: str, new: str):

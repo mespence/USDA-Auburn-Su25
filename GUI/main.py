@@ -28,7 +28,7 @@ from settings.Settings import Settings
 
 from FileSelector import FileSelector
 from utils.UploadFileDialog import UploadFileDialog
-from settings.SettingsWindow import SettingsWindow
+from settings.SettingsWindow2 import SettingsWindow
 
 from live_view.LiveViewTab import LiveViewTab
 from label_view.LabelViewTab import LabelViewTab
@@ -75,6 +75,13 @@ class MainWindow(QMainWindow):
 
         self.live_view_tab = LiveViewTab(self, settings=settings)
         self.label_tab = LabelViewTab(self)
+
+        self.settings_window = SettingsWindow(self)
+        self.settings_window.load_settings()
+        if Settings.backup_recording_directory is None:
+            self.settings_window.save_setting("backup_recording_directory", os.getcwd())
+        if Settings.default_recording_directory is None:
+           self.settings_window.save_setting("default_recording_directory", os.getcwd())
 
         self.initUI()
 
@@ -174,7 +181,9 @@ class MainWindow(QMainWindow):
 
 
     def open_settings(self):
-        pass # TODO: write
+        self.settings_window.show()
+        self.settings_window.raise_()
+        self.settings_window.activateWindow()
 
     def export_comments_from_current_tab(self):
         current_widget = self.tabs.currentWidget()
@@ -250,11 +259,6 @@ class MainWindow(QMainWindow):
             self.baselineCursorButton.setText("Change to Baseline Cursor")
         elif self.datawindow.cursor_state == 1:
             self.baselineCursorButton.setText("Change to Normal Cursor")
-
-    def openSettings(self):
-        self.settings_window.show()
-        self.settings_window.raise_()
-        self.settings_window.activateWindow()
 
     def openSliders(self):
         is_visible = self.slider_panel.isVisible()
@@ -388,7 +392,7 @@ def load_fonts():
 
 
 def start_main_application(app_instance, settings=None, file=None, channel_index = None):
-    Settings()
+    #Settings()
     #app.setStyle("Fusion")
 
     load_fonts()

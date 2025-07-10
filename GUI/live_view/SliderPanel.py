@@ -266,7 +266,7 @@ class SliderPanel(QWidget):
             #self.send_control_update("ddsa", 1)
 
             self.send_control_update("ddsa", "-1")
-            self.send_control_update("excita\tionFrequency", "0")
+            self.send_control_update("excitationFrequency", "0")
 
         elif selected_mode == "AC":
             for widget in self.slider_widgets_map["ddsa"]:

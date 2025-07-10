@@ -13,9 +13,9 @@
     "data_line_width": 2,
 
     "show_h_grid": true,
-    "show_v_grid": true,
+    "show_v_grid": false,
     "show_labels": true,
-    "show_durations": true,
+    "show_durations": false,
     "show_comments": true,
 
     "default_recording_directory": null,

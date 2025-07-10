@@ -309,13 +309,15 @@ class PanZoomViewBox(ViewBox):
                 left_touching = True
         else:
             left_end = 0
-            left_touching = True
+            left_touching = False
 
         if idx < len(self.datawindow.labels) - 1:
-            right_label = self.datawindow.labels[idx + 1]
+            right_start = self.datawindow.labels[idx + 1].start_time
             this_end = label_area.start_time + label_area.duration
-            if abs(right_label.start_time - this_end) < 1e-4:
+            if abs(right_start - this_end) < 1e-4:
                 right_touching = True
+        else:
+            right_start = self.datawindow.df['time'].iloc[-1] if not self.df.empty else None # end of data
 
         snap_left.setEnabled(not left_touching)
         snap_right.setEnabled(not right_touching)
@@ -332,12 +334,10 @@ class PanZoomViewBox(ViewBox):
             self.datawindow.add_comment_at_click(x)
             print("add comment")
         elif selected_action == snap_left:
-            #label_area.duration += label_area.start_time - left_end
             label_area.set_transition_line("left", left_end)
             self.datawindow.selection._attempt_snap_and_merge(label_area.transition_line)
         elif selected_action == snap_right:
-            #label_area.duration += right_label.start_time - this_end
-            label_area.set_transition_line("right", right_label.start_time)
+            label_area.set_transition_line("right", right_start)
             self.datawindow.selection._attempt_snap_and_merge(label_area.right_transition_line)
         else:
             pass
