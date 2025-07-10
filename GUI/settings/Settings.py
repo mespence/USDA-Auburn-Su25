@@ -4,7 +4,7 @@ import os
 
 class Settings:
     PLOT_LIGHT = {
-        "NAME":                     "LIGHT",
+        "NAME":                       "LIGHT",
         "BACKGROUND":             "#F5F5F6",
         "FOREGROUND":             "#111132",
         "AXIS_COLOR":             "#111132",
@@ -13,7 +13,7 @@ class Settings:
     }
 
     PLOT_DARK = {
-        "NAME":                     "DARK",
+        "NAME":                        "DARK",
         "BACKGROUND":             "#1E1E1E",
         "FOREGROUND":             "#888888",
         "AXIS_COLOR":             "#EBEBEB",
