@@ -1,5 +1,4 @@
 from numpy.typing import NDArray
-from queue import Empty
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
@@ -10,7 +9,7 @@ import os
 import threading
 import re
 
-from pyqtgraph import PlotWidget, PlotItem, ScatterPlotItem, PlotDataItem, mkPen, InfiniteLine
+from pyqtgraph import PlotWidget, PlotItem, ScatterPlotItem, PlotDataItem, mkPen, InfiniteLine, TextItem
 
 from PyQt6.QtCore import QTimer, Qt, QPointF
 from PyQt6.QtGui import QWheelEvent, QMouseEvent, QCursor, QKeyEvent, QGuiApplication
@@ -19,7 +18,7 @@ from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel, QDialogB
 from utils.PanZoomViewBox import PanZoomViewBox
 from utils.CommentMarker import CommentMarker
 from utils.TextEdit import TextEdit
-from settings.Settings import Settings
+from settings import settings
 
 class LiveDataWindow(PlotWidget):
     """
@@ -34,7 +33,7 @@ class LiveDataWindow(PlotWidget):
     - Periodic auto-backup of waveform and comments.
     - Export functionality for waveform data and comments.
     """
-    def __init__(self, parent = None, settings=None):
+    def __init__(self, parent = None):
         """
         Initializes the LiveDataWindow widget.
 
@@ -50,30 +49,24 @@ class LiveDataWindow(PlotWidget):
         self.viewbox.datawindow = self
         self.viewbox.menu = None  # disable default menu
 
+        settings.settingChanged.connect(self.on_setting_changed)
+
+        self.compression = 0
+        self.compression_text = TextItem(
+            text=f"Compression: {self.compression: .1f}", color="black", anchor=(0, 0)
+        )
+        self.compression_text.setPos(QPointF(80, 15))
+        self.scene().addItem(self.compression_text)
+
         # --- INITIAL SETTINGS ---
-        self.settings = settings
-
-        if self.settings:
-            self.recording_filename = self.settings.get("filename")
-            self.min_voltage = self.settings.get("min_voltage")
-            self.max_voltage = self.settings.get("max_voltage")
-
-            self.viewbox.setYRange(self.min_voltage, self.max_voltage, padding=0)
-
-            if self.recording_filename:
-                # remember saving directory
-                self.base_data_directory = os.path.dirname(self.recording_filename)
-        else:
-            # if no initial filename/path, use cwd
-            self.recording_filename = None
-            self.viewbox.setYRange(-1, 1, padding=0)
-            self.base_data_directory = Settings.default_recording_directory
+        self.min_voltage = settings.get("default_min_voltage")
+        self.max_voltage = settings.get("default_max_voltage")
+        self.viewbox.setYRange(self.min_voltage, self.max_voltage, padding=0)
+        self.base_data_directory = settings.get("default_recording_directory")
 
         # --- PERIODIC BACKUP SETTINGS ---
         # backups stored wherever .exe opened
-        self.periodic_backup_dir = "backups"
-        self.periodic_backup_dir = os.path.join(Settings.backup_recording_directory, self.periodic_backup_dir)
-        os.makedirs(self.periodic_backup_dir, exist_ok=True)
+        self.periodic_backup_dir = settings.get("backup_recording_directory")
 
         # base names for the backup files
         self.waveform_backup_base = "waveform_backup.csv"
@@ -142,7 +135,7 @@ class LiveDataWindow(PlotWidget):
         self.plot_item.addItem(self.scatter)
         self.plot_item.setLabel("bottom", "<b>Time [s]</b>", color="black")
         self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color="black")
-        self.plot_item.showGrid(x=True, y=True)
+        self.plot_item.showGrid(x=settings.get("show_v_grid"), y=settings.get("show_h_grid"))
         self.plot_item.layout.setContentsMargins(30, 30, 30, 20)
         self.plot_item.disableAutoRange() # no autoscaling
 
@@ -185,7 +178,47 @@ class LiveDataWindow(PlotWidget):
         self.moving_comment: CommentMarker = None
         
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.update_plot_theme()
         self.update_plot()
+
+
+    def update_plot_theme(self):
+        plot_theme = settings.get("plot_theme") 
+        self.setBackground(plot_theme["BACKGROUND"])
+
+        self.setTitle("<b>Live Waveform Viewer</b>", size="12pt", color=plot_theme["FONT_COLOR_1"])
+        self.plot_item.setLabel("bottom", "<b>Time [s]</b>", color=plot_theme["FONT_COLOR_1"])
+        self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color=plot_theme["FONT_COLOR_1"])
+
+        self.compression_text.setColor(plot_theme["FONT_COLOR_1"])
+
+        self.plot_item.getAxis("left").setPen(plot_theme["AXIS_COLOR"])
+        self.plot_item.getAxis("bottom").setPen(plot_theme["AXIS_COLOR"])
+        self.plot_item.getAxis("right").setPen(plot_theme["AXIS_COLOR"])
+        self.plot_item.getAxis("top").setPen(plot_theme["AXIS_COLOR"])
+        self.plot_item.getAxis('top').setTicks([[]])  # disable ticks
+        self.plot_item.getAxis('right').setTicks([[]])
+
+        for _, comment in self.comments.items():
+            comment.update_color()
+
+    def on_setting_changed(self, key: str, value):
+        if key == "show_h_grid":
+            self.plotItem.showGrid(y=value)
+        elif key == "show_v_grid":
+            self.plotItem.showGrid(x=value)
+        elif key == "show_comments":
+            for comment in self.comments.items():
+                comment.set_visible(value)
+        elif key == "plot_theme":
+            self.update_plot_theme()
+        elif key == "data_line_color":
+            self.curve.setPen(mkPen(color=value))
+            self.scatter.setPen(mkPen(color=value))
+        elif key == "data_line_width":
+            self.curve.setPen(mkPen(width=value))
+            self.scatter.setPen(mkPen(width=value))
+
 
     def closeEvent(self, event):
         """
@@ -428,6 +461,40 @@ class LiveDataWindow(PlotWidget):
         # update last rendered range
         self.last_rendered_x_range = current_x_range
 
+    def update_compression(self) -> None:
+        """
+        Calculates the compression level based on the current zoom level and 
+        updates the compression readout.
+        A compresion of 1 corresponds to 0.2 sec/division.
+
+        NOTE: WinDaq also has 'negative' compression levels for
+        high levels of zooming out. We do not implement those here.
+        """
+        if not self.isVisible():
+            return  # don't run prior to initialization
+
+        # Get the pixel distance of one second
+        plot_width = self.viewbox.geometry().width() * self.devicePixelRatioF()
+
+        (x_min, x_max), _ = self.viewbox.viewRange()
+        time_span = x_max - x_min
+
+        if time_span == 0:
+            return float("inf")  # Avoid division by zero
+
+        pix_per_second = plot_width / time_span
+        second_per_pix = 1 / (pix_per_second)
+
+        # Convert to compression based on formula derived from experimenting with WinDaq
+        self.compression = second_per_pix * 125
+        if self.compression < 1:
+            compression_str = round(self.compression, 2)
+            compression_str = 1.0 if compression_str == "1.00" else compression_str
+        else:
+            compression_str = round(self.compression, 1)
+        
+        self.compression_text.setText(f"Compression Level: {compression_str}")  
+
     def set_live_mode(self, enabled: bool):
         """
         Enables or disables live auto-scrolling mode.
@@ -600,6 +667,7 @@ class LiveDataWindow(PlotWidget):
     
         # create comment
         new_marker = CommentMarker(comment_time, text, self)
+
         self.comments[comment_time] = new_marker
         self.update_plot()
 
@@ -802,6 +870,7 @@ class LiveDataWindow(PlotWidget):
         comments_df = self.df[~self.df["comments"].isnull()]
         for time, text in zip(comments_df["time"], comments_df["comments"]):
             marker = CommentMarker(time, text, self, icon_path=r"message.svg")
+            
             self.comments[time] = marker
         
         return

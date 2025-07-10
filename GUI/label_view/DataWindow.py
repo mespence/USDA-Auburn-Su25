@@ -21,9 +21,9 @@ from PyQt6.QtWidgets import (
     QPushButton, QVBoxLayout, QLabel, QDialog, QMessageBox, QMenu, QDialogButtonBox, QFileDialog
 )
 
+from settings import settings
 from EPGData import EPGData
 from utils.PanZoomViewBox import PanZoomViewBox
-from settings.Settings import Settings
 from label_view.LabelArea import LabelArea
 from utils.CommentMarker import CommentMarker
 from label_view.SelectionManager import Selection
@@ -60,6 +60,8 @@ class DataWindow(PlotWidget):
         self.viewbox.menu = None  # disable default menu
         self.viewbox.sigRangeChanged.connect(self.update_plot)  # update plot on viewbox change
 
+        settings.settingChanged.connect(self.on_setting_changed)
+
         # DATA
         self.epgdata: EPGData = self.parent().parent().epgdata
         self.file: str = None
@@ -67,9 +69,9 @@ class DataWindow(PlotWidget):
         self.init_df = None
         
         self.xy_data: list[NDArray] = [None, None]  # x and y data actually rendered to the screen
-        self.curve: PlotDataItem = PlotDataItem(antialias=False, pen = Settings.data_line_color) 
+        self.curve: PlotDataItem = PlotDataItem(antialias=False, pen = settings.get("data_line_color")) 
         self.scatter: ScatterPlotItem = ScatterPlotItem(
-            symbol="o", size=4, brush="blue"
+            symbol="o", size=4, brush=settings.get("data_line_color")
         )  # the discrete points shown at high zooms
         self.initial_downsampled_data: list[NDArray, NDArray]  # cache of the dataset after the initial downsample
         self.zero_line = InfiniteLine(
@@ -91,7 +93,7 @@ class DataWindow(PlotWidget):
         self.zoom_text: TextItem = TextItem()
         #self.transitions: list[tuple[float, str]] = []   # the x-values of each label transition
         self.transition_mode: str = 'labels'
-        self.labels: list = []  # the list of LabelAreas
+        self.labels: list[LabelArea] = []  # the list of LabelAreas
 
         # SELECTION
         self.selection: Selection = Selection(self)
@@ -142,17 +144,17 @@ class DataWindow(PlotWidget):
         self.chart_height: int = 400
         self.setGeometry(0, 0, self.chart_width, self.chart_height)
 
-        self.setBackground("white")
-        self.setTitle("<b>SCIDO Waveform Editor</b>", color="black", size="12pt")
+        #self.setBackground("white")
+        #self.setTitle("<b>SCIDO Waveform Editor</b>", color="black", size="12pt")
 
         self.viewbox.setBorder(mkPen("black", width=3))
 
         self.plot_item.addItem(self.curve)
         self.plot_item.addItem(self.scatter)
         self.viewbox.addItem(self.zero_line)
-        self.plot_item.setLabel("bottom", "<b>Time [s]</b>", color="black")
-        self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color="black")
-        self.plot_item.showGrid(x=Settings.show_h_grid, y=Settings.show_v_grid)
+        #self.plot_item.setLabel("bottom", "<b>Time [s]</b>", color="black")
+        #self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color="black")
+        self.plot_item.showGrid(x=settings.get("show_v_grid"), y=settings.get("show_h_grid"))
         self.plot_item.layout.setContentsMargins(30, 30, 30, 20)
         self.plot_item.enableAutoRange(False)
 
@@ -166,8 +168,6 @@ class DataWindow(PlotWidget):
         ## DEBUG/DEV TOOLS
         self.enable_debug = False
         self.debug_boxes = []
-
-
 
     def deferred_init(self) -> None:
         """
@@ -188,6 +188,68 @@ class DataWindow(PlotWidget):
         self.scene().addItem(self.zoom_text)
 
         self.viewbox.setXRange(0,10)
+        self.update_plot_theme()
+
+
+    def update_plot_theme(self):
+        plot_theme = settings.get("plot_theme") 
+        self.setBackground(plot_theme["BACKGROUND"])
+
+        self.setTitle("<b>Waveform Label Editor</b>", size="12pt", color=plot_theme["FONT_COLOR_1"])
+        self.plot_item.setLabel("bottom", "<b>Time [s]</b>", color=plot_theme["FONT_COLOR_1"])
+        self.plot_item.setLabel("left", "<b>Voltage [V]</b>", color=plot_theme["FONT_COLOR_1"])
+
+        self.compression_text.setColor(plot_theme["FONT_COLOR_1"])
+        self.zoom_text.setColor(plot_theme["FONT_COLOR_1"])
+
+        self.plot_item.getAxis("left").setPen(plot_theme["AXIS_COLOR"])
+        self.plot_item.getAxis("bottom").setPen(plot_theme["AXIS_COLOR"])
+        self.plot_item.getAxis("right").setPen(plot_theme["AXIS_COLOR"])
+        self.plot_item.getAxis("top").setPen(plot_theme["AXIS_COLOR"])
+        self.plot_item.getAxis('top').setTicks([[]])  # disable ticks
+        self.plot_item.getAxis('right').setTicks([[]])
+
+
+        for label_area in self.labels:
+            label_area.refreshColor()
+
+        for _, comment in self.comments.items():
+            comment.update_color()
+
+        self.selection._update_default_style()
+
+    def on_setting_changed(self, key: str, value):
+        if key == "show_h_grid":
+            self.plotItem.showGrid(y=value)
+        elif key == "show_v_grid":
+            self.plotItem.showGrid(x=value)
+        elif key == "show_durations":
+            for label in self.labels:
+                label.set_duration_visible(value)
+        elif key == "show_labels":
+            for label_area in self.labels:
+                label_area.setVisible(value)
+                if value:
+                    label_area.update_label_area()
+        elif key == "show_comments":
+            for _, comment in self.comments.items():
+                comment.set_visible(value)
+        elif key == "plot_theme":
+            self.update_plot_theme()
+        elif key in ("data_line_color", "data_line_width"):
+            color = settings.get("data_line_color")
+            width = settings.get("data_line_width")
+            pen = mkPen(color=color, width=width)
+            self.curve.setPen(pen)
+            self.scatter.setPen(pen)
+        elif key == "label_colors":
+            for label_area in self.labels:
+                label_area.refreshColor()
+                label_area.update_label_area()
+
+
+        
+
 
     def checkForUnsavedChanges(self) -> bool:
         self.update_labels_column()
@@ -341,7 +403,7 @@ class DataWindow(PlotWidget):
                 label_area.setVisible(False)     
                 continue           
 
-            label_area.setVisible(True)
+            label_area.setVisible(settings.get("show_labels"))
             label_area.update_label_area()
 
         self.viewbox.update()  # or anything that redraws
@@ -492,6 +554,10 @@ class DataWindow(PlotWidget):
         # find nearest time clicked
         nearest_idx, comment_time = self.find_nearest_idx_time(click_time)
         existing = self.df.at[nearest_idx, 'comments']
+
+        if pd.isna(existing) or str(existing).strip().lower() == "nan":
+            existing = False
+
         
         # if there's already a comment at the time clicked, give an option to replace
         if existing and str(existing).strip():

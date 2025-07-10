@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 import os
 import sys
-from settings.Settings import Settings
+from settings import settings
 from utils.WindaqFileDialog import WindaqFileDialog
 
 class UploadFileDialog(QDialog):
@@ -59,7 +59,7 @@ class UploadFileDialog(QDialog):
         file_dialog.setNameFilter("EPG Files (*.csv *.wdq *.daq);;All Files (*)")
         file_dialog.setViewMode(QFileDialog.ViewMode.Detail)
 
-        file_dialog.setDirectory(Settings.default_recording_directory)
+        file_dialog.setDirectory(settings.get("default_recording_directory"))
 
         if file_dialog.exec(): # Show the dialog
             selected_files = file_dialog.selectedFiles()

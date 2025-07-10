@@ -18,7 +18,7 @@ from live_view.socket.EPGSocket import SocketClient, SocketServer
 
 
 class LiveViewTab(QWidget):
-    def __init__(self, parent=None, settings=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.connection_indicator = ConnectionIndicator()
 
@@ -26,7 +26,7 @@ class LiveViewTab(QWidget):
         self.total_pause_time: float = 0  # the cumulative length of any pauses
         self.pause_start_time: float = None # unix timestamp of the most recent pause
 
-        self.datawindow = LiveDataWindow(self, settings=settings)
+        self.datawindow = LiveDataWindow(self)
         self.datawindow.getPlotItem().hideButtons()
 
 
@@ -131,8 +131,16 @@ class LiveViewTab(QWidget):
         top_controls.addWidget(self.connection_indicator)
         top_controls.addWidget(self.slider_button)
 
+        top_controls_widget = QWidget()
+        top_controls_widget.setLayout(top_controls)
+        top_controls_widget.setStyleSheet("""
+            QWidget {
+                border-bottom: 1px solid #808080;
+            }
+        """)
+
         left_layout = QVBoxLayout()
-        left_layout.addLayout(top_controls)
+        left_layout.addWidget(top_controls_widget)
         left_layout.addWidget(self.datawindow)
 
         main_layout = QHBoxLayout()

@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QGraphicsRectItem
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QFont, QFontMetricsF, QPen, QColor
 
-from settings.Settings import Settings
+from settings import settings
 
 class LabelArea:
     """
@@ -74,14 +74,14 @@ class LabelArea:
         self.text_metrics = QFontMetricsF(font)
 
         self.label = label   
-        self.label_text = TextItem(label, color='black', anchor=(0.5, 0.5))
+        self.label_text = TextItem(label, color=settings.get("plot_theme")["FONT_COLOR_1"], anchor=(0.5, 0.5))
         self.label_text.setFont(font)
         self.label_text.setPos(centered_x, label_y)
         
         self.viewbox.addItem(self.label_text)
 
         self.duration = dur
-        self.duration_text = TextItem(f"{dur:.2f}", color='black', anchor=(0.5, 0.5))
+        self.duration_text = TextItem(f"{dur:.2f}", color=settings.get("plot_theme")["FONT_COLOR_1"], anchor=(0.5, 0.5))
         self.duration_text.setFont(font)
         self.duration_text.setPos(centered_x, duration_y)
         self.viewbox.addItem(self.duration_text)
@@ -91,7 +91,7 @@ class LabelArea:
         self.transition_line = InfiniteLine(
             pos=time,
             angle=90,  # vertical
-            pen=mkPen(color='black', width=2),
+            pen=mkPen(color=settings.get("plot_theme")["TRANSITION_LINE_COLOR"], width=),
             hoverPen=None,
             movable=False,
         )
@@ -101,7 +101,7 @@ class LabelArea:
         self.area = LinearRegionItem(
             values = (time, time + dur),
             orientation='vertical',
-            brush=mkBrush(color=Settings.get_label_color(self.label)),
+            brush=mkBrush(color=settings.get_label_color(self.label)),
             hoverBrush=None,
             movable=False,
         )
@@ -119,7 +119,7 @@ class LabelArea:
 
         #QApplication.processEvents()
 
-        self.set_duration_visible(Settings.show_durations)
+        self.set_duration_visible(settings.get("show_durations"))
 
         #self.viewbox.sigTransformChanged.connect(self.update_label_area)   
 
@@ -152,6 +152,18 @@ class LabelArea:
                 self.viewbox.removeItem(self.label_debug_box)
             if hasattr(self, "duration_debug_box"):
                 self.viewbox.removeItem(self.duration_debug_box)
+
+    def refreshColor(self) -> None:
+        self.area.setBrush(mkBrush(color=settings.get_label_color(self.label)))
+        self.label_background.setBrush(mkBrush(self.get_background_color()))
+        self.duration_background.setBrush(mkBrush(self.get_background_color()))
+        self.label_text.setColor(settings.get("plot_theme")["FONT_COLOR_1"])
+        self.duration_text.setColor(settings.get("plot_theme")["FONT_COLOR_1"])
+
+        self.transition_line.setPen(mkPen(settings.get("plot_theme")["TRANSITION_LINE_COLOR"]))
+        if self.right_transition_line:
+            self.right_transition_line.setPen(mkPen(settings.get("plot_theme")["TRANSITION_LINE_COLOR"]))
+
 
     def setVisible(self, visible: bool) -> None:
         """
@@ -246,10 +258,10 @@ class LabelArea:
         Returns:
             QColor: The background color.
         """
-        color = self.datawindow.composite_on_white(Settings.get_label_color(self.label)) 
+        color = self.datawindow.composite_on_white(settings.get_label_color(self.label)) 
         color = color.darker(110) # 10% darker
-        h, s, v, f = color.getHsvF()
-        color = QColor.fromHsvF(h, s * 1.8, v, f) # 80% more saturated
+        h, s, v, a = color.getHsvF()
+        color = QColor.fromHsvF(h, min(1.0, s * 1.8), v, a) # up to 80% more saturated
         color.setAlpha(200)
         return color
             
@@ -260,7 +272,10 @@ class LabelArea:
         Redraws and repositions label area elements after zoom/pan or label changes.
 
         Called automatically on `sigTransformChanged` or manually after edits.
-        """        
+        """
+        if not settings.get("show_labels"):
+            return       
+         
         self.viewbox = self.datawindow.viewbox
         _, (y_min, y_max) = self.viewbox.viewRange()
 
@@ -272,7 +287,7 @@ class LabelArea:
         # update text and area if changed
         if self.label_text.toPlainText() != self.label:  # label changed
             self.label_text.setText(self.label)
-            self.area.setBrush(mkBrush(color=Settings.get_label_color(self.label)))
+            self.area.setBrush(mkBrush(color=settings.get_label_color(self.label)))
             self.label_background.setBrush(mkBrush(color=self.get_background_color()))
             self.duration_background.setBrush(mkBrush(color=self.get_background_color()))
 
@@ -317,7 +332,7 @@ class LabelArea:
         label or duration text and backgrounds when they intersect a transition line (uses 
         opacity rather than visibilty to keep allow objects to keep updating.)
 
-        Also checks whether to display duration text based on `Settings.show_durations`.
+        Also checks whether to display duration text based on `settings.show_durations`.
 
         NOTE: hiding <1px can lead to multiple sequential short labels all being
         hidden, which can cause visible white regions, esp. when zoomed out.
@@ -339,7 +354,7 @@ class LabelArea:
         self.label_background.setOpacity(0.0 if  label_overlapping else 1.0)
 
         dur_overlapping = self.duration_bbox.left() < self.start_time < self.duration_bbox.right()        
-        if Settings.show_durations:
+        if settings.get("show_durations"):
             self.duration_text.setOpacity(0.0 if dur_overlapping else 1.0)
             self.duration_background.setOpacity(0.0 if dur_overlapping else 1.0)
         else:
@@ -391,7 +406,7 @@ class LabelArea:
         self.right_transition_line = InfiniteLine(
             pos= self.start_time + self.duration,
             angle=90,  # vertical
-            pen=mkPen(color='black', width=2), # updated below
+            pen=mkPen(color=settings.get("plot_theme")["TRANSITION_LINE_COLOR"], width=2), # updated below
             hoverPen=None,
             movable=False,
         )

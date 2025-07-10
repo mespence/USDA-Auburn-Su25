@@ -24,7 +24,7 @@ from label_view.DataWindow import DataWindow
 from EPGData import EPGData
 from FileSelector import FileSelector
 from label_view.Labeler import Labeler
-from settings.Settings import Settings
+from settings import settings
 
 from FileSelector import FileSelector
 from utils.UploadFileDialog import UploadFileDialog
@@ -56,7 +56,7 @@ class LabelingTask(QRunnable):
 class MainWindow(QMainWindow):
     start_labeling = pyqtSignal()
 
-    def __init__(self, settings = None, file = None, channel_index = None) -> None:
+    def __init__(self, file = None, channel_index = None) -> None:
         if os.name == "nt":  # windows
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
                 "company.app.1"  # needed to set taskbar icon on windows
@@ -73,15 +73,15 @@ class MainWindow(QMainWindow):
         self.channel_index = channel_index
         self.epgdata.load_data(file, self.channel_index)
 
-        self.live_view_tab = LiveViewTab(self, settings=settings)
+        self.live_view_tab = LiveViewTab(self)
         self.label_tab = LabelViewTab(self)
 
         self.settings_window = SettingsWindow(self)
-        self.settings_window.load_settings()
-        if Settings.backup_recording_directory is None:
-            self.settings_window.save_setting("backup_recording_directory", os.getcwd())
-        if Settings.default_recording_directory is None:
-           self.settings_window.save_setting("default_recording_directory", os.getcwd())
+
+        if settings.get("default_recording_directory") is None:
+            settings.set("default_recording_directory", os.getcwd())
+        if settings.get("backup_recording_directory") is None:
+            settings.set("backup_recording_directory", os.getcwd())
 
         self.initUI()
 
@@ -342,7 +342,7 @@ class MainWindow(QMainWindow):
                         except OSError as e:
                             print(f"ERROR: Could not delete old {fpath}: {e}")
         
-
+        settings.save_all()
         super().closeEvent(event)
 
 
@@ -391,7 +391,7 @@ def load_fonts():
         QFontDatabase.addApplicationFont(font)
 
 
-def start_main_application(app_instance, settings=None, file=None, channel_index = None):
+def start_main_application(app_instance, file=None, channel_index = None):
     #Settings()
     #app.setStyle("Fusion")
 
@@ -400,7 +400,7 @@ def start_main_application(app_instance, settings=None, file=None, channel_index
     splash.show()
     app_instance.processEvents()
 
-    window = MainWindow(settings=settings, file=file, channel_index=channel_index)
+    window = MainWindow(file=file, channel_index=channel_index)
         
     # Display Focused
     window.showMaximized()

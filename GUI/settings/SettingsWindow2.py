@@ -11,7 +11,9 @@ from PyQt6.QtCore import Qt, QSize, QSettings
 
 import os
 import json
-from settings.Settings import Settings
+from settings import settings
+
+
 
 class AppearanceTab(QWidget):
     def __init__(self, parent=None):
@@ -28,7 +30,7 @@ class AppearanceTab(QWidget):
 
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(["Light", "Dark"])
-        self.theme_combo.setCurrentText(Settings.plot_theme["NAME"])
+        self.theme_combo.setCurrentText(settings.get("plot_theme")["NAME"].title())
         self.theme_combo.currentTextChanged.connect(self.on_theme_changed)
 
         theme_row = QHBoxLayout()
@@ -52,7 +54,7 @@ class AppearanceTab(QWidget):
         self.data_line_color_button.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.data_line_color_button.clicked.connect(self.pick_line_color)
 
-        self.set_data_line_color_button(Settings.data_line_color)
+        self.set_data_line_color_button(settings.get("data_line_color"))
 
         # Width Spinner
         width_label = QLabel("Width:")
@@ -60,10 +62,10 @@ class AppearanceTab(QWidget):
 
         self.width_spinbox = QSpinBox()
         self.width_spinbox.setRange(1, 5)
-        self.width_spinbox.setValue(Settings.data_line_width)
+        self.width_spinbox.setValue(settings.get("data_line_width"))
         self.width_spinbox.setSuffix(" px")
         self.width_spinbox.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
-        #self.width_spinbox.valueChanged.connect(self.on_width_changed)
+        self.width_spinbox.valueChanged.connect(self.on_width_changed)
 
         # Horizontal layout with spacing
         line_appearance_row = QHBoxLayout()
@@ -94,18 +96,24 @@ class AppearanceTab(QWidget):
             "Show Waveform Durations": "show_durations",
             "Show Comments": "show_comments"
         }
-
         for label_text, attr in bool_settings.items():
             checkbox = QCheckBox(label_text)
-            checkbox.setChecked(getattr(Settings, attr))
-            #checkbox.toggled.connect(lambda state, a=attr: self.on_checkbox_toggled(a, state))
+            setattr(self, f"{attr}_checkbox", checkbox)
+            checkbox.setChecked(settings.get(attr))
             self.checkboxes[attr] = checkbox
-
+    
             row = QHBoxLayout()
             row.addSpacing(20)
             row.addWidget(checkbox)
             row.addStretch()
             layout.addLayout(row)
+
+        self.show_labels_checkbox.toggled.connect(lambda checked: self.show_durations_checkbox.setEnabled(checked))
+        self.show_durations_checkbox.setEnabled(self.show_labels_checkbox.isChecked())
+
+
+
+        
 
         # Horizontal Rule
         hrule = QFrame()
@@ -132,7 +140,7 @@ class AppearanceTab(QWidget):
         self.label_selector = QComboBox()
         self.label_selector.setFixedWidth(60)
         self.label_selector.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.label_selector.addItems(sorted(Settings.label_colors.keys()))
+        self.label_selector.addItems(sorted(settings.get("label_colors").keys()))
         self.label_selector.currentTextChanged.connect(self.load_label_info)
 
         select_row.addWidget(select_label)
@@ -156,6 +164,7 @@ class AppearanceTab(QWidget):
         self.rename_button = QPushButton("Rename")
         self.rename_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.rename_button.clicked.connect(self.rename_label)
+        
 
         name_layout.addWidget(name_label)
         name_layout.addWidget(self.name_edit)
@@ -163,10 +172,6 @@ class AppearanceTab(QWidget):
         name_layout.addStretch()
 
         label_layout.addLayout(name_layout)
-
-        # label_layout.addWidget(name_label, 0, 0)
-        # label_layout.addWidget(self.name_edit, 0, 1)
-        # label_layout.addWidget(self.rename_button, 0, 2)
 
         # Row 1: Color
         color_layout = QHBoxLayout()
@@ -188,17 +193,15 @@ class AppearanceTab(QWidget):
         color_layout.addStretch()
 
         label_layout.addLayout(color_layout)
-        # label_grid.addWidget(label_color_label, 1, 0)
-        # label_grid.addWidget(self.label_color_wrapper, 1, 1)
 
-        # Row 2: Delete button
-        self.delete_button = QPushButton("Delete All Instances of Waveform")
-        self.delete_button.setStyleSheet("QPushButton {padding: 3px 12px;}")
-        self.delete_button.setContentsMargins(0, 0, 0, 0)
-        self.delete_button.setFixedWidth(200)
-        self.delete_button.clicked.connect(self.delete_label)
+        # # Row 2: Delete button
+        # self.delete_button = QPushButton("Delete All Instances of Waveform")
+        # self.delete_button.setStyleSheet("QPushButton {padding: 3px 12px;}")
+        # self.delete_button.setContentsMargins(0, 0, 0, 0)
+        # self.delete_button.setFixedWidth(200)
+        # self.delete_button.clicked.connect(self.delete_label)
 
-        label_layout.addWidget(self.delete_button, alignment= Qt.AlignmentFlag.AlignLeft)
+        # label_layout.addWidget(self.delete_button, alignment= Qt.AlignmentFlag.AlignLeft)
 
         self.label_edit_panel = QWidget()
         self.label_edit_panel.setLayout(label_layout)
@@ -218,7 +221,6 @@ class AppearanceTab(QWidget):
         group_layout.setContentsMargins(0, 0, 0, 0)
         group_layout.addWidget(self.label_edit_panel)
         
-
         # Wrap the grid in an HBox with indent
         grid_wrapper = QHBoxLayout()
         grid_wrapper.addSpacing(40)
@@ -234,7 +236,7 @@ class AppearanceTab(QWidget):
         self.apply_interactive_cursor(self.data_line_color_button)
         self.apply_interactive_cursor(self.width_spinbox)
         self.apply_interactive_cursor(self.rename_button)
-        self.apply_interactive_cursor(self.delete_button)
+        #self.apply_interactive_cursor(self.delete_button)
         self.apply_interactive_cursor(self.label_selector)
         self.apply_interactive_cursor(self.label_color_button)
 
@@ -245,38 +247,31 @@ class AppearanceTab(QWidget):
         self.load_label_info(self.label_selector.currentText())
 
         # === Connect Setting Signals ===
-        self.parent().parent().bind_setting(
-            "plot_theme",
-            self.theme_combo.currentTextChanged,
-            lambda: Settings.PLOT_LIGHT if self.theme_combo.currentText() == "Light" else Settings.PLOT_DARK
-        )
-        self.parent().parent().bind_setting(
-            "data_line_width",
-            self.width_spinbox.valueChanged,
-            self.width_spinbox.value
-        )
         for attr, checkbox in self.checkboxes.items():
-            self.parent().parent().bind_setting(
-                attr,
-                checkbox.toggled,
-                checkbox.isChecked
-            )
+            checkbox.toggled.connect(lambda state, a=attr: self.on_checkbox_toggled(a, state))
 
     def sync_ui_from_settings(self):
-        self.theme_combo.setCurrentText(Settings.plot_theme["NAME"].title())
-        self.set_data_line_color_button(Settings.data_line_color)
-        self.width_spinbox.setValue(Settings.data_line_width)
+        self.theme_combo.blockSignals(True)
+        self.width_spinbox.blockSignals(True)
+
+        self.theme_combo.setCurrentText(settings.get("plot_theme")["NAME"].title())
+        self.set_data_line_color_button(settings.get("data_line_color"))
+        self.width_spinbox.setValue(settings.get("data_line_width"))
+
+        self.theme_combo.blockSignals(False)
+        self.width_spinbox.blockSignals(False)
+
 
         for attr, checkbox in self.checkboxes.items():
             checkbox.blockSignals(True)
-            checkbox.setChecked(getattr(Settings, attr))
+            checkbox.setChecked(settings.get(attr))
             checkbox.blockSignals(False)
 
         # Update label selector
         self.label_selector.blockSignals(True)
         self.label_selector.clear()
-        self.label_selector.addItems(sorted(Settings.label_colors.keys()))
-        if Settings.label_colors:
+        self.label_selector.addItems(sorted(settings.get("label_colors").keys()))
+        if settings.get("label_colors"):
             self.label_selector.setCurrentIndex(0)
             self.load_label_info(self.label_selector.currentText())
         else:
@@ -294,12 +289,28 @@ class AppearanceTab(QWidget):
         )
 
     def on_theme_changed(self):
+        new_theme_text = self.theme_combo.currentText()
+        new_theme = settings.PLOT_LIGHT if new_theme_text == "Light" else settings.PLOT_DARK
+        settings.set("plot_theme", new_theme)
+        
         self.update_label_color_wrapper_style()
         self.refresh_label_color_preview()
 
+    def on_width_changed(self, value):
+        settings.set("data_line_width", value)
+
+    def on_checkbox_toggled(self, key, value):
+        settings.set(key, value)
+
+    def on_label_rename(self):
+        old_label = self.label_name_edit.text().strip()
+        new_label = self.rename_edit.text().strip()
+        if old_label and new_label and old_label != new_label:
+            self.parent().parent().rename_label_color(old_label, new_label)
+    
 
     def load_label_info(self, label: str):
-        visible = bool(label and label in Settings.label_colors)
+        visible = bool(label and label in settings.get("label_colors"))
         self.label_edit_panel.setVisible(visible)
         if not visible:
             return
@@ -307,12 +318,12 @@ class AppearanceTab(QWidget):
         self.label_color_wrapper.setVisible(True)
         self.name_edit.setVisible(True)
         self.rename_button.setVisible(True)
-        self.delete_button.setVisible(True)
+        #self.delete_button.setVisible(True)
         self.name_edit.setText(label)
-        color = QColor(Settings.label_colors[label][Settings.plot_theme["NAME"]])
+        color = QColor(settings.get("label_colors")[label][settings.get("plot_theme")["NAME"]])
         self.label_color_button.setText(color.name().upper())
         text_color = self.get_contrasting_text_color(color)
-        border_color = Settings.plot_theme["TRANSITION_LINE_COLOR"]
+        border_color = settings.get("plot_theme")["TRANSITION_LINE_COLOR"]
         self.label_color_button.setStyleSheet(f"""
             QPushButton {{
                 background-color: {color.name()};
@@ -333,8 +344,8 @@ class AppearanceTab(QWidget):
         self.update_rename_button_state()
 
     def update_label_color_wrapper_style(self):
-        theme_bg = Settings.plot_theme["BACKGROUND"]
-        theme_fg = Settings.plot_theme["FOREGROUND"]
+        theme_bg = settings.get("plot_theme")["BACKGROUND"]
+        theme_fg = settings.get("plot_theme")["FOREGROUND"]
         self.label_color_wrapper.setStyleSheet(f"""
             QFrame#LabelColorWrapper {{
                 background-color: {theme_bg};
@@ -346,20 +357,19 @@ class AppearanceTab(QWidget):
 
     def pick_label_color(self):
         label = self.label_selector.currentText()
-        current_color = Settings.get_label_color(label)
+        current_color = settings.get_label_color(label)
         new_color = QColorDialog.getColor(current_color, self)
 
         if new_color.isValid():
-            Settings.set_label_color(label, new_color)
+            settings.set_label_color(label, new_color)
             self.load_label_info(label)
-            self.parent().parent().parent().save_setting("label_colors", Settings.label_colors)
                 
 
     def pick_line_color(self):
-        color = QColorDialog.getColor(initial=Settings.data_line_color, parent=self)
+        color = QColorDialog.getColor(initial=settings.get("data_line_color"), parent=self)
         if color.isValid():
             self.set_data_line_color_button(color)
-            self.parent().parent().parent().save_setting("data_line_color", color)
+            settings.set("data_line_color", color)
 
     def rename_label(self):
         old_name = self.label_selector.currentText()
@@ -368,7 +378,7 @@ class AppearanceTab(QWidget):
         if not new_name or new_name == old_name:
             return
 
-        if new_name in Settings.label_colors:
+        if new_name in settings.get("label_colors"):
             QMessageBox.warning(self, "Rename Failed", "Label name already exists.")
             return
 
@@ -382,11 +392,13 @@ class AppearanceTab(QWidget):
         if reply == QMessageBox.StandardButton.No:
             return
 
-        # Proceed with renaming
-        Settings.rename_label(old_name, new_name)
+        settings.rename_label(old_name, new_name)
+        self.parent().parent().parent().rename_label_areas(old_name, new_name)
+
+        # UI update
         self.label_selector.blockSignals(True)
         self.label_selector.clear()
-        self.label_selector.addItems(sorted(Settings.label_colors.keys()))
+        self.label_selector.addItems(sorted(settings.get("label_colors").keys()))
         self.label_selector.setCurrentText(new_name)
         self.label_selector.blockSignals(False)
         self.load_label_info(new_name)
@@ -404,10 +416,10 @@ class AppearanceTab(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.Yes:
-            Settings.delete_label(label)
+            settings.delete_label(label)
             self.label_selector.clear()
-            self.label_selector.addItems(sorted(Settings.label_colors.keys()))
-            if Settings.label_colors:
+            self.label_selector.addItems(sorted(settings.get("label_colors").keys()))
+            if settings.get("label_colors"):
                 self.label_selector.setCurrentIndex(0)
                 self.load_label_info(self.label_selector.currentText())
             else:
@@ -451,7 +463,7 @@ class FolderRow(QWidget):
         # --- center: read‑only path ---
         self.path_edit = QLineEdit()
         self.path_edit.setReadOnly(True)
-        self.path_edit.setText(str(getattr(Settings, setting_attr, "")))
+        self.path_edit.setText(str(settings.get(setting_attr)))
         self.path_edit.setMinimumWidth(400)
         self.path_edit.setStyleSheet("""
             QLineEdit {
@@ -488,13 +500,13 @@ class FolderRow(QWidget):
         row.addWidget(browse_btn)
 
     def pick_directory(self):
-        start_dir = getattr(Settings, self.setting_attr, str(os.getcwd()))
+        start_dir = settings.get(self.setting_attr)
         path = QFileDialog.getExistingDirectory(
             self, "Select Folder", start_dir,
             QFileDialog.Option.ShowDirsOnly
         )
         if path:
-            self.parent().parent().parent().parent().save_setting(self.setting_attr, path)
+            settings.save(self.setting_attr, path)
             self.path_edit.setText(path)
 
 class EPGSettingsTab(QWidget):
@@ -522,7 +534,7 @@ class EPGSettingsTab(QWidget):
 
     def sync_ui_from_settings(self):
         for row in self.rows:
-            new_path = getattr(Settings, row.setting_attr, "")
+            new_path = settings.get(row.setting_attr)
             row.path_edit.setText(new_path)
 
 class SidebarButton(QToolButton):
@@ -577,8 +589,14 @@ class SettingsWindow(QMainWindow):
         self.setWindowTitle("SCIDO Settings")
         self.setMinimumSize(700, 700)
 
-        self.settings = QSettings("USDA", "SCIDO")
-        self.load_settings(init = True)
+        self.setWindowFlags(
+            Qt.WindowType.Window |
+            Qt.WindowType.CustomizeWindowHint |
+            Qt.WindowType.WindowTitleHint |
+            Qt.WindowType.WindowCloseButtonHint  # optionally include maximize if desired
+        )
+
+        settings.settingChanged.connect(self.sync_all_tabs)
 
         # === Main Layout ===
         central = QWidget()
@@ -678,114 +696,52 @@ class SettingsWindow(QMainWindow):
         central.setLayout(wrapper)
         self.setCentralWidget(central)
 
+        self.sync_all_tabs()
+
+    def rename_label_areas(self, old_label: str, new_label: str):
+        datawindow = self.parent().label_tab.datawindow
+
+        for label_area in datawindow.labels:
+            if label_area.label == old_label:
+                label_area.label = new_label
+                label_area.refreshColor()
+                label_area.update_label_area()
+
+        # Trigger label color refresh + collision recheck
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, lambda: [
+            label.update_label_area() for label in datawindow.labels
+        ])
+
+    def sync_all_tabs(self):
+        self.appearance_tab.sync_ui_from_settings()
+        self.epg_tab.sync_ui_from_settings()
+
     def switch_tab(self, index: int):
         self.stack.setCurrentIndex(index)
         for i, btn in enumerate(self.buttons):
             btn.setChecked(i == index)
 
-    def bind_setting(self, key, getter_signal, getter_func):
-        """
-        Automatically saves a setting whenever the widget emits a change signal.
-        """
-        def update():
-            val = getter_func()
-            setattr(Settings, key, val)
-            self.save_setting(key, val)
-
-        getter_signal.connect(update)
-        #update() # call on init to ensure sync
-
-    
-    def save_setting(self, key: str, value):
-        import traceback
-        print(f"[save_setting] {key} = {value} (during init: {'AppearanceTab' in ''.join(traceback.format_stack())})")
-        setattr(Settings, key, value)
-
-        if isinstance(value, QColor):
-            value_to_store = value.name()  # store as hex string
-        elif key == "label_colors":
-            # Save as plain dict with label: {LIGHT: hex, DARK: hex}
-            value_to_store = {
-                label: {"LIGHT": colors["LIGHT"], "DARK": colors["DARK"]}
-                for label, colors in value.items()
-            }
-        else:
-            value_to_store = value
-
-        self.settings.setValue(key, value_to_store)
-        self.settings.sync()
-
-    def save_settings(self):
-        for key in Settings.saved_settings.keys():
-            self.save_setting(key, getattr(Settings, key))
-        self.settings.sync()
-        print("Saving all settings")   
-        
-    def load_settings(self, log: bool = False, init = False):
-        use_defaults = not self.settings.allKeys()
-
-        if use_defaults:
-            if log:
-                print("No settings file found, loading defaults from JSON.")
-            defaults_path = os.path.join(os.path.dirname(__file__), "default_settings.json")
-            with open(defaults_path, "r", encoding="utf-8") as f:
-                defaults = json.load(f)
-        else:
-            defaults = {}
-
-        for key, expected_type in Settings.saved_settings.items():
-            # Load from QSettings or fallback to default
-            if self.settings.contains(key):
-                raw_val = self.settings.value(key)
-            else:
-                raw_val = defaults.get(key, getattr(Settings, key))
-
-            # Handle type casting appropriately
-            if expected_type is bool:
-                # Fix string->bool issues
-                if isinstance(raw_val, str):
-                    value = raw_val.lower() in ("true", "1", "yes")
-                else:
-                    value = bool(raw_val)
-            if expected_type is QColor:
-                value = QColor(raw_val)
-            elif key == "label_colors":
-                # Regenerate random colors for currently plotted labels
-                value = {}
-                try:
-                    datawindow = self.parent().label_tab.datawindow
-                    current_labels = sorted({label_area.label for label_area in datawindow.labels})
-                    for label in current_labels:
-                        value[label] = Settings.generate_label_color_dict()
-                except AttributeError:
-                    value = {}  # fallback    
-            elif key == "plot_theme":
-                value = {
-                    k: raw_val.get(k, Settings.PLOT_LIGHT[k])
-                    for k in Settings.PLOT_LIGHT
-                }
-            else:
-                value = expected_type(raw_val)
-
-            setattr(Settings, key, value)
-
+    def load_settings(self, init = False):
+        settings.load()
         if not init:
             self.appearance_tab.sync_ui_from_settings()
             self.epg_tab.sync_ui_from_settings()
         
     def reset_settings(self):
-        reply = QMessageBox.question(
-            self,
-            "Reset Settings",
-            "Are you sure you want to reset all settings to defaults?\nThis includes all waveform colors.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Reset to Default Settings")
+        msg_box.setIcon(QMessageBox.Icon.Question)
+        msg_box.setText("<b>Are you sure you want to reset all settings?</b>")
+        msg_box.setInformativeText("This will restore all waveform colors, display preferences, and default file paths.")
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg_box.setDefaultButton(QMessageBox.StandardButton.No)
+
+        reply = msg_box.exec()
+
         if reply == QMessageBox.StandardButton.Yes:
-            self.settings.clear()
-            self.settings.sync()
-            self.load_settings()
+            settings.reset()
             self.appearance_tab.refresh_label_color_preview()
-    
     def closeEvent(self, event):
-        self.save_settings()
+        settings.save_all()
         super().closeEvent(event)

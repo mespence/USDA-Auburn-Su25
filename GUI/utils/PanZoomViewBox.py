@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QWheelEvent, QAction, QKeyEvent, QKeySequence
 from PyQt6.QtWidgets import QMenu
 
-from settings.Settings import Settings
+from settings import settings
 from label_view.LabelArea import LabelArea
 
 class PanZoomViewBox(ViewBox):
@@ -113,6 +113,7 @@ class PanZoomViewBox(ViewBox):
                         self.translateBy(x=dx)
 
         self.datawindow.update_plot()
+        self.datawindow.update_compression() # if not done in plot already
         event.accept()
 
     def x_zoom(self, live, zoom_factor, center) -> None:
@@ -277,7 +278,7 @@ class PanZoomViewBox(ViewBox):
         add_comment = QAction("Add Comment", menu)
 
         label_type_dropdown = QMenu("Change Waveform Type", menu)
-        label_names = list(Settings.label_colors.keys())
+        label_names = list(settings.get("label_colors").keys())
         for label in label_names:            
             action = QAction(label, menu)
             action.setCheckable(True)
@@ -287,7 +288,8 @@ class PanZoomViewBox(ViewBox):
                 
             action.triggered.connect(
                 lambda checked, label_area=label_area, label=label:
-                self.datawindow.selection.change_label_type(label_area, label)
+                (self.datawindow.selection.change_label_type(label_area, label),
+                 label_area.update_label_area())
             )
         
             label_type_dropdown.addAction(action)

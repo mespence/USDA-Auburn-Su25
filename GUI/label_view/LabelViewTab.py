@@ -11,16 +11,13 @@ from PyQt6.QtGui import QIcon
 from label_view.DataWindow import DataWindow
 from EPGData import EPGData
 from label_view.Labeler import Labeler
-from settings.Settings import Settings
 from FileSelector import FileSelector
-from settings.SettingsWindow import SettingsWindow
 
 
 
 # TODO: fix the cause of the warning
 import warnings
 warnings.filterwarnings('ignore', module="torch", message="enable_nested_tensor is True.*")
-
 
 class LabelViewTab(QWidget):
     def __init__(self, parent=None):
@@ -143,6 +140,14 @@ class LabelViewTab(QWidget):
         top_controls.addStretch(1)
         top_controls.addWidget(resetButton)
 
+        top_controls_widget = QWidget()
+        top_controls_widget.setLayout(top_controls)
+        top_controls_widget.setStyleSheet("""
+            QWidget {
+                border-bottom: 1px solid #808080;
+            }
+        """)
+
         # Plot Layout
         plot_layout = QVBoxLayout()
         plot_layout.addWidget(self.datawindow)
@@ -157,7 +162,6 @@ class LabelViewTab(QWidget):
         bottom_controls.addWidget(startLabelingButton)
         bottom_controls.addWidget(stopLabelingButton)
         bottom_controls.addWidget(self.progressBar)
-        
 
         #bottom_controls.addWidget(saveDataButton)
 
@@ -166,24 +170,14 @@ class LabelViewTab(QWidget):
 
         # Main layout
         main_layout = QVBoxLayout()
-        main_layout.addLayout(top_controls)
+        main_layout.addWidget(top_controls_widget)
         main_layout.addLayout(plot_layout) 
-        main_layout.addLayout(bottom_controls)
+        main_layout.addLayout(bottom_controls) 
         #main_layout.addLayout(bottom_controls_2)
 
 
         self.setLayout(main_layout)
 
-
-        
-        self.settings_window = SettingsWindow()
-        self.settings_window.label_color_changed.connect(self.datawindow.change_label_color)
-        self.settings_window.line_color_changed.connect(self.datawindow.change_line_color)
-        self.settings_window.duration_toggled.connect(self.datawindow.set_durations_visible)
-        self.settings_window.destroyed.connect(lambda: setattr(self, 'settings_window', None))
-        #self.settings_window.load_settings()
-
-        #self.openSettings()
 
     def sync_scroll_to_view(self, slider_value: int):
         if self.datawindow.df is None:

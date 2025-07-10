@@ -8,8 +8,8 @@ from PyQt6.QtCore import Qt, QSize
 import sys
 import os
 
-from main import MainWindow
-from settings.Settings import Settings
+from settings import settings
+
 
 class NewRecordingDialog(QDialog):
     def __init__(self, parent=None):
@@ -121,7 +121,7 @@ class NewRecordingDialog(QDialog):
         if not initial_filename:
             initial_filename = "Untitled.csv"
 
-        initial_path = os.path.join(Settings.default_recording_directory, initial_filename)
+        initial_path = os.path.join(settings.get("default_recording_directory"), initial_filename)
 
         # open file dialog
         save_path, _ = QFileDialog.getSaveFileName(

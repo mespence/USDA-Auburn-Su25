@@ -6,7 +6,6 @@ from NewRecordingDialog import NewRecordingDialog
 from utils.UploadFileDialog import UploadFileDialog
 from main import start_main_application
 from settings.SettingsWindow2 import SettingsWindow
-from settings.Settings import Settings
 from PyQt6.QtWidgets import QApplication, QDialog, QHBoxLayout, QPushButton, QVBoxLayout, QLabel
 from PyQt6.QtCore import Qt, pyqtSignal
 import sys
@@ -84,7 +83,7 @@ def launch_application():
     def launch_main_window_with_settings(settings):
         nonlocal main_window_instance
 
-        main_window_instance = start_main_application(app, settings=settings)
+        main_window_instance = start_main_application(app)
         launcher_dialog.accept() 
 
     def launch_main_window_with_file(file, channel_index):

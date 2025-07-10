@@ -5,7 +5,6 @@ from PyQt6.QtGui import QColor
 
 from utils.TextEdit import TextEdit
 from label_view.LabelArea import LabelArea
-from settings.Settings import Settings
 
 
 class AddLabelManager:

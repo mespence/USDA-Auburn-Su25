@@ -6,7 +6,7 @@ from PyQt6.QtGui import QColor, QMouseEvent, QKeyEvent
 from PyQt6.QtCore import Qt, QPointF
 
 from label_view.LabelArea import LabelArea
-from settings.Settings import Settings
+from settings import settings
 
 
 # werid multi select bugs still, multi delete
@@ -35,9 +35,9 @@ class Selection:
         self.datawindow: PlotWidget = plot_widget  # the parent PlotWidget (i.e. the DataWindow)
 
         self.default_style = {
-            'transition line': mkPen(color='#000000', width=2),
+            'transition line': mkPen(color=settings.get("plot_theme")["TRANSITION_LINE_COLOR"], width=2),
             'baseline': mkPen(color='#808080', width=2),
-            'text color': '#000000'
+            'text color': settings.get("plot_theme")["FONT_COLOR_1"]
         }
 
         self.highlighted_style = {
@@ -70,6 +70,14 @@ class Selection:
         if isinstance(item, InfiniteLine):
             return item.value()
         return float('inf')  # fallback
+    
+    def _update_default_style(self):
+        # update for theme change
+        self.default_style = {
+            'transition line': mkPen(color=settings.get("plot_theme")["TRANSITION_LINE_COLOR"], width=2),
+            'baseline': mkPen(color='#808080', width=2),
+            'text color': settings.get("plot_theme")["FONT_COLOR_1"]
+        }
     
 
     def select(self, item) -> None:
@@ -159,7 +167,7 @@ class Selection:
             labels = self.datawindow.labels
             idx = labels.index(item)
 
-            item.area.setBrush(mkBrush(color=Settings.get_label_color(item.label)))
+            item.area.setBrush(mkBrush(color=settings.get_label_color(item.label)))
             item.label_background.setBrush(mkBrush(item.get_background_color()))
             item.duration_background.setBrush(mkBrush(item.get_background_color()))
             item.label_text.setColor(self.default_style['text color'])
@@ -754,7 +762,7 @@ class Selection:
                     item.setPen(self.highlighted_style['transition line'])
 
             elif isinstance(item, LabelArea):
-                label_area_color = self.datawindow.composite_on_white(Settings.get_label_color(item.label))
+                label_area_color = self.datawindow.composite_on_white(settings.get_label_color(item.label))
                 text_background_color = item.label_background.brush().color()
 
                 highlighted_area_color = self.get_highlighted_color(label_area_color)
@@ -776,8 +784,8 @@ class Selection:
             QColor: The modified highlighted color.
         """
         h, s, l, a = color.getHslF()
-        #highlighted_color = QColor.fromHslF(h, min(s * 5, 1), l * 0.9, a)
-        highlighted_color = QColor.fromHslF(h, max(s, 1 - s**2), l * 0.9, a)    
+        l_scaler = 0.9 if settings.get("plot_theme")["NAME"] == "LIGHT" else 1.6
+        highlighted_color = QColor.fromHslF(h, max(s, 1 - s**2), l * l_scaler, a)    
         highlighted_color.setAlpha(200)
         return highlighted_color
 
@@ -794,7 +802,7 @@ class Selection:
             else:
                 item.setPen(self.default_style['transition line'])
         if isinstance(item, LabelArea):
-            item.area.setBrush(mkBrush(color=Settings.get_label_color(item.label)))
+            item.area.setBrush(mkBrush(color=settings.get_label_color(item.label)))
             item.label_background.setBrush(mkBrush(color=item.get_background_color()))
             item.duration_background.setBrush(mkBrush(color=item.get_background_color()))
 

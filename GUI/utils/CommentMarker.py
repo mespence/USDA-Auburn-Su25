@@ -3,13 +3,15 @@ from pyqtgraph import (
 )
 from PyQt6.QtWidgets import QPushButton, QVBoxLayout, QLabel, QDialog, QTextEdit, QToolTip, QDialogButtonBox, QGraphicsTextItem
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
-from PyQt6.QtGui import QMouseEvent
+from PyQt6.QtGui import QMouseEvent, QColor
 from PyQt6.QtCore import Qt, QPointF, QTimer
 
+from settings import settings
 from utils.TextEdit import TextEdit
 from utils.HoverableSvgItem import HoverableSvgItem
 
-class CommentMarker():
+
+class CommentMarker:
     """
     Represents a comment marker in a PyQtGraph plot.
 
@@ -59,6 +61,8 @@ class CommentMarker():
         self.viewbox.sigTransformChanged.connect(self.update_position) 
         # self.viewbox.sigXRangeChanged.connect(self.update_position)
         self.icon_item.mousePressEvent = self.show_comment_editor
+
+        self.update_color()
 
     def update_position(self):
         """
@@ -175,6 +179,9 @@ class CommentMarker():
         """
         self.marker.setVisible(visible)
         self.icon_item.setVisible(visible)
+
+    def update_color(self):
+        self.marker.setPen(settings.get("plot_theme")["FOREGROUND"], style = Qt.PenStyle.DashLine, width=3)
 
     def remove(self):
         """
