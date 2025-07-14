@@ -160,9 +160,9 @@ class LabelArea:
         self.label_text.setColor(settings.get("plot_theme")["FONT_COLOR_1"])
         self.duration_text.setColor(settings.get("plot_theme")["FONT_COLOR_1"])
 
-        self.transition_line.setPen(mkPen(settings.get("plot_theme")["TRANSITION_LINE_COLOR"]))
+        self.transition_line.setPen(mkPen(settings.get("plot_theme")["TRANSITION_LINE_COLOR"], width = 2))
         if self.right_transition_line:
-            self.right_transition_line.setPen(mkPen(settings.get("plot_theme")["TRANSITION_LINE_COLOR"]))
+            self.right_transition_line.setPen(mkPen(settings.get("plot_theme")["TRANSITION_LINE_COLOR"], width = 2))
 
 
     def setVisible(self, visible: bool) -> None:

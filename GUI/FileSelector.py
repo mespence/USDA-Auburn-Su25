@@ -45,7 +45,7 @@ class FileSelector:
                     return
             if epgdata.load_data(file_path, channel_idx) and isinstance(datawindow, DataWindow):
                 datawindow.plot_recording(file_path)
-                datawindow.plot_transitions(file_path)
+                #datawindow.plot_transitions(file_path)
                 #datawindow.mode = 'labels'
                 #datawindow.plot_comments(file_path)
 

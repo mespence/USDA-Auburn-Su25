@@ -5,7 +5,7 @@ import sys
 from NewRecordingDialog import NewRecordingDialog
 from utils.UploadFileDialog import UploadFileDialog
 from main import main
-from settings.SettingsWindow2 import SettingsWindow
+from settings.SettingsWindow import SettingsWindow
 from PyQt6.QtWidgets import QApplication, QDialog, QHBoxLayout, QPushButton, QVBoxLayout, QLabel
 from PyQt6.QtCore import Qt, pyqtSignal
 import sys

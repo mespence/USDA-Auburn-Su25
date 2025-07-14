@@ -1,4 +1,4 @@
-from settings.SettingsWindow2 import SettingsWindow
+from settings.SettingsWindow import SettingsWindow
 from settings import settings
 
 if __name__ == "__main__":

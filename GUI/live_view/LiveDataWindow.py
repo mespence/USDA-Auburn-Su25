@@ -209,7 +209,7 @@ class LiveDataWindow(PlotWidget):
         elif key == "show_v_grid":
             self.plotItem.showGrid(x=value)
         elif key == "show_comments":
-            for comment in self.comments.items():
+            for _, comment in self.comments.items():
                 comment.set_visible(value)
         elif key == "plot_theme":
             self.update_plot_theme()

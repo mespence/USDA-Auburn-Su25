@@ -91,12 +91,14 @@ class LiveViewTab(QWidget):
             }
         """)
         self.add_comment_button.clicked.connect(self.call_add_comment)
+        self.add_comment_button.setEnabled(False)
         
         self.pause_live_button.setCheckable(True)
         self.pause_live_button.setChecked(True)
         self.pause_live_button.setToolTip("Pause Live View")
         self.pause_live_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.pause_live_button.clicked.connect(self.toggle_live)
+        self.pause_live_button.setEnabled(False)
 
 
         self.slider_panel = SliderPanel(parent=self)

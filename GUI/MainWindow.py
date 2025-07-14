@@ -28,7 +28,7 @@ from settings import settings
 
 from FileSelector import FileSelector
 #from utils.UploadFileDialog import UploadFileDialog
-from settings.SettingsWindow2 import SettingsWindow
+from settings.SettingsWindow import SettingsWindow
 
 from live_view.LiveViewTab import LiveViewTab
 from label_view.LabelViewTab import LabelViewTab
@@ -72,7 +72,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("SCIDO EPG Labeler")
         icon_path = resource_path("SCIDO.ico")
         self.setWindowIcon(QIcon(icon_path))
-        self.move(0,0)
+
+        main_geometry = QApplication.instance().primaryScreen().geometry()
+        self.move(main_geometry.left(), main_geometry.top())
 
         # === Menu Bar ===
         menubar = QMenuBar(self)
