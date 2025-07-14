@@ -1,6 +1,7 @@
 # startup_loader.py
 import os
 from PyQt6.QtGui import QFontDatabase
+from PyQt6.QtWidgets import QApplication
 from LoadingScreen import LoadingScreen
 from utils.ResourcePath import resource_path
 
