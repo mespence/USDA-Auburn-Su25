@@ -189,3 +189,4 @@ GUI/backups
 *.ipynb
 
 GUI/*.csv
+ML/data

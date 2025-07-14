@@ -11,7 +11,7 @@ import warnings
 import tqdm
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-class Model:
+class Model():
     def __init__(self, save_path = None, trial = None):
         self.chunk_seconds = 3
         self.num_estimators = 128
@@ -19,6 +19,7 @@ class Model:
         self.max_depth = 16
         self.sample_rate = 100
         self.chunk_size = self.chunk_seconds * self.sample_rate
+        self.waveform_type = "post_rect"
         self.random_state = 42
         dirname = os.path.dirname(__file__)
         self.model = None
@@ -38,12 +39,10 @@ class Model:
             if num_chunks == 0:
                 print(len(probe))
                 print(self.chunk_size)
-                return
-            
             chunks = np.array_split(probe[:num_chunks * self.chunk_size], num_chunks)
             columns = defaultdict(list)
             for chunk in chunks:
-                chunk_fft = np.abs(fft(chunk["voltage"].values))[1:self.chunk_size//2]
+                chunk_fft = np.abs(fft(chunk[self.waveform_type].values))[1:self.chunk_size//2]
                 chunk_freqs = fftfreq(self.chunk_size, 1 / self.sample_rate)[1:self.chunk_size//2]
                 
                 num_largest = self.num_freqs
@@ -54,11 +53,11 @@ class Model:
 
                 for i in range(num_largest):
                     columns[f"F{i}"].append(peak_freqs[i])
-                columns["mean"].append(np.mean(chunk["voltage"]))
-                columns["std"].append(np.std(chunk["voltage"]))
-                # columns["resistance"].append(chunk["resistance"].values[0])
-                # columns["volts"].append(chunk["voltage"].values[0])
-                # columns["current"].append(0 if chunk["current"].values[0] == "AC" else 1)
+                columns["mean"].append(np.mean(chunk[self.waveform_type]))
+                columns["std"].append(np.std(chunk[self.waveform_type]))
+                columns["resistance"].append(chunk["resistance"].values[0])
+                columns["volts"].append(chunk["voltage"].values[0])
+                columns["current"].append(0 if chunk["current"].values[0] == "AC" else 1)
                 if training: # In reality, we won't know what the labels are
                     labels, label_counts = np.unique(chunk["labels"], return_counts=True)
                     label = labels[np.argmax(label_counts)]
