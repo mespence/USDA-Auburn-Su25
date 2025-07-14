@@ -66,9 +66,10 @@ class Model:
 
             probe_out = pd.DataFrame(columns)
             transformed_probes.append(probe_out)
+            print(probe_out)
         return transformed_probes
 
-    def train(self, probes, test_data, fold):
+    def train(self, probes, test_data = None, fold = None):
         transformed_probes = self.transform_data(probes)
         train = pd.concat(transformed_probes)
         X_train = train.drop(["label"], axis=1)

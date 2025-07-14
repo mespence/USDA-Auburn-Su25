@@ -57,6 +57,7 @@ class Filter:
             for start_time, end_time in time_ranges:
                 # Filter rows where the time is within the current range (inclusive)
                 df_range = df[(df[time_column_name] >= start_time) & (df[time_column_name] <= end_time)].copy()
+                df_range.rename(columns={"pre_rect": "voltage"}, inplace = True)
                 filtered_dfs.append(df_range)
                 print(f"  Range ({start_time}, {end_time}): Found {len(df_range)} rows.")
 
