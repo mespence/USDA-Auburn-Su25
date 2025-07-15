@@ -69,6 +69,8 @@ probes = []
 
 data_dir = r"C:\EPG-Project\Summer\CS-Repository\Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled"
 for filename in os.listdir(data_dir):
+    if "a02" in filename:
+        continue
     if filename.endswith(".csv"):
         print(f"Reading {filename}...")
         file_path = os.path.join(data_dir, filename)
@@ -92,7 +94,7 @@ print()
 print(predictions)
 
 print("Saving output...")
-
+rf_model.save()
 test_df["labels"] = predictions
 test_df.to_csv("out.csv")
 print("Output saved.")
