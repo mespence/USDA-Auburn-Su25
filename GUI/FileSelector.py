@@ -36,7 +36,7 @@ class FileSelector:
         file_path = file_path.toLocalFile()
         channel_idx = None
         if file_path:
-            if os.path.splitext(file_path)[1].lower() in [".wdq", ".daq"]:
+            if os.path.splitext(file_path)[1].lower() in [".wdq", ".daq", '.wdh']:
                 windaq_dialog = WindaqFileDialog(file_path)
                 if windaq_dialog.exec() == QDialog.DialogCode.Accepted:
                     channel_idx = windaq_dialog.get_selected_channel_index()

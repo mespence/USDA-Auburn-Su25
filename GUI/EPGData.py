@@ -39,7 +39,7 @@ class EPGData:
         import time
         start_time = time.perf_counter()
 
-        if re.search(r"\.(WDQ|DAQ)$", file, re.IGNORECASE):
+        if re.search(r"\.(WDQ|DAQ|WDH)$", file, re.IGNORECASE):
             windaq_file = windaq.windaq(file)
             # TODO: don't hardcode channel count and names
             # TODO: add event markers as column

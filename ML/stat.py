@@ -2,8 +2,8 @@ import pandas as pd
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, classification_report
 
 # === File paths ===
-ground_truth_path = r"C:\EPG-Project\Summer\CS-Repository\ML\data\test_a02.csv"
-ml_output_path = r"C:\EPG-Project\Summer\CS-Repository\ML\out.csv"
+ground_truth_path = r"D:\USDA-Auburn\CS-Repository\Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_b11_labeled.csv"
+ml_output_path = r"D:\USDA-Auburn\CS-Repository\ML\out.csv"
 
 # === Load the data ===
 df_truth = pd.read_csv(ground_truth_path)

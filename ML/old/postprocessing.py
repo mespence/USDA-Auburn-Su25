@@ -1,7 +1,7 @@
 # %%
 import numpy as np
 import pandas as pd
-from data_augmentation import Probe
+from old.data_augmentation import Probe
 from scipy.special import softmax
 from collections import defaultdict
 from scipy.signal import savgol_filter

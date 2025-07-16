@@ -26,7 +26,7 @@ class Model():
         self.dilation_base = 2       # Base for exponential dilation
         self.epochs = epochs
 
-        self.batch_size = 64
+        self.batch_size = 64  # JH: tweaks this for GPU based on RAM limits
         self.ticks_before = int(self.SAMPLING_RATE*3)
         self.ticks_during = int(self.SAMPLING_RATE*0.5)
         self.ticks_after = int(self.SAMPLING_RATE*3)
@@ -81,7 +81,7 @@ class Model():
         dirname = os.path.dirname(__file__)
         self.save_path = os.path.join(dirname, 'tcn_weights')
 
-    def train(self, probes, test_probes, fold):
+    def train(self, probes, test_probes = None, fold = None):
         tr_dfs, tr_df = self.load_probes(probes)
         tr_dataset = TimeSeriesDataset(tr_df, self.label_map, self.ticks_before, 
                                        self.ticks_during, self.ticks_after, 

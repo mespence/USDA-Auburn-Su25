@@ -8,7 +8,9 @@ from sklearn.ensemble import RandomForestClassifier
 import pickle
 import optuna
 import warnings
-import tqdm
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from transform_worker import transform_single_probe
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 class Model:
@@ -23,7 +25,7 @@ class Model:
         dirname = os.path.dirname(__file__)
         self.model = None
         self.save_path = save_path
-        self.model_path = "../ML/rf_pickle"
+        self.model_path = "./ML/rf_pickle"
         
         if trial:
             self.chunk_seconds = trial.suggest_int('chunk_seconds', 1, 3)
@@ -31,51 +33,46 @@ class Model:
             self.num_estimators = trial.suggest_categorical('num_estimators', [8, 16, 32, 64, 128])
             self.max_depth = trial.suggest_categorical('max_depth', [8, 16, 32, 64, 128])
 
-    def transform_data(self, probes, training = True):
-        transformed_probes = []
-        for probe in probes:
-            num_chunks = len(probe) // self.chunk_size
-            if num_chunks == 0:
-                print(len(probe))
-                print(self.chunk_size)
-                return
-            
-            chunks = np.array_split(probe[:num_chunks * self.chunk_size], num_chunks)
-            columns = defaultdict(list)
-            for chunk in chunks:
-                chunk_fft = np.abs(fft(chunk["voltage"].values))[1:self.chunk_size//2]
-                chunk_freqs = fftfreq(self.chunk_size, 1 / self.sample_rate)[1:self.chunk_size//2]
-                
-                num_largest = self.num_freqs
-                indices = (-chunk_fft).argpartition(num_largest, axis=None)[:num_largest]
-                indices = sorted(indices, key=lambda x: chunk_fft[x], reverse=True)
+    
+    def transform_data(self, probes, training=True):
+        """
+        Transforms a list of probe DataFrames into frequency-domain features using FFT.
+        Runs per-probe processing in parallel using multiprocessing.
+        """
+        from functools import partial
+        with ProcessPoolExecutor() as executor:
+            futures = [
+                executor.submit(
+                    transform_single_probe,
+                    probe,
+                    self.chunk_size,
+                    self.sample_rate,
+                    self.num_freqs,
+                    training
+                ) for probe in probes
+            ]
 
-                peak_freqs = chunk_freqs[indices]
+            transformed_probes = []
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Processing probes"):
+                result = future.result()
+                if result is None:
+                    print("WARNING: Got None from transform_single_probe")
+                else:
+                    transformed_probes.append(result)
 
-                for i in range(num_largest):
-                    columns[f"F{i}"].append(peak_freqs[i])
-                columns["mean"].append(np.mean(chunk["voltage"]))
-                columns["std"].append(np.std(chunk["voltage"]))
-                # columns["resistance"].append(chunk["resistance"].values[0])
-                # columns["volts"].append(chunk["voltage"].values[0])
-                # columns["current"].append(0 if chunk["current"].values[0] == "AC" else 1)
-                if training: # In reality, we won't know what the labels are
-                    labels, label_counts = np.unique(chunk["labels"], return_counts=True)
-                    label = labels[np.argmax(label_counts)]
-                    columns["label"].append(label)
-
-            probe_out = pd.DataFrame(columns)
-            transformed_probes.append(probe_out)
-            print(probe_out)
         return transformed_probes
+
 
     def train(self, probes, test_data = None, fold = None):
         transformed_probes = self.transform_data(probes)
+        if not transformed_probes:
+            raise ValueError(f"[Fold {fold}] No transformed probes! Check probe input or transform_single_probe.")
         train = pd.concat(transformed_probes)
         X_train = train.drop(["label"], axis=1)
         Y_train = train["label"]
-        rf = RandomForestClassifier(self.num_estimators, class_weight="balanced", max_depth = self.max_depth)
+        rf = RandomForestClassifier(self.num_estimators, class_weight="balanced", max_depth = self.max_depth, verbose=1, n_jobs=-1)
         self.model = rf.fit(X_train, Y_train)
+
     
     def predict(self, probes):
         transformed_probes = self.transform_data(probes, training = False)

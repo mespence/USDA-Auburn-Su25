@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from collections import defaultdict
 import random
-from transition_matrix import transition_matrix_dict
+from old.transition_matrix import transition_matrix_dict
 
 '''
 data object to hold probe dataframe as class object to avoid duplicating work when splitting states

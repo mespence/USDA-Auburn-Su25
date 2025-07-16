@@ -182,6 +182,7 @@ Exploration/Jonathan/Data/
 Data/Sharpshooter Data - HPR 2017/sharpshooter_parsed
 Data/Sharpshooter Data - HPR 2017/sharpshooter_labeled
 Data/Sharpshooter Data - HPR 2017/sharpshooter_unlabeled
+Data/Sharpshooter Data - HPR 2017/sharpshooter_parquet
 Data/Sharpshooter Data - HPR 2017/windaq_files
 GUI/backups
 .DS_Store
@@ -190,3 +191,5 @@ GUI/backups
 
 GUI/*.csv
 ML/data
+ML/**/*.csv
+ML/**/*.parquet
