@@ -2,7 +2,9 @@ import numpy as np
 import pandas as pd
 import optuna
 from sklearn.metrics import accuracy_score, classification_report
-
+import os # Import os module for path manipulation
+import glob
+import re
 # Best Parameters:
 #     window: 961
 #     threshold: 0.09406124969163045
@@ -57,23 +59,62 @@ class ProbeSplitter:
         
         return probes
 
-sharpshooter_files = [
-    "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/sharpshooter_d198_labeled.csv",
-    "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/sharpshooter_b11_labeled.csv",
-    "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/sharpshooter_d07_labeled.csv",
-    "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/sharpshooter_c182_labeled.csv",
-    "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/sharpshooter_a12_labeled.csv",
-    "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/sharpshooter_c02_labeled.csv",
-]
+base_directory = "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/"
+
+all_sharpshooter_files = glob.glob(os.path.join(base_directory, "sharpshooter_*_labeled.csv"))
+
+excluded_file_ids = {
+    "a01", "a02", "a03", "a10", "a15",
+    "b01", "b02", "b04", "b07", "b12", "b188", "b202", "b206", "b208",
+    "c046", "c07", "c09", "c10",
+    "d01", "d03", "d056", "d058", "d12",
+    "b11", # TEST FILE
+}
+
+file_id_pattern = re.compile(r"sharpshooter_([a-d]\d{2,3})_labeled\.csv", re.IGNORECASE)
+
+# Filter the list of files to exclude the specified ones
+sharpshooter_files = []
+for file_path in all_sharpshooter_files:
+    file_basename = os.path.basename(file_path)
+    match = file_id_pattern.match(file_basename)
+
+    if match:
+        extracted_id = match.group(1) # Get the captured identifier (e.g., 'a01')
+        if extracted_id not in excluded_file_ids:
+            sharpshooter_files.append(file_path)
+    else:
+        print(f"Warning: File '{file_basename}' did not match the expected naming pattern and will be skipped.")
 
 
-# file_path = "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/sharpshooter_d198_labeled.csv"
-# data = pd.read_csv(file_path)
-# print(f"Successfully loaded data from: {file_path}")
+print(f"Found {len(all_sharpshooter_files)} total sharpshooter files.")
+print(f"Excluding {len(excluded_file_ids)} specified file IDs.")
+print(f"Optimizing on {len(sharpshooter_files)} sharpshooter files.")
 
-# pre_rect = data["pre_rect"].values # Use 'pre_rect' column
-# ground_truth_labels = data["labels"].astype(str).str.lower()
-# true_is_probe = ~ground_truth_labels.isin(["n", "z"]) # n and z are both np
+# Best trial:
+#   Value (Average Accuracy): 0.9660
+#   Best Parameters:
+#     window: 902
+#     threshold: 0.16037791395522136
+#     min_probe_length: 557
+#     np_pad: 412
+
+    # single
+#     window: 961
+#     threshold: 0.09406124969163045
+#     min_probe_length: 867
+#     np_pad: 390
+
+# --- Evaluation with Best Parameters on the FIRST file (for detailed report) ---
+# Accuracy on first file with best parameters: 0.9757
+#               precision    recall  f1-score   support
+
+#           NP       0.97      0.99      0.98   2379522
+#            P       0.98      0.95      0.96   1220479
+
+#     accuracy                           0.98   3600001
+#    macro avg       0.98      0.97      0.97   3600001
+# weighted avg       0.98      0.98      0.98   3600001
 
 # --- Optuna Objective Function ---
 def objective(trial, file_paths):
@@ -82,13 +123,13 @@ def objective(trial, file_paths):
     """
     # 1. Suggest parameters
     # window: Integer, typically related to sample rate. Range from 50 to 500.
-    window = trial.suggest_int("window", 500, 1200)
+    window = trial.suggest_int("window", 700, 1200)
     # threshold: Float, critical for distinguishing NP from P. Range from 0.01 to 0.1.
-    threshold = trial.suggest_float("threshold", 0.005, 0.2)
+    threshold = trial.suggest_float("threshold", 0.05, 0.3)
     # min_probe_length: Integer, minimum length of a valid probe. Range from 500 to 2000.
-    min_probe_length = trial.suggest_int("min_probe_length", 500, 1000)
+    min_probe_length = trial.suggest_int("min_probe_length", 400, 1000)
     # np_pad: Integer, padding around probes. Range from 50 to 500.
-    np_pad = trial.suggest_int("np_pad", 50, 500)
+    np_pad = trial.suggest_int("np_pad", 300, 500)
 
     accuracies = []
 
@@ -107,7 +148,9 @@ def objective(trial, file_paths):
         # Prepare data for optimization for the current file
         pre_rect = data["pre_rect"].values
         ground_truth_labels = data["labels"].astype(str).str.lower()
-        true_is_probe = ~ground_truth_labels.isin(["n", "z"]) # True for probe (P), False for NP ('n' or 'z')
+        # True for probe (P), False for NP ('n' or 'z').
+        # Any other label (like 'g') will correctly be treated as 'P'.
+        true_is_probe = ~ground_truth_labels.isin(["n", "z"])
 
         # Run simple_probe_finder with suggested parameters on current file's data
         probes = ProbeSplitter.simple_probe_finder(
@@ -138,10 +181,10 @@ def objective(trial, file_paths):
 # --- Run Optuna Optimization ---
 if __name__ == "__main__":
     print("Starting Optuna optimization across multiple files...")
-    # Create an Optuna study. We want to maximize the average accuracy.
+        # Create an Optuna study. We want to maximize the average accuracy.
     study = optuna.create_study(direction="maximize")
     # Use a lambda function to pass file_paths to the objective
-    study.optimize(lambda trial: objective(trial, sharpshooter_files), n_trials=50) # Adjust n_trials as needed
+    study.optimize(lambda trial: objective(trial, sharpshooter_files), n_trials=1) # Adjust n_trials as needed
 
     print("\nOptimization finished.")
     print(f"Number of finished trials: {len(study.trials)}")
@@ -158,6 +201,7 @@ if __name__ == "__main__":
     # For a full multi-file report, you'd need to loop through all files again.
     print("\n--- Evaluation with Best Parameters on the FIRST file (for detailed report) ---")
     try:
+        # Re-load the first file to get its data for the detailed report
         first_file_data = pd.read_csv(sharpshooter_files[0])
         pre_rect_first_file = first_file_data["pre_rect"].values
         ground_truth_labels_first_file = first_file_data["labels"].astype(str).str.lower()
