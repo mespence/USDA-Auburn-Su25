@@ -5,6 +5,7 @@ from sklearn.metrics import accuracy_score, classification_report, f1_score
 import os # Import os module for path manipulation
 import glob
 import re
+import random
 
 # single file training
 # Best Parameters:
@@ -94,7 +95,7 @@ class ProbeSplitter:
         is_NP = smoothed < threshold # NP is where the signal is close to 0
         
         # Find starts and ends, combine into tuple
-        find_sequence = lambda l, seq : [i for i in range(len(l)) if l[i:i+len(seq)] == seq]
+        find_sequence = lambda l, seq : [i for i in range(len(l)) if l[i:i+len(seq)] == seq] 
         is_NP_list = list(is_NP)
         probe_starts = find_sequence(is_NP_list, [True, False])
         probe_ends = find_sequence(is_NP_list, [False, True])
@@ -157,47 +158,54 @@ class ProbeSplitter:
                 rolling_std = segment_series.rolling(window=g_window_samples, center=True, min_periods=1).std().fillna(0).values
 
                 # Calculate rolling peak-to-peak (max - min)
-                rolling_max = segment_series.rolling(window=g_window_samples, center=True, min_periods=1).max().values
-                rolling_min = segment_series.rolling(window=g_window_samples, center=True, min_periods=1).min().values
-                rolling_ptp = (rolling_max - rolling_min).fillna(0).values
+                # Get rolling max/min as Series first
+                rolling_max_series = segment_series.rolling(window=g_window_samples, center=True, min_periods=1).max()
+                rolling_min_series = segment_series.rolling(window=g_window_samples, center=True, min_periods=1).min()
+                
+                # Perform subtraction on Series, then fillna, then convert to values
+                rolling_ptp = (rolling_max_series - rolling_min_series).fillna(0).values
 
                 # Identify 'G' based on thresholds within this NP segment
                 is_g_in_segment = (rolling_std > g_std_threshold) & (rolling_ptp > g_ptp_threshold)
                 
                 # If G is detected, re-label those parts as True (P) in the refined array
                 refined_pred_is_probe[np_block_start:np_block_end][is_g_in_segment] = True
-            
+                
         return refined_pred_is_probe
 
 base_directory = r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\Data\Sharpshooter Data - HPR 2017"
 all_sharpshooter_files = glob.glob(os.path.join(base_directory, "sharpshooter_*_labeled.csv"))
 
-excluded_file_ids = {
-    "a01", "a02", "a03", "a10", "a15",
-    "b01", "b02", "b04", "b07", "b12", "b188", "b202", "b206", "b208",
-    "c046", "c07", "c09", "c10",
-    "d01", "d03", "d056", "d058", "d12",
-    "b11", #b11 is the test file
-}
+NUM_TRAINING_FILES = 10
 
-file_id_pattern = re.compile(r"sharpshooter_([a-d]\d{2,3})_labeled\.csv", re.IGNORECASE)
+random.seed(42)
 
-# Filter the list of files to exclude the specified ones
-sharpshooter_files = []
-for file_path in all_sharpshooter_files:
-    file_basename = os.path.basename(file_path)
-    match = file_id_pattern.match(file_basename)
+if len(all_sharpshooter_files) > NUM_TRAINING_FILES:
+    sharpshooter_files = random.sample(all_sharpshooter_files, NUM_TRAINING_FILES)
+else:
+    sharpshooter_files = all_sharpshooter_files
+    print(f"Warning: Not enough files found ({len(all_sharpshooter_files)}) to select {NUM_TRAINING_FILES} for training. Using all available files.")
 
-    if match:
-        extracted_id = match.group(1) # Get the captured identifier (e.g., 'a01')
-        if extracted_id not in excluded_file_ids:
-            sharpshooter_files.append(file_path)
+training_file_set = set(sharpshooter_files)
+test_file_candidates = [f for f in all_sharpshooter_files if f not in training_file_set]
+
+if not test_file_candidates:
+    print("Error: No files available for testing that were not used for training.")
+    if sharpshooter_files:
+        test_file_path = random.choice(sharpshooter_files)
+        print(f"WARNING: Using a training file '{os.path.basename(test_file_path)} as test file due to lack of distinct test candidates.")
     else:
-        print(f"Warning: File '{file_basename}' did not match the expected naming pattern and will be skipped.")
+        test_file_path = None
+else:
+    test_file_path = random.choice(test_file_candidates)
 
 print(f"Found {len(all_sharpshooter_files)} total sharpshooter files.")
-print(f"Excluding {len(excluded_file_ids)} specified file IDs.")
-print(f"Optimizing on {len(sharpshooter_files)} sharpshooter files.")
+print(f"Randomly selected on {len(sharpshooter_files)} files ({[os.path.basename(sharpshooter_file) for sharpshooter_file in sharpshooter_files]}) for optimization.")
+
+if test_file_path:
+    print(f"Randomly selected test file: {os.path.basename(test_file_path)}")
+else:
+    print("No test file could be selected.")
 
 # --- Optuna Objective Function ---
 def objective(trial, file_paths):
@@ -206,17 +214,18 @@ def objective(trial, file_paths):
     and the G-signal refinement parameters.
     """
     # 1. Suggest parameters for simple_probe_finder (main stage)
-    window = trial.suggest_int("window", 800, 1200)
-    threshold = trial.suggest_float("threshold", 0.1, 0.25)
-    min_probe_length = trial.suggest_int("min_probe_length", 400, 900)
+    window = trial.suggest_int("window", 700, 1200)
+    threshold = trial.suggest_float("threshold", 0.05, 0.3)
+    min_probe_length = trial.suggest_int("min_probe_length", 400, 1000)
     np_pad = trial.suggest_int("np_pad", 300, 500)
 
     # 2. Suggest parameters for G-signal refinement (secondary stage)
     # These ranges are suggestions; you might need to adjust them based on initial runs
     sample_rate = 100 # Assuming a fixed sample rate for the data
-    g_window_seconds = trial.suggest_float('g_window_seconds', 0.1, 2.0) # Window for G-signal analysis (in seconds)
-    g_std_threshold = trial.suggest_float('g_std_threshold', 0.001, 0.05) # Min std dev for G
-    g_ptp_threshold = trial.suggest_float('g_ptp_threshold', 0.01, 0.15) # Min peak-to-peak for G
+    g_window_seconds = trial.suggest_float('g_window_seconds', 0.1, 30.0) # Window for G-signal analysis (in seconds)
+    g_std_threshold = trial.suggest_float('g_std_threshold', 0.005, 0.08) # Min std dev for G
+    g_ptp_threshold = trial.suggest_float('g_ptp_threshold', 0.03, 1.0) # Min peak-to-peak for G
+
 
     total_true_labels = []
     total_predicted_labels = []
@@ -283,15 +292,19 @@ def objective(trial, file_paths):
 # --- Run Optuna Optimization ---
 if __name__ == "__main__":
     if not sharpshooter_files:
-        print("Error: No sharpshooter files specified for optimization after exclusion. Please add file paths to the 'sharpshooter_files' list or configure 'base_directory', 'glob' pattern, and 'excluded_file_ids'.")
+        print("Error: No sharpshooter files found for optimization. Please check 'base_directory' and 'glob' pattern.")
         print("Exiting optimization.")
         exit()
 
-    print("Starting Optuna optimization across multiple files with G-signal refinement...")
+    if test_file_path is None:
+        print("Error: No suitable test file could be selected. Exiting optimization.")
+        exit()
+
+    print("Starting Optuna optimization across randomly selected files with G-signal refinement...")
     # Create an Optuna study. We want to maximize the average F1-score for 'P'.
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=42))
     # Pass the loaded file_paths to the objective function
-    study.optimize(lambda trial: objective(trial, sharpshooter_files), n_trials=30) # Start with fewer trials (e.g., 30)
+    study.optimize(lambda trial: objective(trial, sharpshooter_files), n_trials=20)
 
     print("\nOptimization finished.")
     print(f"Number of finished trials: {len(study.trials)}")
@@ -303,9 +316,8 @@ if __name__ == "__main__":
     for key, value in trial.params.items():
         print(f"    {key}: {value}")
 
-    # --- Final Evaluation with Best Parameters on a Test File ---
-    print("\n--- Final Evaluation with Best Parameters on a Test File ---")
-    test_file_path = os.path.join(base_directory, r"sharpshooter_b11_labeled.csv") # Assuming b11 is in the base_directory
+    # --- Final Evaluation with Best Parameters on the Randomly Selected Test File ---
+    print("\n--- Final Evaluation with Best Parameters on the Randomly Selected Test File ---")
     
     try:
         test_df = pd.read_csv(test_file_path)

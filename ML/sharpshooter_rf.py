@@ -27,7 +27,7 @@ def read_file(file_path):
 
 
 if __name__ == "__main__":
-    data_dir = r"D:\USDA-Auburn\CS-Repository\Data\Sharpshooter Data - HPR 2017\sharpshooter_parquet"
+    data_dir = r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\Data\Sharpshooter Data - HPR 2017"
     probes = []
 
     # Collect valid file paths
@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
 
     print("Running Model")
-    test_df = pd.read_csv(r"D:\USDA-Auburn\CS-Repository\Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_b11_labeled.csv")
+    test_df = pd.read_csv(r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\Data\Sharpshooter Data - HPR 2017\sharpshooter_b11_labeled.csv")
     test_df.rename(columns={"pre_rect": "voltage"}, inplace = True)
     predictions = rf_model.predict([test_df])[0]
     print("Model run.")
