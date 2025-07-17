@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.ndimage
 import pandas as pd
 import optuna
 from sklearn.metrics import accuracy_score, classification_report, f1_score
@@ -69,6 +70,60 @@ import random
 #    macro avg       0.96      0.75      0.82   3600089
 # weighted avg       0.94      0.94      0.93   3600089
 
+
+
+# new tuning with g filter
+# Number of finished trials: 20
+# Best trial:
+#   Value (Average F1-score for P): 0.9322
+#   Best Parameters:
+#     window: 887
+#     threshold: 0.28767857660247903      
+#     min_probe_length: 839
+#     g_window_seconds: 0.39643541684062933
+#     g_std_threshold: 0.00864373149647393
+#     g_ptp_threshold: 0.018131705703547926
+
+# --- Final Evaluation with Best Parameters on the Randomly Selected Test File ---
+# Evaluating on test file: sharpshooter_d16_labeled.csv
+# Accuracy on test file: 0.8576
+#               precision    recall  f1-score   support
+
+#           NP       0.54      0.97      0.69    591461
+#            P       0.99      0.84      0.91   3008540
+
+#     accuracy                           0.86   3600001
+#    macro avg       0.76      0.90      0.80   3600001
+# weighted avg       0.92      0.86      0.87   3600001
+
+
+# new tuning with g filter increased window range, dilation
+# Optimization finished.
+# Number of finished trials: 3
+# Best trial:
+#   Value (Average F1-score for P): 0.9151
+#   Best Parameters:
+#     window: 887
+#     threshold: 0.28767857660247903
+#     min_probe_length: 839
+#     np_pad: 420
+#     g_window_seconds: 20.460652415485278
+#     g_std_threshold: 0.0166995890252152
+#     g_ptp_threshold: 0.14442471597135292
+#     g_dilation_seconds: 17.323522915498703
+
+# --- Final Evaluation with Best Parameters on the Randomly Selected Test File ---
+# Evaluating on test file: sharpshooter_d16_labeled.csv
+# Accuracy on test file: 0.9725
+#               precision    recall  f1-score   support
+
+#           NP       0.89      0.94      0.92    591461
+#            P       0.99      0.98      0.98   3008540
+
+#     accuracy                           0.97   3600001
+#    macro avg       0.94      0.96      0.95   3600001
+# weighted avg       0.97      0.97      0.97   3600001
+
 class ProbeSplitter:
     def simple_probe_finder(recording, window = 1000, threshold = 0.16,
                         min_probe_length = 675, np_pad = 415):
@@ -106,47 +161,42 @@ class ProbeSplitter:
         
         return probes
     
+    
+# --- New Function for G-Signal Refinement (Optimized with Dilation and Min Length) ---
     def refine_predictions_for_g(initial_predicted_is_probe, raw_recording, sample_rate,
-                             g_window_seconds, g_std_threshold, g_ptp_threshold,
+                                g_window_seconds, g_std_threshold, g_ptp_threshold,
+                             g_dilation_seconds, min_g_length_seconds,
                              initial_probes_tuples):
         """
         Refines initial boolean predictions by re-classifying 'NP' segments as 'P'
-        if they exhibit 'G'-like characteristics (high rolling std and peak-to-peak).
-
-        Args:
-            initial_predicted_is_probe (np.array): Boolean array, True for P, False for NP.
-            raw_recording (np.array): The original 1-D voltage recording.
-            sample_rate (int): Samples per second.
-            g_window_seconds (float): Time window (in seconds) for G-signal analysis.
-            g_std_threshold (float): Minimum standard deviation within g_window to be considered G.
-            g_ptp_threshold (float): Minimum peak-to-peak amplitude within g_window to be considered G.
-            initial_probes_tuples (list): List of (start, end) tuples for initially detected P regions.
-
-        Returns:
-            np.array: Refined boolean array (True for P, False for NP).
+        if they exhibit 'G'-like characteristics (high rolling std and peak-to-peak),
+        applies dilation to bridge gaps within detected G regions, and then filters
+        these detected G regions by a minimum length.
         """
         refined_pred_is_probe = np.copy(initial_predicted_is_probe)
         
         g_window_samples = int(g_window_seconds * sample_rate)
-        g_window_samples = max(1, g_window_samples) # Ensure window is at least 1
+        g_window_samples = max(1, g_window_samples)
+
+        g_dilation_samples = int(g_dilation_seconds * sample_rate)
+        g_dilation_samples = max(0, g_dilation_samples) # Dilation can be 0 or more
+
+        min_g_length_samples = int(min_g_length_seconds * sample_rate)
+        min_g_length_samples = max(1, min_g_length_samples) # Ensure minimum length is at least 1 sample
 
         recording_length = len(raw_recording)
 
-        # Define NP segments based on the gaps between initial probes
         np_segments_ranges = []
         current_np_start = 0
 
         for p_start, p_end in initial_probes_tuples:
-            # NP segment before this probe
             if p_start > current_np_start:
                 np_segments_ranges.append((current_np_start, p_start))
-            current_np_start = p_end # Start looking for next NP segment after this probe ends
+            current_np_start = p_end
 
-        # Add the final NP segment after the last probe (if any)
         if current_np_start < recording_length:
             np_segments_ranges.append((current_np_start, recording_length))
 
-        # Iterate through identified NP segments and apply G-signal detection
         for np_block_start, np_block_end in np_segments_ranges:
             np_segment = raw_recording[np_block_start:np_block_end]
 
@@ -154,23 +204,41 @@ class ProbeSplitter:
             if len(np_segment) >= g_window_samples:
                 segment_series = pd.Series(np_segment)
 
-                # Calculate rolling standard deviation
                 rolling_std = segment_series.rolling(window=g_window_samples, center=True, min_periods=1).std().fillna(0).values
-
-                # Calculate rolling peak-to-peak (max - min)
-                # Get rolling max/min as Series first
                 rolling_max_series = segment_series.rolling(window=g_window_samples, center=True, min_periods=1).max()
                 rolling_min_series = segment_series.rolling(window=g_window_samples, center=True, min_periods=1).min()
-                
-                # Perform subtraction on Series, then fillna, then convert to values
                 rolling_ptp = (rolling_max_series - rolling_min_series).fillna(0).values
 
-                # Identify 'G' based on thresholds within this NP segment
-                is_g_in_segment = (rolling_std > g_std_threshold) & (rolling_ptp > g_ptp_threshold)
+                # Initial detection of fluctuating 'G' parts within this NP segment
+                is_g_in_segment_local = (rolling_std > g_std_threshold) & (rolling_ptp > g_ptp_threshold)
                 
-                # If G is detected, re-label those parts as True (P) in the refined array
-                refined_pred_is_probe[np_block_start:np_block_end][is_g_in_segment] = True
-                
+                # Apply dilation to bridge small gaps within these detected 'G' regions
+                if g_dilation_samples > 0:
+                    dilated_is_g_in_segment = scipy.ndimage.binary_dilation(
+                        is_g_in_segment_local,
+                        structure=np.ones(g_dilation_samples * 2 + 1, dtype=bool),
+                        border_value=False
+                    )
+                else:
+                    dilated_is_g_in_segment = is_g_in_segment_local
+
+                # --- Filter by minimum G length within the NP segment ---
+                # Find contiguous True regions in dilated_is_g_in_segment
+                # Use np.diff to find start/end of True blocks
+                # Pad with False at ends to catch blocks starting/ending at boundaries
+                g_segment_diff = np.diff(np.concatenate(([False], dilated_is_g_in_segment, [False])))
+                g_segment_starts_local = np.where(g_segment_diff == 1)[0]
+                g_segment_ends_local = np.where(g_segment_diff == -1)[0]
+
+                final_g_in_segment_local = np.zeros_like(is_g_in_segment_local, dtype=bool)
+                for start_loc, end_loc in zip(g_segment_starts_local, g_segment_ends_local):
+                    # Check if the length of the detected G segment meets the minimum requirement
+                    if (end_loc - start_loc) >= min_g_length_samples:
+                        final_g_in_segment_local[start_loc:end_loc] = True
+
+                # Re-label the *filtered* and dilated 'G' parts as True (P) in the refined array
+                refined_pred_is_probe[np_block_start:np_block_end][final_g_in_segment_local] = True
+            
         return refined_pred_is_probe
 
 base_directory = r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\Data\Sharpshooter Data - HPR 2017"
@@ -214,18 +282,19 @@ def objective(trial, file_paths):
     and the G-signal refinement parameters.
     """
     # 1. Suggest parameters for simple_probe_finder (main stage)
-    window = trial.suggest_int("window", 700, 1200)
-    threshold = trial.suggest_float("threshold", 0.05, 0.3)
-    min_probe_length = trial.suggest_int("min_probe_length", 400, 1000)
-    np_pad = trial.suggest_int("np_pad", 300, 500)
+    window = trial.suggest_int("window", 750, 1000)
+    threshold = trial.suggest_float("threshold", 0.05, 0.2)
+    min_probe_length = trial.suggest_int("min_probe_length", 700, 900)
+    np_pad = trial.suggest_int("np_pad", 400, 450)
 
     # 2. Suggest parameters for G-signal refinement (secondary stage)
     # These ranges are suggestions; you might need to adjust them based on initial runs
     sample_rate = 100 # Assuming a fixed sample rate for the data
-    g_window_seconds = trial.suggest_float('g_window_seconds', 0.1, 30.0) # Window for G-signal analysis (in seconds)
-    g_std_threshold = trial.suggest_float('g_std_threshold', 0.005, 0.08) # Min std dev for G
-    g_ptp_threshold = trial.suggest_float('g_ptp_threshold', 0.03, 1.0) # Min peak-to-peak for G
-
+    g_window_seconds = trial.suggest_float('g_window_seconds', 5.0, 30.0) # Window for G-signal analysis (in seconds)
+    g_std_threshold = trial.suggest_float('g_std_threshold', 0.01, 0.1) # Min std dev for G
+    g_ptp_threshold = trial.suggest_float('g_ptp_threshold', 0.05, 2.5) # Min peak-to-peak for G
+    g_dilation_seconds = trial.suggest_float('g_dilation_seconds', 5.0, 30.0)
+    min_g_length_seconds = trial.suggest_float('min_g_length_seconds', 0.1, 10.0)
 
     total_true_labels = []
     total_predicted_labels = []
@@ -268,6 +337,8 @@ def objective(trial, file_paths):
             g_window_seconds,
             g_std_threshold,
             g_ptp_threshold,
+            g_dilation_seconds,
+            min_g_length_seconds,
             initial_probes_tuples # Pass the initial probes list
         )
         
@@ -285,7 +356,7 @@ def objective(trial, file_paths):
     true_labels_str = np.where(np.array(total_true_labels), 'P', 'NP')
     predicted_labels_str = np.where(np.array(total_predicted_labels), 'P', 'NP')
     
-    f1 = f1_score(true_labels_str, predicted_labels_str, pos_label='P', average='binary')
+    f1 = f1_score(true_labels_str, predicted_labels_str, average='macro')
     
     return f1 # Optuna will maximize this F1-score
 
@@ -304,14 +375,14 @@ if __name__ == "__main__":
     # Create an Optuna study. We want to maximize the average F1-score for 'P'.
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=42))
     # Pass the loaded file_paths to the objective function
-    study.optimize(lambda trial: objective(trial, sharpshooter_files), n_trials=20)
+    study.optimize(lambda trial: objective(trial, sharpshooter_files), n_trials=3)
 
     print("\nOptimization finished.")
     print(f"Number of finished trials: {len(study.trials)}")
     print("Best trial:")
     trial = study.best_trial
 
-    print(f"  Value (Average F1-score for P): {trial.value:.4f}")
+    print(f"  Value (Average Macro F1-score): {trial.value:.4f}")
     print("  Best Parameters:")
     for key, value in trial.params.items():
         print(f"    {key}: {value}")
@@ -358,6 +429,8 @@ if __name__ == "__main__":
         g_window_seconds=trial.params["g_window_seconds"],
         g_std_threshold=trial.params["g_std_threshold"],
         g_ptp_threshold=trial.params["g_ptp_threshold"],
+        g_dilation_seconds=trial.params["g_dilation_seconds"],
+        min_g_length_seconds=trial.params["min_g_length_seconds"],
         initial_probes_tuples=best_initial_probes_tuples # Pass the initial probes list
     )
 
