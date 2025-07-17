@@ -108,7 +108,7 @@ class Labeler(QObject):
         ground_truth_labels = data["labels"].astype(str).str.lower()
         true_is_probe = ~ground_truth_labels.isin(["n", "z"])
 
-        pre_rect = data["voltage"].values
+        pre_rect = data["voltage"].values # once the data is fed into the program, the data is saved as voltage (no longer pre_rect)
         self.start_labeling_progress.emit(25, 100)
         probes = ProbeSplitter.simple_probe_finder(pre_rect)
         self.start_labeling_progress.emit(50, 100)
@@ -117,7 +117,6 @@ class Labeler(QObject):
             data.loc[start:end, 'probes'] = 'P'
         datawindow.transition_mode = 'probes'
         datawindow.plot_recording(epgdata.current_file)
-        # datawindow.plot_transitions(epgdata.current_file)
         self.start_labeling_progress.emit(100, 100)
 
         predicted_is_probe = np.zeros_like(pre_rect, dtype=bool)
@@ -126,7 +125,7 @@ class Labeler(QObject):
             end_bound = min(len(predicted_is_probe), end)
             predicted_is_probe[start_bound:end_bound] = True
 
-        # 3. Evaluate and print results
+        # print accuracy results on probe splitting for the current file
         print("\n=== Probe Splitting Evaluation ===")
         print(f"Accuracy: {accuracy_score(true_is_probe, predicted_is_probe):.4f}")
         print(classification_report(true_is_probe, predicted_is_probe, target_names=["NP", "P"]))

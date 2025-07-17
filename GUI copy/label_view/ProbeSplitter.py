@@ -5,6 +5,8 @@ from sklearn.metrics import accuracy_score, classification_report
 import os # Import os module for path manipulation
 import glob
 import re
+
+# single file training
 # Best Parameters:
 #     window: 961
 #     threshold: 0.09406124969163045
@@ -21,6 +23,50 @@ import re
 #     accuracy                           0.98   3600001
 #    macro avg       0.98      0.98      0.98   3600001
 # weighted avg       0.98      0.98      0.98   3600001
+
+# 6 file training
+# Best trial:
+#   Value (Average Accuracy): 0.9660
+#   Best Parameters:
+#     window: 902
+#     threshold: 0.16037791395522136
+#     min_probe_length: 557
+#     np_pad: 412
+# 
+# --- Evaluation with Best Parameters on the FIRST file (for detailed report) ---
+# Accuracy on first file with best parameters: 0.9757
+#               precision    recall  f1-score   support
+
+#           NP       0.97      0.99      0.98   2379522
+#            P       0.98      0.95      0.96   1220479
+
+#     accuracy                           0.98   3600001
+#    macro avg       0.98      0.97      0.97   3600001
+# weighted avg       0.98      0.98      0.98   3600001
+
+
+
+# 56 file training
+# Optimization finished.
+# Number of finished trials: 53
+# Best trial:
+#   Value (Average Accuracy): 0.8976
+#   Best Parameters:
+#     window: 1095
+#     threshold: 0.1604695760150232
+#     min_probe_length: 681
+#     np_pad: 416
+
+# --- Evaluation with Best Parameters on the FIRST file (for detailed report) ---
+# Accuracy on first file with best parameters: 0.9383
+#               precision    recall  f1-score   support
+
+#           NP       0.94      1.00      0.97   3157722
+#            P       0.98      0.51      0.67    442367
+
+#     accuracy                           0.94   3600089
+#    macro avg       0.96      0.75      0.82   3600089
+# weighted avg       0.94      0.94      0.93   3600089
 
 class ProbeSplitter:
     def simple_probe_finder(recording, window = 950, threshold = 0.1,
@@ -59,8 +105,7 @@ class ProbeSplitter:
         
         return probes
 
-base_directory = "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/"
-
+base_directory = r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\Data\Sharpshooter Data - HPR 2017"
 all_sharpshooter_files = glob.glob(os.path.join(base_directory, "sharpshooter_*_labeled.csv"))
 
 excluded_file_ids = {
@@ -68,7 +113,7 @@ excluded_file_ids = {
     "b01", "b02", "b04", "b07", "b12", "b188", "b202", "b206", "b208",
     "c046", "c07", "c09", "c10",
     "d01", "d03", "d056", "d058", "d12",
-    "b11", # TEST FILE
+    "b11", #b11 is the test file
 }
 
 file_id_pattern = re.compile(r"sharpshooter_([a-d]\d{2,3})_labeled\.csv", re.IGNORECASE)
@@ -90,31 +135,6 @@ for file_path in all_sharpshooter_files:
 print(f"Found {len(all_sharpshooter_files)} total sharpshooter files.")
 print(f"Excluding {len(excluded_file_ids)} specified file IDs.")
 print(f"Optimizing on {len(sharpshooter_files)} sharpshooter files.")
-
-# Best trial:
-#   Value (Average Accuracy): 0.9660
-#   Best Parameters:
-#     window: 902
-#     threshold: 0.16037791395522136
-#     min_probe_length: 557
-#     np_pad: 412
-
-    # single
-#     window: 961
-#     threshold: 0.09406124969163045
-#     min_probe_length: 867
-#     np_pad: 390
-
-# --- Evaluation with Best Parameters on the FIRST file (for detailed report) ---
-# Accuracy on first file with best parameters: 0.9757
-#               precision    recall  f1-score   support
-
-#           NP       0.97      0.99      0.98   2379522
-#            P       0.98      0.95      0.96   1220479
-
-#     accuracy                           0.98   3600001
-#    macro avg       0.98      0.97      0.97   3600001
-# weighted avg       0.98      0.98      0.98   3600001
 
 # --- Optuna Objective Function ---
 def objective(trial, file_paths):
@@ -145,11 +165,9 @@ def objective(trial, file_paths):
             print(f"Error loading {file_path}: {e}. Skipping this file.")
             continue
 
-        # Prepare data for optimization for the current file
         pre_rect = data["pre_rect"].values
         ground_truth_labels = data["labels"].astype(str).str.lower()
-        # True for probe (P), False for NP ('n' or 'z').
-        # Any other label (like 'g') will correctly be treated as 'P'.
+
         true_is_probe = ~ground_truth_labels.isin(["n", "z"])
 
         # Run simple_probe_finder with suggested parameters on current file's data
@@ -173,7 +191,7 @@ def objective(trial, file_paths):
 
     # If no files were processed successfully, return a very low value so Optuna avoids these parameters
     if not accuracies:
-        return 0.0 # Or -np.inf if you prefer
+        return 0.0 
 
     # Return the average accuracy across all processed files
     return np.mean(accuracies)
@@ -184,7 +202,7 @@ if __name__ == "__main__":
         # Create an Optuna study. We want to maximize the average accuracy.
     study = optuna.create_study(direction="maximize")
     # Use a lambda function to pass file_paths to the objective
-    study.optimize(lambda trial: objective(trial, sharpshooter_files), n_trials=1) # Adjust n_trials as needed
+    study.optimize(lambda trial: objective(trial, sharpshooter_files), n_trials=53) # A single trial takes ~17 minutes --> estimated time for n=53 trials, 15 hrs (started at 4:41:41pm 7/16/25)
 
     print("\nOptimization finished.")
     print(f"Number of finished trials: {len(study.trials)}")
