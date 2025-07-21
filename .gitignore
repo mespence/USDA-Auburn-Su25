@@ -193,3 +193,5 @@ GUI/*.csv
 ML/data
 ML/**/*.csv
 ML/**/*.parquet
+
+Exploration/Cole/probesplitter/gooddata
