@@ -43,24 +43,7 @@ if __name__ == "__main__":
             df = future.result()
             if df is not None:
                 probes.append(df)
-
-
-    # for filename in os.listdir(data_dir):
-    #     if any(bug_id in filename for bug_id in excluded):
-    #         continue
-    #     if filename.endswith(".csv"):
-    #         print(f"Reading {filename}...")
-    #         file_path = os.path.join(data_dir, filename)
-    #         df = pd.read_csv(file_path, engine="pyarrow")
-    #         df = df.rename(columns={"pre_rect": "voltage"})
-    #         probes.append(df)
-    #     elif filename.endswith(".parquet"):
-    #         print(f"Reading {filename}...")
-    #         file_path = os.path.join(data_dir, filename)
-    #         df = pd.read_parquet(file_path, columns=["time", "pre_rect", "labels"], engine="pyarrow")
-    #         df = df.rename(columns={"pre_rect": "voltage"})
-    #         probes.append(df)
-
+                
     rf_model = Model()
     rf_model.train(probes)
 
