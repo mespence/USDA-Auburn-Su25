@@ -82,7 +82,11 @@ class Model:
             # We need to expand the prediction based on the sample rate
             pred = np.repeat(pred, self.chunk_seconds * self.sample_rate)
             # Expand until the end since probe is never exactly divisible by window size
-            pred = np.pad(pred, (0, len(raw_probe) - len(pred)), 'edge')
+            diff = len(raw_probe) - len(pred)
+            if diff > 0:
+                pred = np.pad(pred, (0, diff), mode="edge")
+            else:
+                pred = pred[:len(raw_probe)]
             predictions.append(pred)
         return predictions
 
