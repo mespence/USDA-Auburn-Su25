@@ -41,6 +41,9 @@ def transform_single_probe(probe, chunk_size, sample_rate, num_freqs, training):
         label_array = probe["labels"].values[:num_chunks * chunk_size]
         label_chunks = label_array.reshape(num_chunks, chunk_size)
         from collections import Counter
-        result["label"] = [Counter(chunk).most_common(1)[0][0] for chunk in label_chunks]
+        label_array = probe["labels"].values[:num_chunks * chunk_size]
+        label_chunks = label_array.reshape(num_chunks, chunk_size)
+        label_map = {"NP": 0, "P": 1}  # enforce binary
+        result["label"] = [label_map[Counter(chunk).most_common(1)[0][0]] for chunk in label_chunks]
 
     return pd.DataFrame(result)
