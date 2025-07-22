@@ -70,7 +70,7 @@ def get_probing_sections(df) -> list[pd.DataFrame]:
 
 
 if __name__ == "__main__":
-    data_dir = "/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/Data"
+    data_dir = r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\Data\Sharpshooter Data - HPR 2017\Data"
     # r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\Data\Sharpshooter Data - HPR 2017"
     probes = []
 
@@ -129,7 +129,7 @@ if __name__ == "__main__":
         sys.exit(1) # Exit if no training data
 
     print("Running Model")
-    test_df = pd.read_csv("/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/Data/sharpshooter_b11_labeled.csv")
+    test_df = pd.read_csv(r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\Data\Sharpshooter Data - HPR 2017\Data\sharpshooter_b11_labeled.csv")
     test_df.rename(columns={"pre_rect": "voltage"}, inplace = True)
 
     # --- Start of new prediction logic for 'P' labels ---

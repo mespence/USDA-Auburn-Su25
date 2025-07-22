@@ -28,10 +28,10 @@ class Model:
         self.model_path = r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\ML\rf_pickle"
         
         if trial:
-            self.chunk_seconds = trial.suggest_int('chunk_seconds', 1, 3)
-            self.num_freqs = trial.suggest_int('num_freqs', 1, 10)
-            self.num_estimators = trial.suggest_categorical('num_estimators', [8, 16, 32, 64, 128])
-            self.max_depth = trial.suggest_categorical('max_depth', [8, 16, 32, 64, 128])
+            self.chunk_seconds = trial.suggest_int('chunk_seconds', 1, 10)
+            self.num_freqs = trial.suggest_int('num_freqs', 3, 15)
+            self.num_estimators = trial.suggest_categorical('num_estimators', [50, 100, 200, 300, 400, 500, 600])
+            self.max_depth = trial.suggest_categorical('max_depth', [10, 20, 30, 40, 50, 60, None])
 
     
     def transform_data(self, probes, training=True):
