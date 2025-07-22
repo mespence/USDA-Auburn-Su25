@@ -27,7 +27,8 @@ def read_file(file_path):
 
 
 if __name__ == "__main__":
-    data_dir = r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\Data\Sharpshooter Data - HPR 2017"
+    #data_dir = r"/Users/cathy/coding/bugs2025/USDA-Auburn-Su25/Exploration/Cole/probesplitter/gooddata"
+    data_dir = r"/Users/cathy/coding/bugs2025/USDA-Auburn-Su25/Exploration/Cole/probesplitter/gooddata_edited"
     probes = []
 
     # Collect valid file paths
@@ -66,7 +67,9 @@ if __name__ == "__main__":
 
 
     print("Running Model")
-    test_df = pd.read_csv(r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\Data\Sharpshooter Data - HPR 2017\sharpshooter_b11_labeled.csv")
+    #test_df = pd.read_csv(r"/Users/cathy/coding/bugs2025/USDA-Auburn-Su25/Exploration/Cole/probesplitter/gooddata/sharpshooter_b11_labeled.csv", index_col=0)
+    test_df = pd.read_csv(r"/Users/cathy/coding/bugs2025/USDA-Auburn-Su25/Exploration/Cole/probesplitter/gooddata_edited/sharpshooter_b11_labeled.csv", index_col=0)
+
     test_df.rename(columns={"pre_rect": "voltage"}, inplace = True)
     predictions = rf_model.predict([test_df])[0]
     print("Model run.")
@@ -76,7 +79,8 @@ if __name__ == "__main__":
     print("Saving output...")
     rf_model.save()
     test_df["labels"] = predictions
-    test_df.to_csv("out.csv")
+    #test_df.to_csv("out.csv")
+    test_df.to_csv("pnpout.csv")
     print("Output saved.")
 
 

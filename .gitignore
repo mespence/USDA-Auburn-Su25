@@ -195,3 +195,7 @@ ML/**/*.csv
 ML/**/*.parquet
 
 Exploration/Cole/probesplitter/gooddata
+Exploration/Cole/probesplitter/gooddata_edited
+Exploration/Cole/probesplitter/out.csv
+Exploration/Cole/probesplitter/out2.csv
+Exploration/Cole/probesplitter/pnpout.csv
