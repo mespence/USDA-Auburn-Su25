@@ -15,10 +15,10 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 class Model:
     def __init__(self, save_path = None, trial = None):
-        self.chunk_seconds = 3
-        self.num_estimators = 128
-        self.num_freqs = 7
-        self.max_depth = 16
+        self.chunk_seconds = 3#3
+        self.num_estimators = 8#128
+        self.num_freqs = 6#7
+        self.max_depth = 32#16
         self.sample_rate = 100
         self.chunk_size = self.chunk_seconds * self.sample_rate
         self.random_state = 42
@@ -68,7 +68,7 @@ class Model:
         train = pd.concat(transformed_probes)
         X_train = train.drop(["label"], axis=1)
         Y_train = train["label"]
-        rf = RandomForestClassifier(self.num_estimators, class_weight="balanced", max_depth = self.max_depth, verbose=1, n_jobs=-1)
+        rf = RandomForestClassifier(self.num_estimators, class_weight="balanced", max_depth = self.max_depth, n_jobs=-1)
         self.model = rf.fit(X_train, Y_train)
 
     
