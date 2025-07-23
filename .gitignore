@@ -193,6 +193,9 @@ GUI/*.csv
 ML/data
 ML/**/*.csv
 ML/**/*.parquet
+ML/out
+ML/**/rf_pickle
+ML/**/tcn_weights
 
 Exploration/Cole/probesplitter/gooddata
 Exploration/Cole/probesplitter/gooddata_edited

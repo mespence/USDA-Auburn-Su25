@@ -25,7 +25,7 @@ class Model:
         dirname = os.path.dirname(__file__)
         self.model = None
         self.save_path = save_path
-        self.model_path = r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\ML\rf_pickle"
+        self.model_path = r"D:\USDA-Auburn\CS-Repository\ML\rf.py"
         
         if trial:
             self.chunk_seconds = trial.suggest_int('chunk_seconds', 1, 10)
@@ -53,7 +53,7 @@ class Model:
             ]
 
             transformed_probes = []
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Processing probes"):
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Processing probes", position=2, leave=False):
                 result = future.result()
                 if result is None:
                     print("WARNING: Got None from transform_single_probe")

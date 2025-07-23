@@ -7,7 +7,7 @@ def transform_single_probe(probe, chunk_size, sample_rate, num_freqs, training):
     """
     Takes a single probe and extracts its top N freqs, mean, and std.
 
-    Defined outside of Model class so it can be parallelized.
+    Defined outside of RF Model class so it can be parallelized.
     """
     freq_bins = np.fft.fftfreq(chunk_size, 1 / sample_rate)[1:chunk_size // 2]
 
