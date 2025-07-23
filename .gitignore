@@ -199,6 +199,10 @@ ML/**/tcn_weights
 
 Exploration/Cole/probesplitter/gooddata
 Exploration/Cole/probesplitter/gooddata_edited
+Exploration/Cole/probesplitter/gooddata_edited_p
+Exploration/Cole/probesplitter/gooddata_edited_np
+Exploration/Cole/probesplitter/gooddata_sliced_p
+Exploration/Cole/probesplitter/gooddata_sliced_np
 Exploration/Cole/probesplitter/out.csv
 Exploration/Cole/probesplitter/out2.csv
 Exploration/Cole/probesplitter/pnpout.csv
