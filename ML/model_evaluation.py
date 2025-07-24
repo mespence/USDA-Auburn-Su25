@@ -2,6 +2,7 @@
 
 import os
 import importlib
+import argparse
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -21,6 +22,7 @@ from sklearn.metrics import (
 
 from data_loader import import_data
 import rf
+import unet
 
 
 class DataImport:
@@ -65,9 +67,9 @@ class DataImport:
         names = []
 
         for i, (start, end) in enumerate(probe_indices):
-            probe = df.iloc[start:end]  # Avoid reset_index and copy
+            probe = df.iloc[start:end]
             probe.attrs["file"] = df.attrs["file"]
-            probe.attrs["probe_index"] = i  # Optional: keep track of index
+            probe.attrs["probe_index"] = i
             probes.append(probe)
             names.append(f"{filename_base}_{i}")
 
@@ -109,7 +111,7 @@ class DataImport:
         NON_PROBING_LABELS = {"N", "Z"}
 
         upper_labels = np.char.upper(labels.astype(str))
-        mask = ~np.isin(upper_labels, list(NON_PROBING_LABELS))  # Faster than pandas
+        mask = ~np.isin(upper_labels, list(NON_PROBING_LABELS))
         probe_indices = np.where(mask)[0]
 
         if probe_indices.size == 0:
@@ -134,7 +136,8 @@ def dynamic_importer(path):
 
     return model
 
-def optuna_objective(data, trial):
+def optuna_objective(data, args, trial, **kwargs):
+    model = unet
     msg_bar = tqdm(total=0, position=1, bar_format="{desc}", leave=False)
 
     def show_msg(msg: str):
@@ -152,8 +155,9 @@ def optuna_objective(data, trial):
         clear_msg()
 
         show_msg(f"Training Trial {trial.number} Fold {fold}")
-        model = rf.Model(trial=trial)
-        model.train(train_data)
+        model_import = dynamic_importer(args.model_path)
+        model = model_import.Model(trial = trial, **kwargs)
+        model.train(train_data, test_data, fold)
         clear_msg()
 
         show_msg(f"Predicting Trial {trial.number} Fold {fold}")
@@ -172,7 +176,7 @@ def optuna_objective(data, trial):
     tqdm.write(f"Trial {trial.number} F1s - Weighted: {weighted_f1:.4f} | Macro: {macro_f1:.4f} | Micro: {micro_f1:.4f}")
     tqdm.write("")
 
-    with open("RF_optuna.txt", "a") as f:
+    with open(f"{args.model_name}_optuna.txt", "a") as f:
         print(trial.datetime_start, trial.number, trial.params, weighted_f1, file=f)
 
     return weighted_f1
@@ -241,6 +245,7 @@ def generate_report(test_data, predicted_labels, test_names, save_path, model_na
     # Make sure we have a place to save everything
     if not os.path.isdir(save_path):
         os.mkdir(save_path)
+        
 
     # precision et. al
     labels = sorted(np.unique(labels_true))
@@ -274,7 +279,8 @@ def generate_report(test_data, predicted_labels, test_names, save_path, model_na
             np.asarray(preds)
         )
         file_stem = Path(name).stem
-        fig_path = Path(save_path) / f"{base_name}_{file_stem}_Fold{fold}.png"
+        fig_path = Path(save_path) / "difference_plots" / f"{base_name}_{file_stem}_Fold{fold}.png"
+        fig_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(fig_path)
         plt.close(fig)
 
@@ -284,29 +290,76 @@ def generate_report(test_data, predicted_labels, test_names, save_path, model_na
 
 
 def main():
-    STUDY = False
+    parser = argparse.ArgumentParser(
+        prog = "Model Performance Evaluator",
+        description = "This program takes in EPG data and a \
+                        labeler program, trains it, and then \
+                        generates statistics and figures to \
+                        characterize the model's performance."
+    )
+    parser.add_argument("--data_path", type = str, required = True)
+    parser.add_argument("--model_path", type = str, required = True)
+    parser.add_argument("--save_path", type = str, required = True)
+    parser.add_argument("--model_name", type = str, required = True)
+    # parser.add_argument("--augment", action="store_true")
+    #parser.add_argument("--post_process", type = str, required = False) # can either be s/smooth or viterbi/m
+    parser.add_argument("--epochs", type = int, required=False)
+    parser.add_argument("--optuna", action="store_true")
+    parser.add_argument("--attention", action="store_true") # can only be used with UNet 
+    args = parser.parse_args()
+
     EXCLUDE = {
         "a01", "a02", "a03", "a10", "a15",
         "b01", "b02", "b04", "b07", "b12", "b188", "b202", "b206", "b208",
         "c046", "c07", "c09", "c10",
         "d01", "d03", "d056", "d058", "d12",
-        #"_b", "_c", "_d"
     }
 
-    data_dir = r"data"
+    data = DataImport(args.data_path, filetype = ".parquet", exclude=EXCLUDE, folds = 5)
 
-    data = DataImport(data_dir, filetype = ".parquet", exclude=EXCLUDE, folds = 5)
-
-    if STUDY:
+    if args.optuna:
         def progress_bar_callback(total_trials):
             pbar = tqdm(total=total_trials, desc="Optuna Trials", position=0)
             return lambda s, t: pbar.update(1)
         
-        trial_count = 100
+        trial_count = 25
         
         study = optuna.create_study(study_name="model_hyperparameter_tuning", direction='maximize')
+
+        kwargs = dict()
+        if args.model_path == "unet.py":
+            if args.attention:
+                # expected f1: 0.7402015172114621
+                kwargs['bottleneck_type'] = 'windowed_attention'
+                kwargs = kwargs | {'epochs': 64, 'lr': 0.0005, 'dropout_rate': 1e-05, 'weight_decay': 1e-05, 'num_layers': 8, 'features': 64, 'transformer_window_size': 150, 'transformer_layers': 2}
+                heads_per_channel = 32
+                kwargs['transformer_nhead'] = max(kwargs['features'] // heads_per_channel, 1)
+                kwargs['embed_dim'] = kwargs['features']
+            else:
+                study.enqueue_trial(
+                    {
+                        "epochs" : args.epochs,
+                        "lr": 5e-4,
+                        "dropout": 0.1,
+                        "weight_decay": 1e-6,
+                        "num_layers": 8,
+                        "features": 32,
+                        "augment_factor": 1
+                    }
+                )
+
+                # expected f1: 0.694895
+                kwargs['bottleneck_type'] = 'block'
+                kwargs = kwargs | {'epochs': args.epochs, 'lr': 0.0005, 'dropout_rate': 0.1, 'weight_decay': 1e-06, 'num_layers': 8, 'features': 32}
+
+            if args.epochs:
+                kwargs['epochs'] = args.epochs
+
+        else:
+            kwargs = {}
+
         study.optimize(
-            lambda x : optuna_objective(data, x), 
+            lambda x : optuna_objective(data, args, x, **kwargs), 
             n_trials = trial_count, 
             show_progress_bar=False,
             callbacks=[progress_bar_callback(trial_count)] # add custom progress bar
@@ -314,7 +367,7 @@ def main():
 
         print(study.best_params)
         optuna.visualization.matplotlib.plot_optimization_history(study)
-        plt.savefig(f"RF_hyper.png")
+        plt.savefig(f"{args.model_name}_hyper.png")
         return
     
     summary_data = []
@@ -327,7 +380,28 @@ def main():
         train_data, _ = data.get_probes(train_data)
         test_data, test_names = data.get_probes(test_data)
 
-        model = rf.Model()
+        model_import = dynamic_importer(args.model_path)
+
+
+        kwargs = dict()
+        if args.model_path == "unet.py":
+            if args.attention:
+                # expected f1: 0.7402015172114621
+                kwargs['bottleneck_type'] = 'windowed_attention'
+                kwargs = kwargs | {'epochs': 64, 'lr': 0.0005, 'dropout_rate': 1e-05, 'weight_decay': 1e-06, 'num_layers': 8, 'features': 32, 'transformer_window_size': 150, 'transformer_layers': 2}
+                heads_per_channel = 32
+                kwargs['transformer_nhead'] = max(kwargs['features'] // heads_per_channel, 1)
+                kwargs['embed_dim'] = kwargs['features']
+            else:
+                # expected f1: 0.694895
+                kwargs['bottleneck_type'] = 'block'
+                kwargs = kwargs | {'epochs': 64, 'lr': 0.0005, 'dropout_rate': 0.1, 'weight_decay': 1e-06, 'num_layers': 8, 'features': 32}
+
+            if args.epochs:
+                kwargs['epochs'] = args.epochs
+
+        model = model_import.Model(save_path = args.save_path, **kwargs)
+
         print("Training Model...")
         model.train(train_data)
 
@@ -335,7 +409,7 @@ def main():
         predicted_labels = model.predict(test_data)
 
         print("Generating Report...")
-        true, pred, stats = generate_report(test_data, predicted_labels, test_names, "out", "RF", fold)
+        true, pred, stats = generate_report(test_data, predicted_labels, test_names, args.save_path, args.model_name, fold)
         print("Report generated.")
         summary_data.append(stats)
         labels_true.extend(true)
@@ -356,16 +430,15 @@ def main():
     out_dataframe["accuracy"] = accuracy_score(labels_true, labels_pred)
 
     out_summary_data = pd.concat([out_summary_data, out_dataframe])
-    out_summary_data.to_csv(f"out/RF_SummaryStats.csv")
+    out_summary_data.to_csv(f"{args.save_path}/{args.model_name}_SummaryStats.csv")
 
     overall = ConfusionMatrixDisplay.from_predictions(labels_true, labels_pred, \
                                             normalize = 'true')
-    overall.plot().figure_.savefig(rf"out/RF_OverallConfusionMatrix.png")
+    overall.plot().figure_.savefig(rf"{args.save_path}/{args.model_name}_OverallConfusionMatrix.png")
 
     all_data = pd.DataFrame({'labels_true': labels_true,
                              'labels_pred': labels_pred})
-    all_data.to_csv(f"out/RF_allpredictions.csv")
-
+    all_data.to_csv(f"{args.save_path}/{args.model_name}_allpredictions.csv")
 
 if __name__ == "__main__":
-    main()
+    main() 

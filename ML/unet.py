@@ -1,24 +1,24 @@
 import pandas as pd
 import numpy as np
 import os
+import json
 from pathlib import Path
 import torch
 from torch import nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader, TensorDataset
+from torch.utils.data import Dataset, DataLoader
 import random
-from torch.nn.utils import weight_norm
-from torch.nn.utils.rnn import pad_sequence
-import subprocess
 import tqdm
 from matplotlib import pyplot as plt
 from positional_encodings.torch_encodings import PositionalEncoding1D
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import Counter
 
 from ProbeSplitterTCN.label_mapper import load_label_map, build_label_map
-from data_loader import import_data
+from data_loader import import_data, stratified_split
+
 
 class Model:
     def __init__(
@@ -147,7 +147,7 @@ class Model:
         dirname = os.path.dirname(__file__)
         self.save_path = save_path
 
-    def train(self, tr_probes, val_probes, fold = None, save_train_curve=False, show_train_curve=False):
+    def train(self, tr_probes, val_probes = None, fold = None, save_train_curve=False, show_train_curve=False):
         self.model = self.model.to(self.device)
 
         tr_dfs, _ = self.load_probes(tr_probes)
@@ -216,6 +216,8 @@ class Model:
 
         if save_train_curve:
             draw_loss_plot(train_losses, validation_losses)
+            if not os.path.isdir(self.save_path):
+                os.mkdir(self.save_path)
             plt.savefig(f"{self.save_path}/loss_curve_fold{fold}.png")
         if show_train_curve:
             draw_loss_plot(train_losses, validation_losses)
@@ -717,7 +719,13 @@ class DataImport:
                 all_probes.extend(probes)
                 all_probe_names.extend(names)
 
-        return all_probes, all_probe_names
+        sorted_pairs = sorted(
+            zip(all_probes, all_probe_names),
+            key=lambda pair: pair[0].attrs.get("file", "")
+        )
+
+        sorted_probes, sorted_names = zip(*sorted_pairs) if sorted_pairs else ([], [])
+        return list(sorted_probes), list(sorted_names)
 
     
     def leak_probe_finder(self, labels):
@@ -744,6 +752,7 @@ class DataImport:
 
 if __name__ == "__main__":
     unet = Model()
+    unet.save_path = "./out"
 
     EXCLUDE = {
         "a01", "a02", "a03", "a10", "a15",
@@ -753,23 +762,38 @@ if __name__ == "__main__":
     }
     INCLUDE = {"a11", "a12", "a13", "a16","a192"}
 
+    with open("./data_quality_map.json", "r") as f:
+        QUALITY_MAP = json.load(f)  
+
+
     data = DataImport("./data", ".parquet", exclude=EXCLUDE)
-    
-   
+        
 
 
-    n = len(data.df_list)
-    train_probes, train_names = data.get_probes(data.df_list[:int(n * 0.8)])           # 80%
-    val_probes, val_names = data.get_probes(data.df_list[int(n * 0.8): int(n * 0.9)])  # 10%
-    test_probes, test_names = data.get_probes(data.df_list[int(n * 0.9):])             # 10%
+    train_dfs, val_dfs, test_dfs = stratified_split(
+        data.df_list,
+        quality_map=QUALITY_MAP,
+        train_size=0.8,
+        val_size=0.1,
+        test_size=0.1,
+        fallback="hybrid",
+        random_state=42
+    ) 
+
+    train_probes, train_names = data.get_probes(train_dfs)
+    val_probes, val_names = data.get_probes(val_dfs)
+    test_probes, test_names = data.get_probes(test_dfs)
   
     print("Training model...")
 
-    unet.train(train_probes, val_probes, show_train_curve=True)
+    unet.train(train_probes, val_probes, show_train_curve=True, save_train_curve=True)
+    #unet.load(r"D:\USDA-Auburn\CS-Repository\ML\unet_weights")
+    unet.save()
+
     print("Testing model...")
     predicted_labels = unet.predict(test_probes)
+
     print("Generating report...")
-
-
     from model_evaluation import generate_report
     true, pred, stats = generate_report(test_probes, predicted_labels, test_names, "out", "RF", fold=0)
+    print(stats)
