@@ -112,7 +112,7 @@ class SliderPanel(QWidget):
         # Input Resistance
         grid.addWidget(QLabel("Input Resistance"), 3, 0)
         self.input_resistance = QComboBox()
-        self.input_resistance.addItems(["10\u2075 (100K)", "10\u2076 (1M)", "10\u2077 (10M)", "10\u2078 (100M)", "10\u2079 (1G)", "10\u00b9\u2070 (10G)", "10\u2079 Loopback"])
+        self.input_resistance.addItems(["10\u2075 (100K)", "10\u2076 (1M)", "10\u2077 (10M)", "10\u2078 (100M)", "10\u2079 (1G)", "10\u00b9\u2070 (10G)", "Loopback"])
         grid.addWidget(self.input_resistance, 3, 1)
         grid.addWidget(QLabel("Ω"), 3, 2)
 
@@ -228,6 +228,7 @@ class SliderPanel(QWidget):
             "10\u2078 (100M)": "100M",
             "10\u2079 (1G)": "1G",
             "10\u00b9\u2070 (10G)": "10G",
+            "Loopback": "Loopback"
         }
 
         # Connect all controls except AC/DC toggle
