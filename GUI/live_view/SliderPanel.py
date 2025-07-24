@@ -95,9 +95,9 @@ class SliderPanel(QWidget):
 
         self.dds_offset_widget = create_slider_row_widgets("Applied Voltage", "mV", scale = 10, precision = 0)
         self.dds_slider = self.dds_offset_widget[1]
-        self.dds_slider.setRange(-100, 100)
+        self.dds_slider.setRange(-330, 330)
         dds_spinbox = self.dds_offset_widget[2]
-        dds_spinbox.setRange(-1000, 1000)
+        dds_spinbox.setRange(-3300, 3300)
         dds_spinbox.setSingleStep(10)
         self.slider_widgets_map["ddso"] = self.dds_offset_widget
 
@@ -106,13 +106,13 @@ class SliderPanel(QWidget):
         self.ddsa_slider.setRange(7, 1000)
         ddsa_spinbox = self.ddsa_amplitude_widget[2]
         ddsa_spinbox.setRange(7, 1000)
-        ddsa_spinbox.setSingleStep(10)
+        ddsa_spinbox.setSingleStep(1)
         self.slider_widgets_map["ddsa"] = self.ddsa_amplitude_widget
 
         # Input Resistance
         grid.addWidget(QLabel("Input Resistance"), 3, 0)
         self.input_resistance = QComboBox()
-        self.input_resistance.addItems(["10\u2075 (100K)", "10\u2076 (1M)", "10\u2077 (10M)", "10\u2078 (100M)", "10\u2079 (1G)", "10\u00b9\u2070 (10G)", "10\u2079 (1G) Loopback"])
+        self.input_resistance.addItems(["10\u2075 (100K)", "10\u2076 (1M)", "10\u2077 (10M)", "10\u2078 (100M)", "10\u2079 (1G)", "10\u00b9\u2070 (10G)", "10\u2079 Loopback"])
         grid.addWidget(self.input_resistance, 3, 1)
         grid.addWidget(QLabel("Ω"), 3, 2)
 
@@ -228,7 +228,6 @@ class SliderPanel(QWidget):
             "10\u2078 (100M)": "100M",
             "10\u2079 (1G)": "1G",
             "10\u00b9\u2070 (10G)": "10G",
-            "10\u2079 (1G) Loopback": "1G Loopback"
         }
 
         # Connect all controls except AC/DC toggle
@@ -262,11 +261,12 @@ class SliderPanel(QWidget):
                 widget.setVisible(True)
             for widget in self.slider_widgets_map["ddsa"]:
                 widget.setVisible(False)
-            self.ddsa_slider.setValue(-1)
+            self.ddsa_slider.setValue(217)
             #self.send_control_update("ddsa", 1)
 
-            self.send_control_update("ddsa", "-1")
-            self.send_control_update("excitationFrequency", "0")
+            self.send_control_update("ddsa", "217.282")
+            QTimer.singleShot(300, lambda: self.send_control_update(
+                "excitationFrequency", "0"))
 
         elif selected_mode == "AC":
             for widget in self.slider_widgets_map["ddsa"]:
@@ -275,8 +275,9 @@ class SliderPanel(QWidget):
                 widget.setVisible(False)
             self.dds_slider.setValue(-34)  # actually -0.341
 
-            self.send_control_update("ddso", "-34")
-            self.send_control_update("excitationFrequency", "1000")
+            self.send_control_update("ddso", "34") # positive 34 because it's not going to be inverted by DDS amplifier since total offset will go to 0
+            QTimer.singleShot(300, lambda: self.send_control_update(
+                "excitationFrequency", "1000"))
 
         QTimer.singleShot(0, lambda: setattr(self, "_suppress", False))
 
@@ -302,6 +303,9 @@ class SliderPanel(QWidget):
         if name == "ddsa": # send to d0 w/ conversion formula
             name = "d0"
             value = int((float(value) - 1075.51) / -4.207)
+
+        if name =="ddso":
+            value = -1*int(value)
 
         self.socket_client.send({
             "source": self.socket_client.client_id,

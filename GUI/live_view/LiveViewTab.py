@@ -347,6 +347,9 @@ class LiveViewTab(QWidget):
         if name == "d0":
             name = "ddsa"
             value = -4.207 * float(value) + 1075.51 # Formula from Pierce
+        if name == "ddso":
+            value = -1*value
+
 
 
         # Workaround to get set_control_value to run in the GUI thread
