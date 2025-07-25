@@ -197,7 +197,7 @@ def plot_labels(time, voltage, true_labels, pred_labels, probs = None):
 
     def generate_label_colors(labels):
         labels = sorted(set(labels))
-        cmap = plt.get_cmap("tab10")  # or "tab20", "nipy_spectral", etc.
+        cmap = plt.get_cmap("tab20")  # or "tab20", "nipy_spectral", etc.
         colors = [mcolors.to_hex(cmap(i / len(labels))) for i in range(len(labels))]
         return dict(zip(labels, colors))
     
@@ -301,6 +301,7 @@ def main():
     parser.add_argument("--model_path", type = str, required = True)
     parser.add_argument("--save_path", type = str, required = True)
     parser.add_argument("--model_name", type = str, required = True)
+    parser.add_argument("--model_version", type = str, required=False)
     # parser.add_argument("--augment", action="store_true")
     #parser.add_argument("--post_process", type = str, required = False) # can either be s/smooth or viterbi/m
     parser.add_argument("--epochs", type = int, required=False)
@@ -323,8 +324,14 @@ def main():
             return lambda s, t: pbar.update(1)
         
         trial_count = 25
+        import datetime
+
+        if args.model_version:
+            version = args.model_version
+        else:
+            version = datetime.utcnow().strftime("%Y%m%d%H%M%S")
         
-        study = optuna.create_study(study_name="model_hyperparameter_tuning", direction='maximize')
+        study = optuna.create_study(study_name=f"{args.model_name}_{version}_hyperparameter_tuning", direction='maximize')
 
         kwargs = dict()
         if args.model_path == "unet.py":
@@ -337,15 +344,16 @@ def main():
                 kwargs['embed_dim'] = kwargs['features']
             else:
                 study.enqueue_trial(
-                    {
-                        "epochs" : args.epochs,
-                        "lr": 5e-4,
-                        "dropout": 0.1,
-                        "weight_decay": 1e-6,
-                        "num_layers": 8,
-                        "features": 32,
-                        "augment_factor": 1
-                    }
+                    # {
+                    #     "epochs" : args.epochs,
+                    #     "lr": 5e-4,
+                    #     "dropout": 0.1,
+                    #     "weight_decay": 1e-6,
+                    #     "num_layers": 8,
+                    #     "features": 32,
+                    #     "augment_factor": 1
+                    # }
+                    {'epochs': 64, 'lr': 5e-4, 'dropout': 1e-06, 'weight_decay': 1e-06, 'num_layers': 6, 'features': 64}
                 )
 
                 # expected f1: 0.694895
@@ -381,7 +389,6 @@ def main():
         test_data, test_names = data.get_probes(test_data)
 
         model_import = dynamic_importer(args.model_path)
-
 
         kwargs = dict()
         if args.model_path == "unet.py":

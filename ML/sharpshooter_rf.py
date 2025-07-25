@@ -21,7 +21,7 @@ excluded = {
     "b11", # TEST FILE
 }
 
-
+        
 def read_file(filepath):   
     if filepath.endswith(".csv"):
         df = pd.read_csv(filepath, index_col=0, engine="pyarrow")
@@ -63,8 +63,6 @@ if __name__ == "__main__":
             test_data = [data.raw_dfs[i] for i in test_index]
             #train_data, _ = data.get_probes(train_data)
             #test_data, test_names = data.get_probes(test_data)
-
-            augment_factor = trial.suggest_categorical("augment_factor", [1, 2, 4, 8])
 
             
             model = Model(trial = trial)

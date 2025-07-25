@@ -3,6 +3,7 @@
 import os
 import importlib
 import argparse
+import json
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -236,11 +237,15 @@ def plot_labels(time, voltage, true_labels, pred_labels, probs = None):
 
 def generate_report(test_data, predicted_labels, test_names, save_path, model_name, fold):
     # Flatten everything
+    with open(".\label_map.json", "r") as f:
+        full_label_map = json.load(f)
+        bin_label_map = {"NP": 0, "P": 1}
+        
     labels_true = []
     labels_pred = []
     for df, preds in zip(test_data, predicted_labels):
-        labels_true.extend(df["labels"].values)
-        labels_pred.extend(preds)
+        labels_true.extend(np.vectorize(full_label_map.get)(df["labels"].values))
+        labels_pred.extend(np.vectorize(bin_label_map.get)(preds))
 
     # Make sure we have a place to save everything
     if not os.path.isdir(save_path):
@@ -262,22 +267,23 @@ def generate_report(test_data, predicted_labels, test_names, save_path, model_na
     from sklearn.metrics import classification_report
 
     # === 1. Convert to binary format ===
-    def to_binary(label):
-        return 0 if label in {"NP"} else 1
+    # def to_binary(label):
+    #     return 0 if label in {"NP"} else 1
 
-    labels_true_bin = [to_binary(lbl) for lbl in labels_true]
-    labels_pred_bin = [to_binary(lbl) for lbl in labels_pred]
+    # labels_true_bin = [to_binary(lbl) for lbl in labels_true]
+    # labels_pred_bin = [to_binary(lbl) for lbl in labels_pred]
 
     # === 2. Optional: Print or store binary classification report ===
     print("\n=== Binary Classification Report ===")
+    
     print(classification_report(
-        labels_true_bin, labels_pred_bin,
+        labels_true, labels_pred,
         target_names=["Non-Probing", "Probing"], digits=4
     ))
 
     # === 3. Compute individual metrics ===
     precision, recall, fscore, _ = precision_recall_fscore_support(
-        labels_true_bin, labels_pred_bin, average=None, labels=[0, 1], zero_division=0
+        labels_true, labels_pred, average=None, labels=[0, 1], zero_division=0
     )
 
     metrics = {}
@@ -296,7 +302,7 @@ def generate_report(test_data, predicted_labels, test_names, save_path, model_na
     # confusion matrix
     # ConfusionMatrixDisplay.from_predictions(labels_true, labels_pred, \
     #                                         normalize = 'true')
-    ConfusionMatrixDisplay.from_predictions(labels_true_bin, labels_pred_bin, display_labels=["Non-Probing", "Probing"]\
+    ConfusionMatrixDisplay.from_predictions(labels_true, labels_pred, display_labels=["Non-Probing", "Probing"],
                                              normalize = 'true')
     plt.savefig(rf"{save_path}/{model_name}_ConfusionMatrix_Fold{fold}.png")
 

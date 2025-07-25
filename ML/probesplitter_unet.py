@@ -23,7 +23,7 @@ from data_loader import import_data, stratified_split
 class Model:
     def __init__(
             self, 
-            epochs=5, 
+            epochs=16, 
             lr=5e-4, 
             num_layers=8, 
             growth_factor=1, 
@@ -238,10 +238,10 @@ class Model:
                 if return_logits:
                     all_logits.append(outputs.cpu())
                 outputs = outputs.argmax(dim=1).view(-1).cpu().tolist()
-                print(outputs)
                 output_labels = [self.inv_label_map[x] for x in outputs]
                 
                 all_predictions.append(output_labels)
+            
             if return_logits:
                 return all_predictions, all_logits
             else:
@@ -673,10 +673,10 @@ class DataImport:
         folds : int, optional
             Number of folds to use for K-fold cross-validation (default is 5).
         """
-        self.df_list = import_data(data_path, filetype, exclude, include)
-        self.random_state = 42
+        self.df_list: list[pd.DataFrame] = import_data(data_path, filetype, exclude, include)
+        self.random_state: int = 42
         kf = KFold(n_splits=folds, random_state=self.random_state, shuffle=True)
-        self.cross_val_iter = list(kf.split(self.df_list))
+        self.cross_val_iter: list = list(kf.split(self.df_list))
 
     def process_df(self,  df: pd.DataFrame):
         labels = df["labels"].values
@@ -756,20 +756,24 @@ if __name__ == "__main__":
     unet.save_path = "./out"
 
     EXCLUDE = {
-        # "a01", "a02", "a03", "a10", "a15",
-        # "b01", "b02", "b04", "b07", "b12", "b188", "b202", "b206", "b208",
-        # "c046", "c07", "c09", "c10",
-        # "d01", "d03", "d056", "d058", "d12",
+        "a01", "a02", "a03", "a10", "a15",
+        "b01", "b02", "b04", "b07", "b12", "b188", "b202", "b206", "b208",
+        "c046", "c07", "c09", "c10",
+        "d01", "d03", "d056", "d058", "d12",
     }
-    INCLUDE = {"a11", "a12", "a13", "a16","a192"}
+    #INCLUDE = {"a11", "a12", "a13", "a16","a192"}
 
     with open("./data_quality_map.json", "r") as f:
-        QUALITY_MAP = json.load(f)  
+        QUALITY_MAP = json.load(f)
+    with open("./label_map.json", "r") as f:
+        LABEL_MAP = json.load(f)    
 
 
-    data = DataImport(r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\Data\Sharpshooter Data - HPR 2017\Data_Parquet", ".parquet", exclude=EXCLUDE)
-        
+    data = DataImport(r".\data", ".parquet", exclude=EXCLUDE)
 
+    # for df in data.df_list:
+    #     if "labels" in df.columns:
+    #         df["labels"] = df["labels"].map(LABEL_MAP)
 
     train_dfs, val_dfs, test_dfs = stratified_split(
         data.df_list,
@@ -782,14 +786,14 @@ if __name__ == "__main__":
     ) 
 
     train_probes = train_dfs
-    val_probes = val_dfs
-    test_probes = test_dfs
+    val_probes =  val_dfs
+    test_probes =  test_dfs
     test_names =  [Path(df.attrs["file"]).stem for df in test_probes]
   
     print("Training model...")
 
     unet.train(train_probes, val_probes, show_train_curve=True, save_train_curve=True)
-    unet.load(r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\ML\unet_weights")
+    #unet.load(r".\unet_weights")
     unet.save()
 
     print("Testing model...")
