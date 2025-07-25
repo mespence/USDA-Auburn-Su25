@@ -65,7 +65,7 @@ class Labeler(QObject):
                 kwargs = kwargs | {'epochs': 64, 'lr': 0.0005, 'dropout_rate': 0.1, 'weight_decay': 1e-06, 'num_layers': 8, 'features': 32}
         elif "Sharpshooter" in model_name:
             kwargs['bottleneck_type'] = 'block'
-            kwargs = kwargs | {'epochs': 64, 'lr': 0.0005, 'dropout_rate': 0.1, 'weight_decay': 1e-06, 'num_layers': 8, 'features': 32} # TODO update params
+            kwargs = kwargs | {'epochs': 64, 'lr': 0.0005, 'dropout_rate': 0.1, 'weight_decay': 1e-06, 'num_layers': 6, 'features': 64} # TODO update params
 
         print(f'Importing {model_name}')
         module = importlib.import_module(name_to_module[model_name])
