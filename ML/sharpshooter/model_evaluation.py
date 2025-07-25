@@ -317,7 +317,7 @@ def main():
         study = optuna.create_study(study_name=f"{args.model_name}_hyperparameter_tuning", direction='maximize')
 
         kwargs = dict()
-        if args.model_path == "unet.py":
+        if "unet" in args.model_path:
             if args.attention:
                 # expected f1: 0.7402015172114621
                 kwargs['bottleneck_type'] = 'windowed_attention'
@@ -372,7 +372,7 @@ def main():
         model_import = dynamic_importer(args.model_path)
 
         kwargs = dict()
-        if args.model_path == "unet.py":
+        if "unet" in args.model_path:
             if args.attention:
                 # expected f1: 0.7402015172114621
                 kwargs['bottleneck_type'] = 'windowed_attention'

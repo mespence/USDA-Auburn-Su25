@@ -7,7 +7,7 @@ Takes an summary output csv from optuna and formats it as a markdown tables
 """
 
 # Load CSV
-df = pd.read_csv(r"D:\USDA-Auburn\CS-Repository\ML\out\RF_SummaryStats.csv")
+df = pd.read_csv(r".\RF_SummaryStats.csv")
 
 # Get the list of metric-label pairs from column headers
 metric_cols = df.columns[df.columns.str.contains("precision_|recall_|fscore_")]

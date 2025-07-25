@@ -27,15 +27,15 @@ class Model:
             self, 
             epochs=64, 
             lr=5e-4, 
-            num_layers=8, 
+            num_layers=6, 
             growth_factor=1, 
-            features=32, 
+            features=64, 
             n_conv_steps_per_block=2, 
             block_kernel_size=3, 
             up_down_sample_kernel_size=2, 
             block_padding=1, 
             weight_decay=1e-6, 
-            dropout_rate=1e-5, 
+            dropout_rate=1e-6, 
             bottleneck_type="block", 
             ignore_N=None,
             transformer_window_size=None, 
@@ -47,7 +47,7 @@ class Model:
         ):
         random.seed(42)  
 
-        binary_label_map = load_label_map(os.path.join(os.path.dirname(__file__), "label_map.json"))[0]
+        binary_label_map = load_label_map("../label_map.json")[0]
         self.label_map = {k: i for i, k in enumerate(sorted(binary_label_map))}
         self.inv_label_map = {i:label for label, i in self.label_map.items()}
 
@@ -754,6 +754,7 @@ class DataImport:
 
 if __name__ == "__main__":
     unet = Model()
+
     unet.save_path = "./out"
 
     EXCLUDE = {
@@ -762,40 +763,16 @@ if __name__ == "__main__":
         "c046", "c07", "c09", "c10",
         "d01", "d03", "d056", "d058", "d12",
     }
-    INCLUDE = {"a11", "a12", "a13", "a16","a192"}
 
-    with open("./data_quality_map.json", "r") as f:
+    with open("../data_quality_map.json", "r") as f:
         QUALITY_MAP = json.load(f)  
 
-
-    data = DataImport("./data", ".parquet", exclude=EXCLUDE)
-        
-
-
-    train_dfs, val_dfs, test_dfs = stratified_split(
-        data.df_list,
-        quality_map=QUALITY_MAP,
-        train_size=0.8,
-        val_size=0.1,
-        test_size=0.1,
-        fallback="hybrid",
-        random_state=42
-    ) 
-
-    train_probes, train_names = data.get_probes(train_dfs)
-    val_probes, val_names = data.get_probes(val_dfs)
-    test_probes, test_names = data.get_probes(test_dfs)
-  
+    data = DataImport("../data", ".parquet", exclude=EXCLUDE)
+    full_data, _ = data.get_probes(data.df_list)
+       
     print("Training model...")
-
-    unet.train(train_probes, val_probes, show_train_curve=True, save_train_curve=True)
-    #unet.load(r"D:\USDA-Auburn\CS-Repository\ML\unet_weights")
+    unet.train(full_data)
     unet.save()
 
-    print("Testing model...")
-    predicted_labels = unet.predict(test_probes)
+    print("Model trained.")
 
-    print("Generating report...")
-    from model_evaluation import generate_report
-    true, pred, stats = generate_report(test_probes, predicted_labels, test_names, "out", "RF", fold=0)
-    print(stats)

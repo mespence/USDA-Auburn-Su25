@@ -934,7 +934,6 @@ if __name__ == "__main__":
 # if __name__ == "__main__":
 #     # Setup
 #     unet = Model()
-#     unet.save_path = "./out_full_train"
     
 #     EXCLUDE = {
 #         "a01", "a02", "a03", "a10", "a15",
