@@ -23,7 +23,7 @@ from data_loader import import_data, stratified_split
 class Model:
     def __init__(
             self, 
-            epochs=64, 
+            epochs=5, 
             lr=5e-4, 
             num_layers=8, 
             growth_factor=1, 
@@ -46,7 +46,7 @@ class Model:
         random.seed(42)  
 
         self.label_map = load_label_map(os.path.join(os.path.dirname(__file__), "label_map.json"))[0]
-        self.inv_label_map = {i:label for label, i in self.label_map.items()}
+        self.inv_label_map = {0: "NP", 1: "P"}
 
 
         self.data_columns = ["voltage"]
@@ -125,7 +125,7 @@ class Model:
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        self.num_classes = len(self.label_map)
+        self.num_classes = 2
             
         self.model = UNet1D(input_size=len(self.data_columns), 
                             output_size=self.num_classes,
@@ -238,7 +238,9 @@ class Model:
                 if return_logits:
                     all_logits.append(outputs.cpu())
                 outputs = outputs.argmax(dim=1).view(-1).cpu().tolist()
-                output_labels = outputs
+                print(outputs)
+                output_labels = [self.inv_label_map[x] for x in outputs]
+                
                 all_predictions.append(output_labels)
             if return_logits:
                 return all_predictions, all_logits
@@ -765,7 +767,7 @@ if __name__ == "__main__":
         QUALITY_MAP = json.load(f)  
 
 
-    data = DataImport("/Users/ashleykim/Desktop/USDA/USDA-Auburn-Su25/Data/Sharpshooter Data - HPR 2017/Data", ".csv", exclude=EXCLUDE)
+    data = DataImport(r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\Data\Sharpshooter Data - HPR 2017\Data_Parquet", ".parquet", exclude=EXCLUDE)
         
 
 
@@ -779,20 +781,21 @@ if __name__ == "__main__":
         random_state=42
     ) 
 
-    train_probes, train_names = data.get_probes(train_dfs)
-    val_probes, val_names = data.get_probes(val_dfs)
-    test_probes, test_names = data.get_probes(test_dfs)
+    train_probes = train_dfs
+    val_probes = val_dfs
+    test_probes = test_dfs
+    test_names =  [Path(df.attrs["file"]).stem for df in test_probes]
   
     print("Training model...")
 
     unet.train(train_probes, val_probes, show_train_curve=True, save_train_curve=True)
-    #unet.load(r"D:\USDA-Auburn\CS-Repository\ML\unet_weights")
+    unet.load(r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\ML\unet_weights")
     unet.save()
 
     print("Testing model...")
     predicted_labels = unet.predict(test_probes)
 
     print("Generating report...")
-    from model_evaluation import generate_report
-    true, pred, stats = generate_report(test_probes, predicted_labels, test_names, "out", "RF", fold=0)
+    from model_evaluation_unet_probe import generate_report
+    true, pred, stats = generate_report(test_probes, predicted_labels, test_names, "out", "UNet", fold=0)
     print(stats)
