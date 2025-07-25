@@ -3,7 +3,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
     QProgressBar, QScrollBar, QApplication, QSizePolicy,
-    QSpacerItem
+    QSpacerItem, QToolButton, QMenu
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
@@ -75,30 +75,35 @@ class LabelViewTab(QWidget):
         file = self.parent().epgdata.current_file
         if file is not None:
             self.datawindow.plot_recording(file)
-        # self.datawindow.plot_transitions(file)
-        # self.datawindow.plot_comments(file)
 
-        # openDataButton = QPushButton("Open Data")
-        # openDataButton.clicked.connect(lambda: FileSelector.load_new_data(self.parent().epgdata, self.datawindow))
+        self.modelChooser = QComboBox()
+        self.modelChooser.setMinimumWidth(250)
+        self.modelChooser.setEditable(False)
 
-        # self.modelChooser = QComboBox()
-        # self.modelChooser.addItem("Select mosquito model...")
-        # self.modelChooser.setItemData(0, 0, Qt.ItemDataRole.UserRole - 1)  # Disable default item
-        # self.modelChooser.addItems([
-        #     'UNet (Block)', 
-        #     'UNet (Attention)',
-        #     'SegTransformer', 
-        #     'TCN', 
-        #     'Random Forests (CSVs only)'
-        # ])
-        # self.modelChooser.currentTextChanged.connect(self.labeler.load_model)
-        # #self.labeler.load_model("UNet (Block)")
+        self.modelChooser.addItem("Select model...")
+        self.modelChooser.setItemData(0, 0, Qt.ItemDataRole.UserRole - 1)  # Disable default item
+
+        self.modelChooser.addItem("----- Mosquito Models -----")
+        self.modelChooser.setItemData(self.modelChooser.count() - 1, 0, Qt.ItemDataRole.UserRole - 1)
+
+        mosquito_models = ["UNet (Block)", "UNet (Attention)"]
+        for model in mosquito_models:
+            self.modelChooser.addItem(f"Mosquito {model}")
+        
+        self.modelChooser.addItem("----- Sharpshooter Models -----")
+        self.modelChooser.setItemData(self.modelChooser.count() - 1, 0, Qt.ItemDataRole.UserRole - 1)
+
+        sharpshooter_models = ["UNet (Block)"]
+        for model in sharpshooter_models:
+            self.modelChooser.addItem(f"Sharpshooter {model}")
+
+        self.modelChooser.currentTextChanged.connect(self.labeler.load_model)
 
         startSplittingButton = QPushButton("Start Probe Splitter")
         startSplittingButton.clicked.connect(lambda: self.labeler.start_probe_splitting(self.epgdata, self.datawindow))
 
-        # startLabelingButton = QPushButton("Start Automated Labeling")
-        # startLabelingButton.clicked.connect(lambda: self.labeler.start_labeling(self.epgdata, self.datawindow))
+        startLabelingButton = QPushButton("Start Automated Labeling")
+        startLabelingButton.clicked.connect(lambda: self.labeler.start_labeling(self.epgdata, self.datawindow))
 
         # saveDataButton = QPushButton("Save Labeled Data")
         # saveDataButton.clicked.connect(lambda: FileSelector.export_labeled_data(self.epgdata, self.epgdata.current_file))
@@ -159,7 +164,8 @@ class LabelViewTab(QWidget):
        
         # bottom_controls.addWidget(self.modelChooser)
         bottom_controls.addWidget(startSplittingButton)
-        # bottom_controls.addWidget(startLabelingButton)
+        bottom_controls.addWidget(self.modelChooser)
+        bottom_controls.addWidget(startLabelingButton)
         # bottom_controls.addWidget(stopLabelingButton)
         # bottom_controls.addWidget(self.progressBar)
 

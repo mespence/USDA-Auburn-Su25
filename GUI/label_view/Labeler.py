@@ -14,7 +14,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QObject
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QCursor
 
-#from models import rf, tcn, unet, transformer
+from models import unet_mosquito, unet_sharpshooter
 
 class Labeler(QObject):
     start_labeling_progress = pyqtSignal(int, int)
@@ -40,24 +40,21 @@ class Labeler(QObject):
         QApplication.processEvents()
 
         name_to_module = {
-            'Random Forests (CSVs only)': 'models.rf',
-            'UNet (Block)': 'models.unet',
-            'UNet (Attention)': 'models.unet',
-            'SegTransformer': 'models.transformer',
-            'TCN': 'models.tcn'
+            'Mosquito UNet (Block)': 'models.unet_mosquito',
+            'Mosquito UNet (Attention)': 'models.unet_mosquito',
+            'Sharpshooter UNet (Block)': 'models.unet_sharpshooter',
         }
         name_to_path = {
-            'Random Forests (CSVs only)' : "models/rf_pickle", 
-            'UNet (Block)' : "models/unet_weights_block",
-            'UNet (Attention)' : "models/unet_weights_attention", 
-            'SegTransformer' : "models/transformer_weights",
-            'TCN' : "models/tcn_weights"
+            'Mosquito UNet (Block)' : "models/unet_block_mosquito_weights",
+            'Mosquito UNet (Attention)' : "models/unet_attention_mosquito_weights", 
+            'Sharpshooter UNet (Block)' : "models/unet_block_sharpshooter_weights",
         }
+
         # Build UNet kwargs
         kwargs = {}
         # UNet settings
-        if "UNet" in model_name:
-            if "Block" in model_name:
+        if "Mosquito" in model_name:
+            if "Attention" in model_name:
                 kwargs['bottleneck_type'] = 'windowed_attention'
                 kwargs = kwargs | {'epochs': 64, 'lr': 0.0005, 'dropout_rate': 1e-05, 'weight_decay': 1e-06, 'num_layers': 8, 'features': 32, 'transformer_window_size': 150, 'transformer_layers': 2}
                 heads_per_channel = 32
@@ -66,7 +63,9 @@ class Labeler(QObject):
             else:
                 kwargs['bottleneck_type'] = 'block'
                 kwargs = kwargs | {'epochs': 64, 'lr': 0.0005, 'dropout_rate': 0.1, 'weight_decay': 1e-06, 'num_layers': 8, 'features': 32}
-
+        elif "Sharpshooter" in model_name:
+            kwargs['bottleneck_type'] = 'block'
+            kwargs = kwargs | {'epochs': 64, 'lr': 0.0005, 'dropout_rate': 0.1, 'weight_decay': 1e-06, 'num_layers': 8, 'features': 32} # TODO update params
 
         print(f'Importing {model_name}')
         module = importlib.import_module(name_to_module[model_name])
@@ -74,7 +73,6 @@ class Labeler(QObject):
         ModelClass = getattr(module, "Model")
         self.model = ModelClass(**kwargs)
         self.model.load(path = name_to_path[model_name])
-
 
         model_chooser.setEnabled(True)
         model_chooser.lineEdit().setStyleSheet("")
