@@ -25,7 +25,7 @@ class Model:
         dirname = os.path.dirname(__file__)
         self.model = None
         self.save_path = save_path
-        self.model_path = "./ML/rf_pickle"
+        self.model_path = r"C:\Users\Clinic\Desktop\USDA-Auburn-Su25\ML\rf_pickle"
         
         if trial:
             self.chunk_seconds = trial.suggest_int('chunk_seconds', 1, 3)
