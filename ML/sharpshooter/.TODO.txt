@@ -26,7 +26,8 @@ To-do list for sharpshooter ML:
 
 OTHER NOTES:
     - data_quality_map.json is a map containing the qualities of each of the valid data files, found through manual inspection. 
-      3 is best, and has lots of densely labeled regions. 0 is worst, and has no probing regions.
+      3 is best, and has lots of densely labeled regions. 0 is worst, and has no probing regions. All files are (probably) still 
+      useful for training but we don't want to accidentally train/test on a set of data that is mostly 0/1 quality. 
       There are notes about individual files in the google drive (Data/Sort Data document)
 
     - label_map.json maps the labels to 0 (non-probing label) or 1 (probing label)

@@ -231,7 +231,7 @@ class Model:
             draw_loss_plot(train_losses, validation_losses)
             plt.show()
 
-    def predict(self, probes, return_logits=False):
+    def predict(self, probes, smooth = True, return_logits=False):
         test_dataset = TimeSeriesDataset(probes, self.label_map, data_columns=self.data_columns,
                                          class_column = "labels", ignore_N=self.ignore_N)
         test_dataloader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)
@@ -247,9 +247,20 @@ class Model:
                 if return_logits:
                     all_logits.append(outputs.cpu())
                 outputs = outputs.argmax(dim=1).view(-1).cpu().tolist()
-                output_labels = [self.inv_label_map[x] for x in outputs]
+                output_labels = outputs # leave as 0/1
+                #output_labels = [self.inv_label_map[x] for x in outputs]
                 
                 all_predictions.append(output_labels)
+
+            if smooth: # apply smoothing post-processing
+                WINDOW_SIZE = 100 # 1s
+                THRESHOLD = 0.2
+                
+                kernel = np.ones(WINDOW_SIZE) / WINDOW_SIZE
+                padded = np.pad(all_predictions, (WINDOW_SIZE // 2,), mode = "edge")
+                averaged = np.convolve(padded, kernel, mode = "valid")
+                
+                all_predictions = (averaged >= THRESHOLD).astype(int).tolist()
             
             if return_logits:
                 return all_predictions, all_logits
@@ -877,6 +888,9 @@ def plot_labels(time, voltage, true_labels, pred_labels, probs = None):
     return fig
 
 
+
+
+
 NUM_FOLDS = 5
 
 if __name__ == "__main__":
@@ -924,6 +938,8 @@ if __name__ == "__main__":
 
         print("Testing model...")
         predicted_labels = unet.predict(test)
+
+
 
         print("Generating report...")
         print(stats)
