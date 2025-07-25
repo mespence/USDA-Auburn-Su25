@@ -473,6 +473,15 @@ wheels = [
 ]
 
 [[package]]
+name = "narwhals"
+version = "1.48.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9b/da/fe15ccd311ebb8fbbdacc447ba5888306c0b4a6253f628d60df351c36c7d/narwhals-1.48.1.tar.gz", hash = "sha256:b375cfdfc20b84b5ac0926f34c5c1373eb23ebea48d47bf75e282161cda63e34", size = 515882, upload-time = "2025-07-24T19:02:19.14Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cd/cf/411b2083991c6906634910ea0c5e5ea0a01f7f14da4194b39d7ad054c187/narwhals-1.48.1-py3-none-any.whl", hash = "sha256:76e3b069cf20a2746d8e227686b959530e98e8018c594a04e5f4f6f77e0872d9", size = 377332, upload-time = "2025-07-24T19:02:17.548Z" },
+]
+
+[[package]]
 name = "nest-asyncio"
 version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -626,6 +635,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/fe/8b/3c73abc9c759ecd3f1f7ceff6685840859e8070c4d947c93fae71f6a0bf2/platformdirs-4.3.8.tar.gz", hash = "sha256:3d512d96e16bcb959a814c9f348431070822a6496326a4be0911c40b5a74c2bc", size = 21362, upload-time = "2025-05-07T22:47:42.121Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fe/39/979e8e21520d4e47a0bbe349e2713c0aac6f3d853d0e5b34d76206c439aa/platformdirs-4.3.8-py3-none-any.whl", hash = "sha256:ff7059bb7eb1179e2685604f4aaf157cfd9535242bd23742eadc3c13542139b4", size = 18567, upload-time = "2025-05-07T22:47:40.376Z" },
+]
+
+[[package]]
+name = "plotly"
+version = "6.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "narwhals" },
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6e/5c/0efc297df362b88b74957a230af61cd6929f531f72f48063e8408702ffba/plotly-6.2.0.tar.gz", hash = "sha256:9dfa23c328000f16c928beb68927444c1ab9eae837d1fe648dbcda5360c7953d", size = 6801941, upload-time = "2025-06-26T16:20:45.765Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ed/20/f2b7ac96a91cc5f70d81320adad24cc41bf52013508d649b1481db225780/plotly-6.2.0-py3-none-any.whl", hash = "sha256:32c444d4c940887219cb80738317040363deefdfee4f354498cc0b6dab8978bd", size = 9635469, upload-time = "2025-06-26T16:20:40.76Z" },
 ]
 
 [[package]]
@@ -1076,6 +1098,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "optuna" },
     { name = "pandas" },
+    { name = "plotly" },
     { name = "positional-encodings" },
     { name = "psutil" },
     { name = "pyarrow" },
@@ -1101,6 +1124,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.3" },
     { name = "optuna", specifier = ">=4.3.0" },
     { name = "pandas", specifier = ">=2.2.3" },
+    { name = "plotly", specifier = ">=6.2.0" },
     { name = "positional-encodings", specifier = ">=6.0.3" },
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "pyarrow", specifier = ">=20.0.0" },
