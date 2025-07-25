@@ -1,13 +1,15 @@
 import numpy as np
-#import pandas as pd
+import pandas as pd
 import importlib
+from sklearn.metrics import accuracy_score, classification_report
+
 """
 import sys
 sys.path.insert(1, '../ML/')
 """
 #from postprocessing import PostProcessor
 #from itertools import groupby
-from label_view.ProbeSplitter import ProbeSplitter
+from models.unet_probesplitter import ProbeSplitter
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QCursor
@@ -22,6 +24,8 @@ class Labeler(QObject):
         super().__init__(parent=parent)
         self.stop_flag = False
         self.model = None
+        self.probe_splitter = ProbeSplitter()
+        self.probe_splitter.load(r".\models\unet_probesplitter_weights")
 
     def load_model(self, model_name):
         model_chooser = self.parent().modelChooser
@@ -102,17 +106,29 @@ class Labeler(QObject):
 
     def start_probe_splitting(self, epgdata, datawindow):
         data = epgdata.dfs[epgdata.current_file]
-        pre_rect = data["pre_rect"].values
+        true_str = data["labels"].astype(str).str.upper()
+        true_binary = (~true_str.isin(["N", "Z"])).astype(int).to_numpy()
+
         self.start_labeling_progress.emit(25, 100)
-        probes = ProbeSplitter.simple_probe_finder(pre_rect)
-        self.start_labeling_progress.emit(50, 100)
-        data['probes'] = 'NP'
-        for i, (start, end) in enumerate(probes, start=1):
-            data.loc[start:end, 'probes'] = 'P'
-        datawindow.transition_mode = 'probes'
-        datawindow.plot_recording(epgdata.current_file)
-        datawindow.plot_transitions(epgdata.current_file)
+
+        predicted_str = self.probe_splitter.predict([data])[0]
+        predicted_np = np.array(predicted_str, dtype="object")
+        predicted_binary = np.array([0 if label == "NP" else 1 for label in predicted_str])
+
+        # data["probes"] = predicted_np
+    
+        # datawindow.transition_mode = 'probes'
+        # datawindow.plot_recording(epgdata.current_file)
         self.start_labeling_progress.emit(100, 100)
+
+        # Ensure lengths match for evaluation
+        assert len(true_binary) == len(predicted_binary)
+
+        print("\n=== Probe Splitting Evaluation Report ===")
+        print("Sample predicted:", predicted_str[:20])
+        print("Sample ground truth:", np.where(true_binary, "P", "NP")[:20])
+        print(f"Accuracy: {accuracy_score(true_binary, predicted_binary):.4f}")
+        print(classification_report(true_binary, predicted_binary, target_names=["NP", "P"]))
 
     def stop_labeling(self):
         self.stop_flag = True

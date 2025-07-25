@@ -10,7 +10,7 @@ from PyQt6.QtGui import QIcon
 
 from label_view.DataWindow import DataWindow
 from EPGData import EPGData
-#from label_view.Labeler import Labeler
+from label_view.Labeler import Labeler
 from FileSelector import FileSelector
 
 
@@ -24,7 +24,7 @@ class LabelViewTab(QWidget):
         super().__init__(parent)
 
         self.epgdata = self.parent().epgdata
-        #self.labeler = Labeler(parent=self)
+        self.labeler = Labeler(parent=self)
 
         # file = self.epgdata.current_file
         # self.epgdata.load_data(file)
@@ -94,8 +94,8 @@ class LabelViewTab(QWidget):
         # self.modelChooser.currentTextChanged.connect(self.labeler.load_model)
         # #self.labeler.load_model("UNet (Block)")
 
-        # startSplittingButton = QPushButton("Start Probe Splitter")
-        # startSplittingButton.clicked.connect(lambda: self.labeler.start_probe_splitting(self.epgdata, self.datawindow))
+        startSplittingButton = QPushButton("Start Probe Splitter")
+        startSplittingButton.clicked.connect(lambda: self.labeler.start_probe_splitting(self.epgdata, self.datawindow))
 
         # startLabelingButton = QPushButton("Start Automated Labeling")
         # startLabelingButton.clicked.connect(lambda: self.labeler.start_labeling(self.epgdata, self.datawindow))
@@ -158,7 +158,7 @@ class LabelViewTab(QWidget):
         #bottom_controls.addWidget(openDataButton)
        
         # bottom_controls.addWidget(self.modelChooser)
-        # bottom_controls.addWidget(startSplittingButton)
+        bottom_controls.addWidget(startSplittingButton)
         # bottom_controls.addWidget(startLabelingButton)
         # bottom_controls.addWidget(stopLabelingButton)
         # bottom_controls.addWidget(self.progressBar)
