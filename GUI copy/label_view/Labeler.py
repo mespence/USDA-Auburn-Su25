@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import importlib
-from sklearn.metrics import accuracy_score, classification_report # Ensure these are imported at the top of your file
+from sklearn.metrics import accuracy_score, classification_report
 
 """
 import sys
@@ -9,7 +9,7 @@ sys.path.insert(1, '../ML/')
 """
 #from postprocessing import PostProcessor
 #from itertools import groupby
-from label_view.ProbeSplitter import ProbeSplitter
+from ML.probesplitter_unet import Model
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QCursor
@@ -105,67 +105,17 @@ class Labeler(QObject):
     def start_probe_splitting(self, epgdata, datawindow):
         data = epgdata.dfs[epgdata.current_file]
 
-        # --- Define Best Parameters from Optuna Optimization ---
-        # IMPORTANT: Replace these with the actual best parameters from your Optuna run.
-        # These are placeholders from your last output.
-
-        BEST_SPLITTER_PARAMS = {
-            "window": 887,
-            "threshold": 0.28,
-            "min_probe_length": 839,
-            "np_pad": 420,
-        }
-        BEST_G_REFINEMENT_PARAMS = {
-            "g_window_seconds": 20,
-            "g_std_threshold": 0.017,
-            "g_ptp_threshold": 0.144,
-            "g_dilation_seconds": 10,
-            "min_g_length_seconds": 10,
-        }
-        sample_rate = 100 # Ensure this matches your data's actual sample rate
-
         # 1. Prepare ground truth labels
-        ground_truth_labels = data["labels"].astype(str).str.lower()
-        # True for probe (P), False for NP ('n' or 'z'). 'g' and other labels are 'P'.
-        true_is_probe = ~ground_truth_labels.isin(["n", "z"])
+        ground_truth_labels = data["labels"].astype(str).str.upper()
+        true_is_probe = ~ground_truth_labels.isin(["N", "Z"])
+        true_is_probe = true_is_probe.astype(int).to_numpy()
 
-        pre_rect = data["voltage"].values # Use 'voltage' column
         self.start_labeling_progress.emit(25, 100)
 
         # 2. Stage 1: Run simple_probe_finder
-        initial_probes_tuples = ProbeSplitter.simple_probe_finder(
-            pre_rect,
-            window=BEST_SPLITTER_PARAMS["window"],
-            threshold=BEST_SPLITTER_PARAMS["threshold"],
-            min_probe_length=BEST_SPLITTER_PARAMS["min_probe_length"],
-            np_pad=BEST_SPLITTER_PARAMS["np_pad"]
-        )
-
-        # Convert initial probe tuples to a boolean array for the next stage
-        initial_predicted_is_probe = np.zeros_like(pre_rect, dtype=bool)
-        for start, end in initial_probes_tuples:
-            start_bound = max(0, start)
-            end_bound = min(len(initial_predicted_is_probe), end)
-            initial_predicted_is_probe[start_bound:end_bound] = True
-
-        self.start_labeling_progress.emit(50, 100)
-
-        # 3. Stage 2: Refine predictions using G-signal detector
-        final_predicted_is_probe = ProbeSplitter.refine_predictions_for_g(
-            initial_predicted_is_probe,
-            pre_rect,
-            sample_rate,
-            BEST_G_REFINEMENT_PARAMS["g_window_seconds"],
-            BEST_G_REFINEMENT_PARAMS["g_std_threshold"],
-            BEST_G_REFINEMENT_PARAMS["g_ptp_threshold"],
-            BEST_G_REFINEMENT_PARAMS["g_dilation_seconds"],
-            BEST_G_REFINEMENT_PARAMS["min_g_length_seconds"],
-            initial_probes_tuples
-        )
-
-        # 4. Apply final predictions to the DataFrame for GUI display
-        # Convert boolean array back to 'P'/'NP' strings for the 'probes' column
-        data['probes'] = np.where(final_predicted_is_probe, 'P', 'NP')
+        predicted_is_probe = Model.predict([data])[0]
+        data["probes"] = np.where(predicted_is_probe, 'P', 'NP')
+    
 
         # 5. Update GUI (as per your original code)
         datawindow.transition_mode = 'probes'
@@ -174,17 +124,59 @@ class Labeler(QObject):
 
         # 6. Evaluate and print results to terminal
         # Ensure lengths match for evaluation
-        min_len = min(len(true_is_probe), len(final_predicted_is_probe))
-        true_labels_clipped = true_is_probe[:min_len]
-        predicted_labels_clipped = final_predicted_is_probe[:min_len]
+        min_len = min(len(true_is_probe), len(predicted_is_probe))
+        true_clip = true_is_probe[:min_len]
+        predicted_clip= predicted_is_probe[:min_len]
 
         # Convert boolean arrays to 'P'/'NP' strings for classification_report
-        true_labels_str = np.where(true_labels_clipped, 'P', 'NP')
-        predicted_labels_str = np.where(predicted_labels_clipped, 'P', 'NP')
+        true_labels_str = np.where(true_clip, 'P', 'NP')
+        predicted_labels_str = np.where(predicted_clip, 'P', 'NP')
 
         print("\n=== Two-Stage Probe Splitting Evaluation ===")
         print(f"Accuracy: {accuracy_score(true_labels_str, predicted_labels_str):.4f}")
         print(classification_report(true_labels_str, predicted_labels_str, target_names=["NP", "P"]))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        # data = epgdata.dfs[epgdata.current_file]
+
+        # ground_truth_labels = data["labels"].astype(str).str.lower()
+        # true_is_probe = ~ground_truth_labels.isin(["n", "z"])
+
+        # pre_rect = data["voltage"].values # once the data is fed into the program, the data is saved as voltage (no longer pre_rect)
+        # self.start_labeling_progress.emit(25, 100)
+        # probes = ProbeSplitter.simple_probe_finder(pre_rect)
+        # self.start_labeling_progress.emit(50, 100)
+        # data['probes'] = 'NP'
+        # for _, (start, end) in enumerate(probes, start=1):
+        #     data.loc[start:end, 'probes'] = 'P'
+        # datawindow.transition_mode = 'probes'
+        # datawindow.plot_recording(epgdata.current_file)
+        # self.start_labeling_progress.emit(100, 100)
+
+        # predicted_is_probe = np.zeros_like(pre_rect, dtype=bool)
+        # for start, end in probes:
+        #     start_bound = max(0, start)
+        #     end_bound = min(len(predicted_is_probe), end)
+        #     predicted_is_probe[start_bound:end_bound] = True
+
+        # # print accuracy results on probe splitting for the current file
+        # print("\n=== Probe Splitting Evaluation ===")
+        # print(f"Accuracy: {accuracy_score(true_is_probe, predicted_is_probe):.4f}")
+        # print(classification_report(true_is_probe, predicted_is_probe, target_names=["NP", "P"]))
 
 
     def stop_labeling(self):
