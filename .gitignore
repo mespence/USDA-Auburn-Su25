@@ -190,7 +190,7 @@ GUI/backups
 *.ipynb
 
 GUI/*.csv
-ML/data
+ML/**/data
 ML/**/*.csv
 ML/**/*.parquet
 ML/**/out

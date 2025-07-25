@@ -18,10 +18,11 @@ from sklearn.metrics import (
     classification_report, precision_recall_fscore_support,
     ConfusionMatrixDisplay, accuracy_score
 )
+from sklearn.model_selection import KFold
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))) # root ML folder
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..\..")))
 
 from label_mapper import load_label_map, build_label_map
 from data_loader import import_data, stratified_split
@@ -52,7 +53,7 @@ class Model:
         ):
         random.seed(42)  
 
-        self.label_map = load_label_map(os.path.join(os.path.dirname(__file__), "label_map.json"))[0]
+        self.label_map = load_label_map("../../label_map.json")[0]
         self.inv_label_map = {0: "NP", 1: "P"}
 
 
@@ -299,8 +300,6 @@ class TimeSeriesDataset(Dataset):
         self.y = []
         self.weights = []
 
-        # process splitting by probes and provide names for each file
-        self.names = [df.attrs["file"] for df in dfs]
 
         for df in dfs:
             # Extract time series data and labels for each df
@@ -685,6 +684,7 @@ class DataImport:
         self.random_state: int = 42
         kf = KFold(n_splits=folds, random_state=self.random_state, shuffle=True)
         self.cross_val_iter: list = list(kf.split(self.df_list))
+    
 
     def process_df(self,  df: pd.DataFrame):
         labels = df["labels"].values
@@ -877,13 +877,6 @@ def plot_labels(time, voltage, true_labels, pred_labels, probs = None):
     return fig
 
 
-
-
-from sklearn.model_selection import KFold
-from pathlib import Path
-import json
-import os
-
 NUM_FOLDS = 5
 
 if __name__ == "__main__":
@@ -894,10 +887,10 @@ if __name__ == "__main__":
         "d01", "d03", "d056", "d058", "d12",
     }
 
-    with open("./data_quality_map.json", "r") as f:
+    with open("../../data_quality_map.json", "r") as f:
         QUALITY_MAP = json.load(f)
 
-    data = DataImport(r".\data", ".parquet", exclude=EXCLUDE)
+    data = DataImport(r"../../data", ".parquet", exclude=EXCLUDE)
     df_list = data.df_list
 
     kf = KFold(n_splits=NUM_FOLDS, shuffle=True, random_state=42)
@@ -935,3 +928,27 @@ if __name__ == "__main__":
         print("Generating report...")
         print(stats)
         true, pred, stats = generate_probesplitter_report(test, predicted_labels, test_names, unet.save_path, "UNet", fold=fold_idx)
+
+
+    
+# if __name__ == "__main__":
+#     # Setup
+#     unet = Model()
+#     unet.save_path = "./out_full_train"
+    
+#     EXCLUDE = {
+#         "a01", "a02", "a03", "a10", "a15",
+#         "b01", "b02", "b04", "b07", "b12", "b188", "b202", "b206", "b208",
+#         "c046", "c07", "c09", "c10",
+#         "d01", "d03", "d056", "d058", "d12",
+#     }
+
+#     data = DataImport(r"..\..\data", ".parquet", exclude=EXCLUDE)
+
+#     print("Training model on full dataset (no validation/test)...")
+#     unet.train(data.df_list, val_probes=None, show_train_curve=True, save_train_curve=True)
+
+#     print("Saving trained model...")
+#     unet.save()
+
+#     print("Full training complete.")
