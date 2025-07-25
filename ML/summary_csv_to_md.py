@@ -1,6 +1,11 @@
 import pandas as pd
 from pathlib import Path
 
+
+"""
+Takes an summary output csv from optuna and formats it as a markdown tables
+"""
+
 # Load CSV
 df = pd.read_csv(r"D:\USDA-Auburn\CS-Repository\ML\out\RF_SummaryStats.csv")
 
