@@ -27,7 +27,7 @@ from models.label_mapper import load_label_map, build_label_map
 from models.data_loader import import_data, stratified_split
 
 
-class ProbeSplitter:
+class UNetProbeSplitter:
     def __init__(
             self, 
             epochs=16, 

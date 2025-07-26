@@ -28,7 +28,7 @@ class Model():
         }
         self.inv_label_map = {i:label for label, i in self.label_map.items()}
 
-        self.data_columns = ["pre_rect"]
+        self.data_columns = ["voltage"]
         
         self.batch_size = 1
         self.epochs=epochs

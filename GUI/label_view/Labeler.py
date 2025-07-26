@@ -9,7 +9,8 @@ sys.path.insert(1, '../ML/')
 """
 #from postprocessing import PostProcessor
 #from itertools import groupby
-from models.unet_probesplitter import ProbeSplitter
+from models.unet_probesplitter import UNetProbeSplitter
+from models.ProbeSplitterMosquito import SimpleProbeSplitter
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QCursor
@@ -24,9 +25,7 @@ class Labeler(QObject):
         super().__init__(parent=parent)
         self.stop_flag = False
         self.model = None
-        self.probe_splitter = ProbeSplitter()
-        self.probe_splitter.load(r".\models\unet_probesplitter_weights")
-
+    
     def load_model(self, model_name):
         model_chooser = self.parent().modelChooser
         model_chooser.blockSignals(True)
@@ -102,17 +101,21 @@ class Labeler(QObject):
                 end = 0
         return probes
 
-    def start_probe_splitting(self, epgdata, datawindow):
+    def start_sharpshooter_probe_splitting(self, epgdata, datawindow):
+        probe_splitter = UNetProbeSplitter()
+        probe_splitter.load(r".\models\unet_probesplitter_weights")
+
         data = epgdata.dfs[epgdata.current_file]
         true_str = data["labels"].astype(str).str.upper()
         true_binary = (~true_str.isin(["N", "Z"])).astype(int).to_numpy()
 
         self.start_labeling_progress.emit(25, 100)
 
-        predicted_str = self.probe_splitter.predict([data])[0]
+        predicted_str = probe_splitter.predict([data])[0]
         predicted_np = np.array(predicted_str, dtype="object")
         predicted_binary = np.array([0 if label == "NP" else 1 for label in predicted_str])
 
+        # TODO need to uncomment this eventually when post prcoessing for less barcoding doen
         # data["probes"] = predicted_np
     
         # datawindow.transition_mode = 'probes'
@@ -122,15 +125,30 @@ class Labeler(QObject):
         # Ensure lengths match for evaluation
         assert len(true_binary) == len(predicted_binary)
 
+
+        # TODO need to comment this out, this is for evaluation
         print("\n=== Probe Splitting Evaluation Report ===")
         print("Sample predicted:", predicted_str[:20])
         print("Sample ground truth:", np.where(true_binary, "P", "NP")[:20])
         print(f"Accuracy: {accuracy_score(true_binary, predicted_binary):.4f}")
         print(classification_report(true_binary, predicted_binary, target_names=["NP", "P"]))
 
+    def start_mosquito_probe_splitting(self, epgdata, datawindow):
+        data = epgdata.dfs[epgdata.current_file]
+        pre_rect = data["pre_rect"].values
+        self.start_labeling_progress.emit(25, 100)
+        probes = SimpleProbeSplitter.simple_probe_finder(pre_rect)
+        self.start_labeling_progress.emit(50, 100)
+        data['probes'] = 'NP'
+        for i, (start, end) in enumerate(probes, start=1):
+            data.loc[start:end, 'probes'] = 'P'
+        datawindow.transition_mode = 'probes'
+        datawindow.plot_recording(epgdata.current_file)
+        datawindow.plot_transitions(epgdata.current_file)
+        self.start_labeling_progress.emit(100, 100)
+
     def stop_labeling(self):
         self.stop_flag = True
-
 
     def start_labeling(self, epgdata, datawindow):
         if not self.model:

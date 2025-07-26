@@ -100,7 +100,11 @@ class LabelViewTab(QWidget):
         self.modelChooser.currentTextChanged.connect(self.labeler.load_model)
 
         startSplittingButton = QPushButton("Start Probe Splitter")
-        startSplittingButton.clicked.connect(lambda: self.labeler.start_probe_splitting(self.epgdata, self.datawindow))
+        selectedModel = self.modelChooser.currentText()
+        if "Mosquito" in selectedModel:
+            startSplittingButton.clicked.connect(lambda: self.labeler.start_mosquito_probe_splitting(self.epgdata, self.datawindow))
+        elif "Sharpshooter" in selectedModel:
+            startSplittingButton.clicked.connect(lambda: self.labeler.start_sharpshooter_probe_splitting(self.epgdata, self.datawindow))
 
         startLabelingButton = QPushButton("Start Automated Labeling")
         startLabelingButton.clicked.connect(lambda: self.labeler.start_labeling(self.epgdata, self.datawindow))
