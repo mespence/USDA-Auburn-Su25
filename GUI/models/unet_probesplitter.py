@@ -6,6 +6,7 @@ from pathlib import Path
 import torch
 from torch import nn
 import torch.optim as optim
+import distinctipy
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 import random
@@ -18,10 +19,11 @@ from sklearn.metrics import (
     classification_report, precision_recall_fscore_support,
     ConfusionMatrixDisplay, accuracy_score
 )
+from sklearn.model_selection import KFold
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))) # root ML folder
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..\..")))
 
 from models.label_mapper import load_label_map, build_label_map
 from models.data_loader import import_data, stratified_split
@@ -52,7 +54,8 @@ class UNetProbeSplitter:
         ):
         random.seed(42)  
 
-        self.label_map = load_label_map(os.path.join(os.path.dirname(__file__), "label_map.json"))[0]
+        self.label_map = load_label_map("../../label_map.json")[0]
+        # self.inv_label_map = {0: "NP", 1: "P"}
 
 
         self.data_columns = ["voltage"]
@@ -251,16 +254,14 @@ class UNetProbeSplitter:
                 all_predictions.append(output_labels)
 
             if smooth: # apply smoothing post-processing
-                WINDOW_SIZE = 400 # 1s
-                THRESHOLD = 0.1
+                WINDOW_SIZE = 100 # 1s
+                THRESHOLD = 0.2
                 
-                flattened_preds = np.concatenate(all_predictions)
                 kernel = np.ones(WINDOW_SIZE) / WINDOW_SIZE
-                averaged = np.convolve(flattened_preds, kernel, mode = "same")
+                padded = np.pad(all_predictions, (WINDOW_SIZE // 2,), mode = "edge")
+                averaged = np.convolve(padded, kernel, mode = "valid")
                 
-                smoothed_flat = (averaged >= THRESHOLD).astype(int)
-                all_predictions = [smoothed_flat.tolist()]
-
+                all_predictions = (averaged >= THRESHOLD).astype(int).tolist()
             
             if return_logits:
                 return all_predictions, all_logits
@@ -311,10 +312,18 @@ class TimeSeriesDataset(Dataset):
         self.y = []
         self.weights = []
 
+
         for df in dfs:
             # Extract time series data and labels for each df
             x_tensor = torch.tensor(df[self.data_columns].values, dtype=torch.float32)
-            y_tensor = torch.tensor(df[self.class_column].map(label_map).values, dtype=torch.long)
+            mapped = df[self.class_column].map(label_map)
+
+            # ✅ Check for unmapped labels
+            if mapped.isnull().any():
+                missing = df[self.class_column][mapped.isnull()].unique()
+                raise ValueError(f"[Label Mapping Error] Found unknown labels: {missing}")
+
+            y_tensor = torch.tensor(mapped.values, dtype=torch.long)
             self.x.append(x_tensor)
             self.y.append(y_tensor)
 
@@ -694,6 +703,7 @@ class DataImport:
         self.random_state: int = 42
         kf = KFold(n_splits=folds, random_state=self.random_state, shuffle=True)
         self.cross_val_iter: list = list(kf.split(self.df_list))
+    
 
     def process_df(self,  df: pd.DataFrame):
         labels = df["labels"].values
@@ -751,7 +761,7 @@ class DataImport:
         Returns (start, end) index tuples for contiguous probe segments
         with labels not in NON_PROBING_LABELS.
         """
-        NON_PROBING_LABELS = {"N", "Z"}
+        NON_PROBING_LABELS = {"Z"}
 
         upper_labels = np.char.upper(labels.astype(str))
         mask = ~np.isin(upper_labels, list(NON_PROBING_LABELS))  # Faster than pandas
@@ -848,11 +858,11 @@ def plot_labels(time, voltage, true_labels, pred_labels, probs = None):
 
     def generate_label_colors(labels):
         labels = sorted(set(labels))
-        cmap = plt.get_cmap("tab20")  # or "tab20", "nipy_spectral", etc.
-        colors = [mcolors.to_hex(cmap(i / len(labels))) for i in range(len(labels))]
-        return dict(zip(labels, colors))
+        colors = distinctipy.get_colors(len(labels))
+        hex_colors = [distinctipy.get_hex(color) for color in colors]
+        return dict(zip(labels, hex_colors))
     
-    unique_labels = ['B', 'B2', 'B4', 'C', 'CG', 'D', 'DG', 'F', 'F1', 'F2', 'F3', 'F4', 'FB', 'G', 'N', 'P', 'Z']
+    unique_labels = ['B', 'B2', 'B4', 'C', 'CG', 'D', 'DG', 'F', 'F1', 'F2', 'F3', 'F4', 'FB', 'G', 'N', 'P', 'Z'] # hardcoded for now
     label_to_color = generate_label_colors(unique_labels)
 
     fig, axs = plt.subplots(3, 1, sharex = True)
@@ -888,14 +898,68 @@ def plot_labels(time, voltage, true_labels, pred_labels, probs = None):
 
 
 
-from sklearn.model_selection import KFold
-from pathlib import Path
-import json
-import os
 
-NUM_FOLDS = 5
+# NUM_FOLDS = 5
 
+# if __name__ == "__main__":
+#     EXCLUDE = {
+#         "a01", "a02", "a03", "a10", "a15",
+#         "b01", "b02", "b04", "b07", "b12", "b188", "b202", "b206", "b208",
+#         "c046", "c07", "c09", "c10",
+#         "d01", "d03", "d056", "d058", "d12",
+#     }
+
+#     with open("../../data_quality_map.json", "r") as f:
+#         QUALITY_MAP = json.load(f)
+
+#     data = DataImport(r"../../data", ".parquet", exclude=EXCLUDE)
+#     df_list = data.df_list
+
+#     kf = KFold(n_splits=NUM_FOLDS, shuffle=True, random_state=42)
+
+#     for fold_idx, (train_val_idx, test_idx) in enumerate(kf.split(df_list)):
+#         print(f"\n===== Fold {fold_idx + 1}/{NUM_FOLDS} =====")
+
+#         # Split into train+val and test
+#         train_val = [df_list[i] for i in train_val_idx]
+#         test = [df_list[i] for i in test_idx]
+#         test_names = [Path(df.attrs["file"]).stem for df in test]
+
+#         # Further split train_val into train and val
+#         train_dfs, val_dfs, _ = stratified_split(
+#             train_val,
+#             quality_map=QUALITY_MAP,
+#             train_size=0.9,
+#             val_size=0.1,
+#             test_size=0.0,
+#             fallback="hybrid",
+#             random_state=fold_idx  # different seed per fold
+#         )
+
+#         # Initialize and train model
+#         unet = Model()
+#         unet.save_path = f"./out/unet_probesplitter/fold_{fold_idx}"
+#         os.makedirs(unet.save_path, exist_ok=True)
+
+#         print("Training model...")
+#         unet.train(train_dfs, val_dfs, save_train_curve=True)
+
+#         print("Testing model...")
+#         predicted_labels = unet.predict(test)
+
+
+
+#         print("Generating report...")
+#         print(stats)
+#         true, pred, stats = generate_probesplitter_report(test, predicted_labels, test_names, unet.save_path, "UNet", fold=fold_idx)
+
+
+    
 if __name__ == "__main__":
+    # Setup
+    unet = Model()
+    unet.save_path = os.getcwd()
+    
     EXCLUDE = {
         "a01", "a02", "a03", "a10", "a15",
         "b01", "b02", "b04", "b07", "b12", "b188", "b202", "b206", "b208",
@@ -903,44 +967,12 @@ if __name__ == "__main__":
         "d01", "d03", "d056", "d058", "d12",
     }
 
-    with open("./data_quality_map.json", "r") as f:
-        QUALITY_MAP = json.load(f)
+    data = DataImport(r"..\..\data", ".parquet", exclude=EXCLUDE)
 
-    data = DataImport(r".\data", ".parquet", exclude=EXCLUDE)
-    df_list = data.df_list
+    print("Training model on full dataset (no validation/test)...")
+    unet.train(data.df_list, val_probes=None, show_train_curve=True, save_train_curve=True)
 
-    kf = KFold(n_splits=NUM_FOLDS, shuffle=True, random_state=42)
+    print("Saving trained model...")
+    unet.save()
 
-    for fold_idx, (train_val_idx, test_idx) in enumerate(kf.split(df_list)):
-        print(f"\n===== Fold {fold_idx + 1}/{NUM_FOLDS} =====")
-
-        # Split into train+val and test
-        train_val = [df_list[i] for i in train_val_idx]
-        test = [df_list[i] for i in test_idx]
-        test_names = [Path(df.attrs["file"]).stem for df in test]
-
-        # Further split train_val into train and val
-        train_dfs, val_dfs, _ = stratified_split(
-            train_val,
-            quality_map=QUALITY_MAP,
-            train_size=0.9,
-            val_size=0.1,
-            test_size=0.0,
-            fallback="hybrid",
-            random_state=fold_idx  # different seed per fold
-        )
-
-        # Initialize and train model
-        unet = UNetProbeSplitter()
-        unet.save_path = f"./out/unet_probesplitter/fold_{fold_idx}"
-        os.makedirs(unet.save_path, exist_ok=True)
-
-        print("Training model...")
-        unet.train(train_dfs, val_dfs, save_train_curve=True)
-
-        print("Testing model...")
-        predicted_labels = unet.predict(test)
-
-        print("Generating report...")
-        print(stats)
-        true, pred, stats = generate_probesplitter_report(test, predicted_labels, test_names, unet.save_path, "UNet", fold=fold_idx)
+    print("Full training complete.")
