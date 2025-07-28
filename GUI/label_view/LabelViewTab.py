@@ -99,12 +99,11 @@ class LabelViewTab(QWidget):
 
         self.modelChooser.currentTextChanged.connect(self.labeler.load_model)
 
-        startSplittingButton = QPushButton("Start Probe Splitter")
-        selectedModel = self.modelChooser.currentText()
-        if "Mosquito" in selectedModel:
-            startSplittingButton.clicked.connect(lambda: self.labeler.start_mosquito_probe_splitting(self.epgdata, self.datawindow))
-        elif "Sharpshooter" in selectedModel:
-            startSplittingButton.clicked.connect(lambda: self.labeler.start_sharpshooter_probe_splitting(self.epgdata, self.datawindow))
+        self.startSplittingButton = QPushButton("Start Probe Splitter")
+        self.startSplittingButton.clicked.connect(self.start_splitting)
+
+        self.startSplittingButton.setEnabled(False)
+        self.modelChooser.currentTextChanged.connect(self.update_splitting_button_state)
 
         startLabelingButton = QPushButton("Start Automated Labeling")
         startLabelingButton.clicked.connect(lambda: self.labeler.start_labeling(self.epgdata, self.datawindow))
@@ -167,8 +166,8 @@ class LabelViewTab(QWidget):
         #bottom_controls.addWidget(openDataButton)
        
         # bottom_controls.addWidget(self.modelChooser)
-        bottom_controls.addWidget(startSplittingButton)
         bottom_controls.addWidget(self.modelChooser)
+        bottom_controls.addWidget(self.startSplittingButton)
         bottom_controls.addWidget(startLabelingButton)
         # bottom_controls.addWidget(stopLabelingButton)
         # bottom_controls.addWidget(self.progressBar)
@@ -188,6 +187,20 @@ class LabelViewTab(QWidget):
 
         self.setLayout(main_layout)
 
+    def update_splitting_button_state(self, text):
+        if "Select model..." in text:
+            self.startSplittingButton.setEnabled(False)
+        else:
+            self.startSplittingButton.setEnabled(True)
+
+    def start_splitting(self):
+        selectedModel = self.modelChooser.currentText()
+        if "Mosquito" in selectedModel:
+            self.labeler.start_mosquito_probe_splitting(self.epgdata, self.datawindow)
+        elif "Sharpshooter" in selectedModel:
+            self.labeler.start_sharpshooter_probe_splitting(self.epgdata, self.datawindow)
+        else:
+            print("No model selected.")
 
     def sync_scroll_to_view(self, slider_value: int):
         if self.datawindow.df is None:

@@ -135,7 +135,7 @@ class Labeler(QObject):
 
     def start_mosquito_probe_splitting(self, epgdata, datawindow):
         data = epgdata.dfs[epgdata.current_file]
-        pre_rect = data["pre_rect"].values
+        pre_rect = data["voltage"].values
         self.start_labeling_progress.emit(25, 100)
         probes = SimpleProbeSplitter.simple_probe_finder(pre_rect)
         self.start_labeling_progress.emit(50, 100)
