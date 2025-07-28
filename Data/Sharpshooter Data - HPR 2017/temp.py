@@ -1,27 +1,34 @@
 import pandas as pd
+from pathlib import Path
 
-file_path = r"D:\USDA-Auburn\CS-Repository\Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_d07_labeled.csv"
+def find_unlabeled_rows_in_file(csv_path, label_col="labels"):
+    try:
+        df = pd.read_csv(csv_path, index_col=0, low_memory=False)
 
-# Read the CSV
-df = pd.read_csv(file_path)
+        unlabeled_mask = df[label_col].isna() | (df[label_col].astype(str).str.strip() == "")
+        unlabeled_rows = df[unlabeled_mask]
 
-# Replace 2 with "F2" in the 'labels' column (works if it's int or string)
-if "labels" in df.columns:
-    df["labels"] = df["labels"].replace("2", "F2")
+        if unlabeled_rows.empty:
+            print(f"[OK] {csv_path.name}: All rows labeled ✅")
+        else:
+            print(f"[WARN] {csv_path.name}: {len(unlabeled_rows)} unlabeled rows:")
+            for idx, row in unlabeled_rows.iterrows():
+                print(f"   - Row index {idx}, time = {row.get('time', '??')}, label = {row[label_col]!r}")
+    except Exception as e:
+        print(f"[ERROR] {csv_path.name}: Failed to read/process file ({e})")
 
-# Save back (overwrite or change path)
-df.to_csv(file_path, index=False)
+def find_unlabeled_rows(path, label_col="labels"):
+    path = Path(path)
+    if path.is_file():
+        find_unlabeled_rows_in_file(path, label_col)
+    elif path.is_dir():
+        csv_files = list(path.glob("*.csv"))
+        print(f"Scanning directory: {path} ({len(csv_files)} CSV files found)")
+        for csv_file in csv_files:
+            find_unlabeled_rows_in_file(csv_file, label_col)
+    else:
+        print(f"[ERROR] Path not found: {path}")
 
-
-# import pandas as pd
-
-# df = pd.read_csv(r"D:\USDA-Auburn\CS-Repository\Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled\sharpshooter_d07_labeled.csv")
-
-# # Replace 'column_name' with the actual column you're checking
-# matching_rows = df[df["labels"] == "2"]
-
-# if not matching_rows.empty:
-#     # Get row indices (zero-based)
-#     print("Matching row indices:", matching_rows.index.tolist())
-# else:
-#     print("No rows found with value 2 in 'column_name'")
+# --- Example usage ---
+# Replace with your directory or file path
+find_unlabeled_rows(r"D:\USDA-Auburn\CS-Repository\Data\Sharpshooter Data - HPR 2017\sharpshooter_labeled")

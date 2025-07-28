@@ -162,6 +162,7 @@ class Settings(QObject):
         self.set("label_colors", self.label_colors)
 
     def generate_label_color_dict(self):
+        #TODO: use distinctipy?
         hue = QRandomGenerator.global_().bounded(0, 360)
         saturation_light = QRandomGenerator.global_().bounded(150, 256)
         saturation_dark = saturation_light - 60

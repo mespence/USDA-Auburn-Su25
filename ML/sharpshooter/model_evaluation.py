@@ -10,6 +10,7 @@ import optuna
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors 
+import distinctipy
 from sklearn.model_selection import KFold
 from sklearn.metrics import classification_report, accuracy_score
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -188,9 +189,9 @@ def plot_labels(time, voltage, true_labels, pred_labels, probs = None):
 
     def generate_label_colors(labels):
         labels = sorted(set(labels))
-        cmap = plt.get_cmap("tab20")  # or "tab20", "nipy_spectral", etc.
-        colors = [mcolors.to_hex(cmap(i / len(labels))) for i in range(len(labels))]
-        return dict(zip(labels, colors))
+        colors = distinctipy.get_colors(len(labels))
+        hex_colors = [distinctipy.get_hex(color) for color in colors]
+        return dict(zip(labels, hex_colors))
     
     unique_labels = ['B', 'B2', 'B4', 'C', 'CG', 'D', 'DG', 'F', 'F1', 'F2', 'F3', 'F4', 'FB', 'G', 'N', 'P', 'Z']
     label_to_color = generate_label_colors(unique_labels)

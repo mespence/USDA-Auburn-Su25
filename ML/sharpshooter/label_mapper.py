@@ -1,10 +1,13 @@
 import os
 import json
 import pandas as pd
+from pathlib import Path
 from collections import defaultdict
 from typing import Optional
 
-NON_PROBING_LABELS = {"N", "Z"} # NOTE: update and rebuild map as needed
+from data_loader import import_data
+
+NON_PROBING_LABELS = {"Z"} # NOTE: update and rebuild map as needed
 
 
 def load_label_map(save_path: str) -> Optional[tuple[dict, dict]]:
@@ -18,7 +21,9 @@ def load_label_map(save_path: str) -> Optional[tuple[dict, dict]]:
         label_map (Dict[str, int]): normalized to uppercase
         inv_label_map (Dict[int, str]): inverse mapping
     """
-    if not os.path.exists(save_path):
+    save_path = Path(save_path)
+    if not save_path.exists():
+        print()
         return None
     
     with open(save_path, "r") as f:
@@ -63,3 +68,16 @@ def build_label_map(dataframes: list[pd.DataFrame], label_column = "labels") -> 
         json.dump(label_map, f, indent=4)
 
     return label_map, inv_label_map
+
+
+if __name__ == "__main__":
+    EXCLUDE = {
+        "a01", "a02", "a03", "a10", "a15",
+        "b01", "b02", "b04", "b07", "b12", "b188", "b202", "b206", "b208",
+        "c046", "c07", "c09", "c10",
+        "d01", "d03", "d056", "d058", "d12",
+    }
+
+    DATA_PATH = r"D:\USDA-Auburn\CS-Repository\ML\sharpshooter\data"
+    data = import_data(DATA_PATH, ".parquet", exclude=EXCLUDE)
+    build_label_map(data)
