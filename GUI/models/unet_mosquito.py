@@ -264,9 +264,6 @@ class TimeSeriesDataset(Dataset):
         self.y = []
         self.weights = []
 
-        # process splitting by probes and provide names for each file
-        self.names = [df["file"] for df in dfs]
-
         for df in dfs:
             # Extract time series data and labels for each df
             x_tensor = torch.tensor(df[self.data_columns].values, dtype=torch.float32)

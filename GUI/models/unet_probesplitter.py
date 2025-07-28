@@ -229,7 +229,7 @@ class UNetProbeSplitter:
             draw_loss_plot(train_losses, validation_losses)
             plt.show()
 
-    def predict(self, probes, return_logits=False):
+    def predict(self, probes, smooth = True, return_logits=False):
         test_dataset = TimeSeriesDataset(probes, self.label_map, data_columns=self.data_columns,
                                          class_column = "labels", ignore_N=self.ignore_N)
         test_dataloader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)
@@ -245,9 +245,22 @@ class UNetProbeSplitter:
                 if return_logits:
                     all_logits.append(outputs.cpu())
                 outputs = outputs.argmax(dim=1).view(-1).cpu().tolist()
-                output_labels = np.where(np.array(outputs) == 1, "P", "NP")
+                output_labels = outputs # leave as 0/1
+                #output_labels = [self.inv_label_map[x] for x in outputs]
                 
                 all_predictions.append(output_labels)
+
+            if smooth: # apply smoothing post-processing
+                WINDOW_SIZE = 400 # 1s
+                THRESHOLD = 0.1
+                
+                flattened_preds = np.concatenate(all_predictions)
+                kernel = np.ones(WINDOW_SIZE) / WINDOW_SIZE
+                averaged = np.convolve(flattened_preds, kernel, mode = "same")
+                
+                smoothed_flat = (averaged >= THRESHOLD).astype(int)
+                all_predictions = [smoothed_flat.tolist()]
+
             
             if return_logits:
                 return all_predictions, all_logits
@@ -918,7 +931,7 @@ if __name__ == "__main__":
         )
 
         # Initialize and train model
-        unet = ProbeSplitter()
+        unet = UNetProbeSplitter()
         unet.save_path = f"./out/unet_probesplitter/fold_{fold_idx}"
         os.makedirs(unet.save_path, exist_ok=True)
 

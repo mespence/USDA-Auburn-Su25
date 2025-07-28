@@ -235,6 +235,8 @@ class Model:
         with torch.no_grad():
             for probe in test_dataloader:
                 x, _, _ = probe
+                print("input batch shape: ", x.shape)
+                
                 x = x.to(self.device)
 
                 outputs = self.model.forward(x.permute(0,2,1))
@@ -293,7 +295,7 @@ class TimeSeriesDataset(Dataset):
         self.weights = []
 
         # process splitting by probes and provide names for each file
-        self.names = [df.attrs["file"] for df in dfs]
+        # self.names = [df.attrs["file"] for df in dfs]
 
         for df in dfs:
             # Extract time series data and labels for each df

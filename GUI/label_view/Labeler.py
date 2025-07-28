@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import importlib
 from sklearn.metrics import accuracy_score, classification_report
+from scipy.signal import savgol_filter
+import torch
 
 """
 import sys
@@ -83,22 +85,19 @@ class Labeler(QObject):
 
     def leak_probe_finder(self, labels):
         non_np_indices = np.where(labels != 'NP')[0]
+        if len(non_np_indices) == 0:
+            return []
+        
         probes = []
-        start = 0
-        end = 0
+        start = non_np_indices[0]
         for i in range(len(non_np_indices)):
-            if i == 0:
-                start = non_np_indices[i]
-            elif i == len(non_np_indices) - 1:
-                end = non_np_indices[i]
-            elif abs(non_np_indices[i] - non_np_indices[i - 1]) > 1:
-                start = non_np_indices[i]
-            elif abs(non_np_indices[i] - non_np_indices[i + 1]) > 1:
-                end = non_np_indices[i]
-            if start > 0 and end > 0:
+            if non_np_indices[i] - non_np_indices[i-1] > 1:
+                end = non_np_indices[i-1]
                 probes.append((start, end))
-                start = 0
-                end = 0
+                start = non_np_indices[i]
+
+        end = non_np_indices[-1]
+        probes.append((start, end))
         return probes
 
     def start_sharpshooter_probe_splitting(self, epgdata, datawindow):
@@ -111,20 +110,17 @@ class Labeler(QObject):
 
         self.start_labeling_progress.emit(25, 100)
 
-        predicted_str = probe_splitter.predict([data])[0]
+        predicted_binary = probe_splitter.predict([data])[0]
+        predicted_str = np.array(["NP" if label == 0 else "P" for label in predicted_binary])
         predicted_np = np.array(predicted_str, dtype="object")
-        predicted_binary = np.array([0 if label == "NP" else 1 for label in predicted_str])
 
-        # TODO need to uncomment this eventually when post prcoessing for less barcoding doen
-        # data["probes"] = predicted_np
-    
-        # datawindow.transition_mode = 'probes'
-        # datawindow.plot_recording(epgdata.current_file)
+
+        # assert len(true_binary) == len(predicted_binary)
+        data["labels"] = predicted_np
+        datawindow.plot_recording(epgdata.current_file)
         self.start_labeling_progress.emit(100, 100)
 
         # Ensure lengths match for evaluation
-        assert len(true_binary) == len(predicted_binary)
-
 
         # TODO need to comment this out, this is for evaluation
         print("\n=== Probe Splitting Evaluation Report ===")
@@ -139,12 +135,10 @@ class Labeler(QObject):
         self.start_labeling_progress.emit(25, 100)
         probes = SimpleProbeSplitter.simple_probe_finder(pre_rect)
         self.start_labeling_progress.emit(50, 100)
-        data['probes'] = 'NP'
+        data['labels'] = 'NP'
         for i, (start, end) in enumerate(probes, start=1):
-            data.loc[start:end, 'probes'] = 'P'
-        datawindow.transition_mode = 'probes'
+            data.loc[start:end, 'labels'] = 'P'
         datawindow.plot_recording(epgdata.current_file)
-        datawindow.plot_transitions(epgdata.current_file)
         self.start_labeling_progress.emit(100, 100)
 
     def stop_labeling(self):
@@ -154,10 +148,12 @@ class Labeler(QObject):
         if not self.model:
             print("No model loaded!")
             return
+        
         current_file = epgdata.dfs[epgdata.current_file]
-        current_file["file"] = "placeholder file"
+
+        # current_file["file"] = "placeholder file"
         # We need to split based on the probe labels
-        probe_indices = self.leak_probe_finder(current_file["probes"].values)
+        probe_indices = self.leak_probe_finder(current_file["labels"].values)
         probes = [current_file.iloc[start:end + 1].reset_index(drop=True).copy() 
                     for start, end in probe_indices]
         #probe_labels, logits = self.model.predict(probes, return_logits = True)
@@ -168,7 +164,14 @@ class Labeler(QObject):
             return
         self.start_labeling_progress.emit(25, 100)
         """
-        probe_labels = self.model.predict(probes)
+        probe_labels, logits  = self.model.predict(probes, return_logits=True)
+
+        smoothed = []
+        for i in range(len(logits)):
+            logit = logits[i].squeeze(0)
+            smoothed_labels = self.postprocess_smooth(logit)
+            smoothed.append(smoothed_labels)
+        print("model predict done")
         """
         import time
         time.sleep(3)
@@ -183,14 +186,21 @@ class Labeler(QObject):
         #probe_labels = [self.dumb_barcode_fix(p) for p in probe_labels]
         """
         # Fill in only in probing regions
+
         labels = np.repeat("NP", current_file.shape[0])
         for i, probe in enumerate(probe_indices):
             start, end = probe
-            labels[start:end + 1] = probe_labels[i]
+            labels[start:end + 1] = smoothed[i]
 
         # Save and write to screen
         epgdata.set_labels(epgdata.current_file, labels)
-        datawindow.transition_mode = 'labels'
         datawindow.plot_recording(epgdata.current_file)
-        datawindow.plot_transitions(epgdata.current_file)
         self.start_labeling_progress.emit(100, 100)
+        print(current_file.head())
+
+    def postprocess_smooth(self, logits, window_size=301, poly_order=3):
+            smooth_logit = torch.tensor(savgol_filter(logits.numpy(), window_size, poly_order, axis=1))
+            preds = smooth_logit.argmax(dim=0).view(-1).tolist()
+            pred_labels = [self.model.inv_label_map[p] for p in preds]
+            return pred_labels
+    
