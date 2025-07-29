@@ -3,20 +3,18 @@ From Summer Team:
 To-do list for sharpshooter ML:
     - Optuna the UNet probe splitter, minimize overfitting
     - Full optuna on the probing UNet (only partial study has been done)
-        - try to get access to a good GPU for this, some trainings were taking quite long (1.4hrs on RTX 4080/0.5hrs on 
-          RTX 5090). maybe the Firebird Computing Cluster at Swarthmore?
+        - try to get access to a good GPU for this, some folds were taking quite long to train (1.4hrs on RTX 4080,
+          0.5hrs on RTX 5090). maybe the Firebird Computing Cluster at Swarthmore?
 
     - Rework Optuna to save outputs to a SQLite database rather than the log txt file (it has built 
       in functionality for this) to not do trials with hyperparameters that have already been tested 
-      before. This should allow Optuna studies to be started/stopped without losing progress.
+      before. This should allow Optuna studies to be started/stopped without losing progress beyond the
+      current trial
 
     - Look at attention for the probing UNet bottleneck (maybe for probe splitter too if it makes it better)
 
     - Postprocessing - we implemented a simple rolling average to reduce barcoding, but the previous clinic team
       did more advanced postprocessing in their code. See if any of that can be adapted.
-
-    - Eventually, Elaine/Auburn will get us new data from the new engineer's DR3 EPG board, which will be different
-      form than what was trained on, so new models might need to be trained. 
 
     - Current models do not take into account the settings of the EPG board at each data point. Once this is incorporated
       into the new recording data, models might be able to take advantage of this.

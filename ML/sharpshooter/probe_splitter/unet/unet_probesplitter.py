@@ -169,7 +169,8 @@ class Model:
                                              class_column = "labels",ignore_N=self.ignore_N)
             val_dataloader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
 
-        criterion = nn.CrossEntropyLoss()
+        weights = torch.FloatTensor([4/3, 4]).to(self.device)
+        criterion = nn.CrossEntropyLoss(weight = weights)
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay, capturable=False)
 
         train_losses = []
@@ -252,16 +253,18 @@ class Model:
                 #output_labels = [self.inv_label_map[x] for x in outputs]
                 
                 all_predictions.append(output_labels)
-
             if smooth: # apply smoothing post-processing
                 WINDOW_SIZE = 100 # 1s
                 THRESHOLD = 0.2
-                
                 kernel = np.ones(WINDOW_SIZE) / WINDOW_SIZE
-                padded = np.pad(all_predictions, (WINDOW_SIZE // 2,), mode = "edge")
-                averaged = np.convolve(padded, kernel, mode = "valid")
                 
-                all_predictions = (averaged >= THRESHOLD).astype(int).tolist()
+                smoothed_predictions = []
+                for pred in all_predictions:
+                    averaged = np.convolve(pred, kernel, mode="same")
+                    smoothed = (averaged >= THRESHOLD).astype(int).tolist()
+                    smoothed_predictions.append(smoothed)
+                
+                all_predictions = smoothed_predictions
             
             if return_logits:
                 return all_predictions, all_logits
@@ -318,7 +321,7 @@ class TimeSeriesDataset(Dataset):
             x_tensor = torch.tensor(df[self.data_columns].values, dtype=torch.float32)
             mapped = df[self.class_column].map(label_map)
 
-            # ✅ Check for unmapped labels
+            # Check for unmapped labels
             if mapped.isnull().any():
                 missing = df[self.class_column][mapped.isnull()].unique()
                 raise ValueError(f"[Label Mapping Error] Found unknown labels: {missing}")
@@ -780,10 +783,12 @@ class DataImport:
 
 def generate_probesplitter_report(test_data, predicted_labels, test_names, save_path, model_name, fold):
     # Flatten everything
-    with open(".\label_map.json", "r") as f:
+    with open("..\..\label_map.json", "r") as f:
         full_label_map = json.load(f)
         bin_label_map = {"NP": 0, "P": 1}
         
+    print(full_label_map)
+    
     labels_true = []
     labels_pred = []
     for df, preds in zip(test_data, predicted_labels):
@@ -793,7 +798,7 @@ def generate_probesplitter_report(test_data, predicted_labels, test_names, save_
     # Make sure we have a place to save everything
     if not os.path.isdir(save_path):
         os.mkdir(save_path)
-        
+
 
     print("\n=== Binary Classification Report ===")
     
@@ -894,8 +899,6 @@ def plot_labels(time, voltage, true_labels, pred_labels, probs = None):
     fig.supylabel("Volts")
     fig.tight_layout()
     return fig
-
-
 
 
 

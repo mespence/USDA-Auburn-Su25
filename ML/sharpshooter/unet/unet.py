@@ -3,6 +3,7 @@ import numpy as np
 import os
 import json
 from pathlib import Path
+from collections import Counter
 import torch
 from torch import nn
 import torch.optim as optim
@@ -10,8 +11,13 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 import random
 import tqdm
+import distinctipy
 from matplotlib import pyplot as plt
 from positional_encodings.torch_encodings import PositionalEncoding1D
+from sklearn.metrics import (
+    precision_recall_fscore_support, confusion_matrix, 
+    ConfusionMatrixDisplay, accuracy_score, f1_score
+)
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -157,13 +163,25 @@ class Model:
                                        class_column = "labels", ignore_N=self.ignore_N)
         tr_dataloader = DataLoader(tr_dataset, batch_size=self.batch_size, shuffle=True)
 
-        if val_probes:
-            val_dfs, _= self.load_probes(val_probes)
-            val_dataset = TimeSeriesDataset(val_dfs, self.label_map, data_columns=self.data_columns,
-                                             class_column = "labels",ignore_N=self.ignore_N)
-            val_dataloader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
+        # Compute label frequencies for weighting
+        label_counts = Counter()
+        for df in tr_dfs:
+            label_counts.update(df["labels"].map(self.label_map).values)
+        total_labels = sum(label_counts.values())
 
-        criterion = nn.CrossEntropyLoss()
+        # Compute weights: weight[c] = 1 / freq[c]
+        num_classes = len(self.label_map)
+        weights = torch.ones(num_classes, dtype=torch.float32)
+        for label_idx in range(num_classes):
+            count = label_counts.get(label_idx, 0)
+            if count > 0:
+                weights[label_idx] = total_labels / count
+            else:
+                weights[label_idx] = 0.0  # or a large value to penalize unseen class
+        weights = weights.to(self.device)
+            
+
+        criterion = nn.CrossEntropyLoss(weight=weights)
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay, capturable=False)
 
         train_losses = []
@@ -193,6 +211,11 @@ class Model:
 
             # Get the validation loss
             if val_probes:
+                val_dfs, _= self.load_probes(val_probes)
+                val_dataset = TimeSeriesDataset(val_dfs, self.label_map, data_columns=self.data_columns,
+                                                class_column = "labels",ignore_N=self.ignore_N)
+                val_dataloader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
+
                 self.model.eval()
                 with torch.no_grad():
                     running_loss = 0
@@ -688,9 +711,9 @@ class DataImport:
         names = []
 
         for i, (start, end) in enumerate(probe_indices):
-            probe = df.iloc[start:end]  # Avoid reset_index and copy
+            probe = df.iloc[start:end]
             probe.attrs["file"] = df.attrs["file"]
-            probe.attrs["probe_index"] = i  # Optional: keep track of index
+            probe.attrs["probe_index"] = i
             probes.append(probe)
             names.append(f"{filename_base}_{i}")
 
@@ -738,7 +761,7 @@ class DataImport:
         NON_PROBING_LABELS = {"N", "Z"}
 
         upper_labels = np.char.upper(labels.astype(str))
-        mask = ~np.isin(upper_labels, list(NON_PROBING_LABELS))  # Faster than pandas
+        mask = ~np.isin(upper_labels, list(NON_PROBING_LABELS))
         probe_indices = np.where(mask)[0]
 
         if probe_indices.size == 0:
@@ -752,27 +775,197 @@ class DataImport:
 
 
 
+
+
+
+def plot_labels(time, voltage, true_labels, pred_labels, probs = None):
+    """
+    plot_labels produced a matplotlib figure containing three subplots
+        that visualize a waveform along with the true and predicted labels
+    Input:
+        time: a series of time values
+        voltage: a time series of voltage values from the waveform
+        true_labels: a time series of the true label for each time point
+        pred_labels: a time series of the predicted labels for each time point
+    Output:
+        (fig, axs): a tuple
+    """
+
+
+    def generate_label_colors(labels):
+        labels = sorted(set(labels))
+        colors = distinctipy.get_colors(len(labels))
+        hex_colors = [distinctipy.get_hex(color) for color in colors]
+        return dict(zip(labels, hex_colors))
+    
+    unique_labels = ['B', 'B2', 'B4', 'C', 'CG', 'D', 'DG', 'F', 'F1', 'F2', 'F3', 'F4', 'FB', 'G', 'N', 'P', 'Z']
+    label_to_color = generate_label_colors(unique_labels)
+
+    fig, axs = plt.subplots(3, 1, sharex = True)
+    recording = 1
+    fill_min, fill_max = voltage.min(), voltage.max()
+    
+    # First plot will be the true labels
+    axs[0].plot(time, voltage, color = "black")
+    for label, color in label_to_color.items():
+        fill = axs[0].fill_between(time, fill_min, fill_max, 
+                where = (true_labels == label), color=color, alpha = 0.5)
+        fill.set_label(label)
+    axs[0].legend(bbox_to_anchor=(0.5, 1), 
+                  bbox_transform=fig.transFigure, loc="upper center", ncol=9)
+    axs[0].set_title("True Labels")
+    # Second plot will be the predicted labels
+    axs[1].plot(time, voltage, color = "black")
+    for label, color in label_to_color.items():
+        axs[1].fill_between(time, fill_min, fill_max, 
+                where = (pred_labels == label), color=color, alpha = 0.5)
+    axs[1].set_title("Predicted Labels")
+    # Third plot will be marked where there is a difference between the two
+    axs[2].plot(time, voltage, color = "black")
+    axs[2].fill_between(time, fill_min, fill_max, 
+            where = (pred_labels != true_labels), color = "gray", alpha = 0.5)
+    axs[2].set_title("Incorrect Labels")
+    # Axes titles and such
+    fig.supxlabel("Time (s)")
+    fig.supylabel("Volts")
+    fig.tight_layout()
+    return fig
+
+def generate_report(test_data, predicted_labels, test_names, save_path, model_name, fold):
+    # Flatten everything
+    labels_true = []
+    labels_pred = []
+    for df, preds in zip(test_data, predicted_labels):
+        labels_true.extend(df["labels"].values)
+        labels_pred.extend(preds)
+
+    # Make sure we have a place to save everything
+    if not os.path.isdir(save_path):
+        os.mkdir(save_path)
+        
+
+    # precision et. al
+    labels = sorted(np.unique(labels_true))
+    precision, recall, fscore, _ = precision_recall_fscore_support(
+        labels_true, labels_pred, labels=labels, average=None, zero_division=0
+    )
+    metrics = {}
+    for label, p, r, f in zip(labels, precision, recall, fscore):
+        metrics[f"{label}_precision"] = p
+        metrics[f"{label}_recall"] = r
+        metrics[f"{label}_fscore"] = f
+
+    out_dataframe = pd.DataFrame([metrics])
+
+    # accuracy
+    accuracy = accuracy_score(labels_true, labels_pred)
+    out_dataframe["accuracy"] = accuracy
+
+    # confusion matrix
+    ConfusionMatrixDisplay.from_predictions(labels_true, labels_pred, \
+                                            normalize = 'true')
+    plt.savefig(rf"{save_path}/{model_name}_ConfusionMatrix_Fold{fold}.png")
+
+    # difference plots
+    base_name = Path(model_name).name
+    for df, preds, name in zip(test_data, predicted_labels, test_names):
+        fig = plot_labels(
+            df["time"],
+            df["voltage"],
+            df["labels"].values,
+            np.asarray(preds)
+        )
+        file_stem = Path(name).stem
+        fig_path = Path(save_path) / "difference_plots" / f"{base_name}_{file_stem}_Fold{fold}.png"
+        fig_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(fig_path)
+        plt.close(fig)
+
+    print(f"Fold {fold} Overall Accuracy: {accuracy}")
+    return labels_true, labels_pred, out_dataframe
+
+
+
+
+
+
+
 if __name__ == "__main__":
-    unet = Model()
-
-    unet.save_path = "./out"
-
     EXCLUDE = {
         "a01", "a02", "a03", "a10", "a15",
         "b01", "b02", "b04", "b07", "b12", "b188", "b202", "b206", "b208",
         "c046", "c07", "c09", "c10",
         "d01", "d03", "d056", "d058", "d12",
+        "_b", "_c"
     }
+    NUM_FOLDS = 5
 
     with open("../data_quality_map.json", "r") as f:
-        QUALITY_MAP = json.load(f)  
+        QUALITY_MAP = json.load(f)
 
     data = DataImport("../data", ".parquet", exclude=EXCLUDE)
-    full_data, _ = data.get_probes(data.df_list)
-       
-    print("Training model...")
-    unet.train(full_data)
-    unet.save()
+    all_probes, all_names = data.get_probes(data.df_list)
+    df_list = data.df_list
 
-    print("Model trained.")
+    if len(df_list) == 0:
+        assert "No data loaded. Is the path to the data directory correct?"
+
+    # === K-Fold Cross-Validation ===
+    NUM_FOLDS = 5
+    kf = KFold(n_splits=NUM_FOLDS, shuffle=True, random_state=42)
+
+    for fold_idx, (train_idx, test_idx) in enumerate(kf.split(all_probes)):
+        print(f"\n===== Fold {fold_idx + 1}/{NUM_FOLDS} =====")
+
+        train_probes = [all_probes[i] for i in train_idx]
+        test_probes  = [all_probes[i] for i in test_idx]
+        test_names   = [all_names[i] for i in test_idx]
+
+        # Init model (no save path)
+        unet = Model()
+        unet.epochs=32
+        print("Training model...")
+        unet.train(train_probes, val_probes=None, show_train_curve=False, save_train_curve=False)
+
+        print("Testing model...")
+        predicted_labels = unet.predict(test_probes)
+
+        print("Generating report...")
+        # You can hardcode or parametrize the output folder
+        report_dir = f"./out/unet_crossval/fold_{fold_idx}"
+        Path(report_dir).mkdir(parents=True, exist_ok=True)
+        _, _, stats = generate_report(test_probes, predicted_labels, test_names, report_dir, "UNet", fold=fold_idx)
+        print(stats)
+
+    print("Cross-validation complete.")
+
+
+
+
+    # unet = Model()
+
+    # unet.save_path = "./out"
+
+    # EXCLUDE = {
+    #     "a01", "a02", "a03", "a10", "a15",
+    #     "b01", "b02", "b04", "b07", "b12", "b188", "b202", "b206", "b208",
+    #     "c046", "c07", "c09", "c10",
+    #     "d01", "d03", "d056", "d058", "d12",
+    # }
+
+    # with open("../data_quality_map.json", "r") as f:
+    #     QUALITY_MAP = json.load(f)  
+
+
+
+    # data = DataImport("../data", ".parquet", exclude=EXCLUDE)
+    # full_data, _ = data.get_probes(data.df_list)
+       
+    # print("Training model on full dataset (no validation/test)...")
+    # unet.train(full_data, val_probes=None, show_train_curve=True, save_train_curve=True)
+
+    # print("Saving trained model...")
+    # unet.save()
+
+    # print("Full training complete.")
 

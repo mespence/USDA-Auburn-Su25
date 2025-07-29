@@ -135,30 +135,7 @@ def wdq_parser(bug_id: str, label_df: pd.DataFrame):
     to this bug ID into a CSV, assigning it a "labels" column from the data in the label dataframe.
     """
     try:
-        rep1, channel_id1, csv_id1 = parse_bug_id(bug_id)
-        # Get rep number, csv ID, and maybe post-rect channel ID
-        channel_id = None
-        if len(bug_id[1:]) == 2:
-            rep = "rep" + str(int(bug_id[1:])) # drop leading zero by converting to int
-            csv_id = bug_id
-        elif len(bug_id[1:]) == 3:
-            if bug_id[1] == "0":
-                rep = "rep" + bug_id[2]
-                csv_id = bug_id[0] + bug_id[2:]
-            elif bug_id[1] == "1":
-                rep = "rep" + bug_id[1:3]
-                csv_id = bug_id[0] + bug_id[2:]
-            elif bug_id[1] == "2":
-                rep = "rep" + bug_id[1:3]
-                csv_id = bug_id[0] + bug_id[1] + bug_id[3]
-            channel_id = int(bug_id[3])
-
-        if rep1 != rep:
-            print(f"MISMATCH on {bug_id}: {rep1}, {rep}")
-        if csv_id1 != csv_id:
-            print(f"MISMATCH on {bug_id}: {csv_id1}, {csv_id}")
-        if channel_id1 != channel_id:
-            print(f"MISMATCH on {bug_id}: {channel_id1}, {channel_id}") 
+        rep, channel_id, csv_id = parse_bug_id(bug_id)
 
         # Only works if there is are no duplicate reps. Additional duplicate reps are ignored
         pattern = re.compile(rf"(?:^|_)({re.escape(rep)})(?:_|$)")
