@@ -54,7 +54,7 @@ class UNetProbeSplitter:
         ):
         random.seed(42)  
 
-        self.label_map = load_label_map("../../label_map.json")[0]
+        self.label_map = load_label_map("./models/label_map.json")[0]
         # self.inv_label_map = {0: "NP", 1: "P"}
 
 
@@ -254,14 +254,14 @@ class UNetProbeSplitter:
                 all_predictions.append(output_labels)
 
             if smooth: # apply smoothing post-processing
-                WINDOW_SIZE = 100 # 1s
-                THRESHOLD = 0.2
+                WINDOW_SIZE = 400 # 1s
+                THRESHOLD = 0.1
                 
+                flattened_preds = np.concatenate(all_predictions)
                 kernel = np.ones(WINDOW_SIZE) / WINDOW_SIZE
-                padded = np.pad(all_predictions, (WINDOW_SIZE // 2,), mode = "edge")
-                averaged = np.convolve(padded, kernel, mode = "valid")
+                averaged = np.convolve(flattened_preds, kernel, mode = "same")
                 
-                all_predictions = (averaged >= THRESHOLD).astype(int).tolist()
+                all_predictions = [(averaged >= THRESHOLD).astype(int).tolist()]
             
             if return_logits:
                 return all_predictions, all_logits
