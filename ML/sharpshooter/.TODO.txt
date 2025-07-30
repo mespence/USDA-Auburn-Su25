@@ -2,6 +2,7 @@ From Summer Team:
 
 To-do list for sharpshooter ML:
     - Optuna the UNet probe splitter, minimize overfitting
+
     - Full optuna on the probing UNet (only partial study has been done)
         - try to get access to a good GPU for this, some folds were taking quite long to train (1.4hrs on RTX 4080,
           0.5hrs on RTX 5090). maybe the Firebird Computing Cluster at Swarthmore?
@@ -15,6 +16,7 @@ To-do list for sharpshooter ML:
 
     - Postprocessing - we implemented a simple rolling average to reduce barcoding, but the previous clinic team
       did more advanced postprocessing in their code. See if any of that can be adapted.
+        - We also began to explore minimum np length for postprocessing 
 
     - Current models do not take into account the settings of the EPG board at each data point. Once this is incorporated
       into the new recording data, models might be able to take advantage of this.

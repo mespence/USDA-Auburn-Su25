@@ -250,7 +250,6 @@ class Model:
                     all_logits.append(outputs.cpu())
                 outputs = outputs.argmax(dim=1).view(-1).cpu().tolist()
                 output_labels = outputs # leave as 0/1
-                #output_labels = [self.inv_label_map[x] for x in outputs]
                 
                 all_predictions.append(output_labels)
             if smooth: # apply smoothing post-processing
@@ -778,7 +777,6 @@ class DataImport:
         segment_ends = np.append(probe_indices[breaks], probe_indices[-1])
 
         return list(zip(segment_starts, segment_ends))
-
 
 
 def generate_probesplitter_report(test_data, predicted_labels, test_names, save_path, model_name, fold):

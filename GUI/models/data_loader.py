@@ -58,6 +58,10 @@ def import_data(
             df.reset_index(drop=True, inplace=True)
         else:
             return None
+        
+        if 'CD' in df["labels"].values:
+            df.loc[df['labels'] == 'CD', 'labels'] = 'D'
+        
         df.rename(columns={"pre_rect": "voltage"}, inplace=True)
         df.attrs["file"] = filepath
         return df

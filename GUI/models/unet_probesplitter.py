@@ -56,7 +56,7 @@ class UNetProbeSplitter:
         random.seed(42)  
 
         self.label_map = load_label_map("./models/label_map.json")[0]
-        # self.inv_label_map = {0: "NP", 1: "P"}
+        self.inv_label_map = {0: "NP", 1: "P"}
 
 
         self.data_columns = ["voltage"]
@@ -250,32 +250,29 @@ class UNetProbeSplitter:
                     all_logits.append(outputs.cpu())
 
                 outputs = outputs.argmax(dim=1).view(-1).cpu().tolist()
+
+                """ try out instead of argmax, a threshold -> this didn't look too promising
                 # probs = torch.softmax(outputs, dim=1)
-                # binary_preds = (probs[:, 1] >= 0.3).long().cpu().tolist()
+                # outputs = (probs[:, 1] >= 0.7).long().cpu().tolist()
+                """
 
-
-
-
-
-                # output_labels = outputs # leave as 0/1
-                #output_labels = [self.inv_label_map[x] for x in outputs]
-                
                 all_predictions.append(outputs)
 
 
             if smooth: # apply smoothing post-processing
-                WINDOW_SIZE = 400 # 1s
-                THRESHOLD = 0.1
-                
-                # flattened_preds = np.concatenate(all_predictions)
-                flattened_preds = np.array(all_predictions).flatten().astype(float)
+
+                WINDOW_SIZE = 100 # 1s
+                THRESHOLD = 0.2
                 kernel = np.ones(WINDOW_SIZE) / WINDOW_SIZE
-                averaged = np.convolve(flattened_preds, kernel, mode = "same")
                 
-                smoothed_preds = (averaged >= THRESHOLD).astype(int).tolist()
-                smoothed_preds = self.enforce_min_np_length(smoothed_preds, 200)
-            
-                all_predictions = [smoothed_preds]
+                smoothed_predictions = []
+                for pred in all_predictions:
+                    averaged = np.convolve(pred, kernel, mode="same")
+                    smoothed = (averaged >= THRESHOLD).astype(int).tolist()
+                    # smoothed = self.enforce_min_np_length(smoothed, 4000) # try out minimum np length
+                    smoothed_predictions.append(smoothed)
+                
+                all_predictions = smoothed_predictions
 
             if return_logits:
                 return all_predictions, all_logits
@@ -826,7 +823,7 @@ def generate_probesplitter_report(test_data, predicted_labels, test_names, save_
     labels_pred = []
     for df, preds in zip(test_data, predicted_labels):
         labels_true.extend(np.vectorize(full_label_map.get)(df["labels"].values))
-        labels_pred.extend(np.vectorize(bin_label_map.get)(preds))
+        labels_pred.extend((preds))
 
     # Make sure we have a place to save everything
     if not os.path.isdir(save_path):
@@ -935,8 +932,6 @@ def plot_labels(time, voltage, true_labels, pred_labels, probs = None):
 
 
 
-
-
 # NUM_FOLDS = 5
 
 # if __name__ == "__main__":
@@ -975,17 +970,16 @@ def plot_labels(time, voltage, true_labels, pred_labels, probs = None):
 #         )
 
 #         # Initialize and train model
-#         unet = Model()
+#         unet = UNetProbeSplitter()
 #         unet.save_path = f"./out/unet_probesplitter/fold_{fold_idx}"
 #         os.makedirs(unet.save_path, exist_ok=True)
 
 #         print("Training model...")
-#         unet.train(train_dfs, val_dfs, save_train_curve=True)
+#         # unet.train(train_dfs, val_dfs, save_train_curve=True)
+        
 
 #         print("Testing model...")
 #         predicted_labels = unet.predict(test)
-
-
 
 #         print("Generating report...")
 #         print(stats)
@@ -993,24 +987,24 @@ def plot_labels(time, voltage, true_labels, pred_labels, probs = None):
 
 
     
-if __name__ == "__main__":
-    # Setup
-    unet = Model()
-    unet.save_path = os.getcwd()
+# if __name__ == "__main__":
+#     # Setup
+#     unet = UNetProbeSplitter()
+#     unet.save_path = os.getcwd()
     
-    EXCLUDE = {
-        "a01", "a02", "a03", "a10", "a15",
-        "b01", "b02", "b04", "b07", "b12", "b188", "b202", "b206", "b208",
-        "c046", "c07", "c09", "c10",
-        "d01", "d03", "d056", "d058", "d12",
-    }
+#     EXCLUDE = {
+#         "a01", "a02", "a03", "a10", "a15",
+#         "b01", "b02", "b04", "b07", "b12", "b188", "b202", "b206", "b208",
+#         "c046", "c07", "c09", "c10",
+#         "d01", "d03", "d056", "d058", "d12",
+#     }
 
-    data = DataImport(r"..\..\data", ".parquet", exclude=EXCLUDE)
+#     data = DataImport(r"..\..\data", ".parquet", exclude=EXCLUDE)
 
-    print("Training model on full dataset (no validation/test)...")
-    unet.train(data.df_list, val_probes=None, show_train_curve=True, save_train_curve=True)
+#     print("Training model on full dataset (no validation/test)...")
+#     unet.train(data.df_list, val_probes=None, show_train_curve=True, save_train_curve=True)
 
-    print("Saving trained model...")
-    unet.save()
+#     print("Saving trained model...")
+#     unet.save()
 
-    print("Full training complete.")
+#     print("Full training complete.")

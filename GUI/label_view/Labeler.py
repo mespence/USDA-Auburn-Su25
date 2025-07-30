@@ -150,8 +150,6 @@ class Labeler(QObject):
             return
         
         current_file = epgdata.dfs[epgdata.current_file]
-
-        # current_file["file"] = "placeholder file"
         # We need to split based on the probe labels
         probe_indices = self.leak_probe_finder(current_file["labels"].values)
         probes = [current_file.iloc[start:end + 1].reset_index(drop=True).copy() 
@@ -199,8 +197,8 @@ class Labeler(QObject):
         print(current_file.head())
 
     def postprocess_smooth(self, logits, window_size=301, poly_order=3):
-            smooth_logit = torch.tensor(savgol_filter(logits.numpy(), window_size, poly_order, axis=1))
-            preds = smooth_logit.argmax(dim=0).view(-1).tolist()
-            pred_labels = [self.model.inv_label_map[p] for p in preds]
-            return pred_labels
+        smooth_logit = torch.tensor(savgol_filter(logits.numpy(), window_size, poly_order, axis=1))
+        preds = smooth_logit.argmax(dim=0).view(-1).tolist()
+        pred_labels = [self.model.inv_label_map[p] for p in preds]
+        return pred_labels
     
