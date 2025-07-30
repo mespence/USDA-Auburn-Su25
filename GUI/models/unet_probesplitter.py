@@ -21,6 +21,7 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import KFold
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from itertools import groupby
 
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..\..")))
@@ -247,26 +248,63 @@ class UNetProbeSplitter:
                 outputs = self.model.forward(x.permute(0,2,1))
                 if return_logits:
                     all_logits.append(outputs.cpu())
+
                 outputs = outputs.argmax(dim=1).view(-1).cpu().tolist()
-                output_labels = outputs # leave as 0/1
+                # probs = torch.softmax(outputs, dim=1)
+                # binary_preds = (probs[:, 1] >= 0.3).long().cpu().tolist()
+
+
+
+
+
+                # output_labels = outputs # leave as 0/1
                 #output_labels = [self.inv_label_map[x] for x in outputs]
                 
-                all_predictions.append(output_labels)
+                all_predictions.append(outputs)
+
 
             if smooth: # apply smoothing post-processing
                 WINDOW_SIZE = 400 # 1s
                 THRESHOLD = 0.1
                 
-                flattened_preds = np.concatenate(all_predictions)
+                # flattened_preds = np.concatenate(all_predictions)
+                flattened_preds = np.array(all_predictions).flatten().astype(float)
                 kernel = np.ones(WINDOW_SIZE) / WINDOW_SIZE
                 averaged = np.convolve(flattened_preds, kernel, mode = "same")
                 
-                all_predictions = [(averaged >= THRESHOLD).astype(int).tolist()]
+                smoothed_preds = (averaged >= THRESHOLD).astype(int).tolist()
+                smoothed_preds = self.enforce_min_np_length(smoothed_preds, 200)
             
+                all_predictions = [smoothed_preds]
+
             if return_logits:
                 return all_predictions, all_logits
             else:
                 return all_predictions
+
+    def enforce_min_np_length(self, binary_preds, min_np_length):
+        arr = np.array(binary_preds, dtype=int)
+        in_np = False
+        start = 0
+
+        for i, val in enumerate(arr):
+            if val == 0 and not in_np:
+                in_np = True
+                start = i
+            elif val == 1 and in_np:
+                end = i
+                if end - start < min_np_length:
+                    arr[start:end] = 1 # convert short NP to P
+                in_np = False
+
+        # case when end with NP
+        if in_np:
+            end = len(arr)
+            if end - start < min_np_length:
+                arr[start:end] = 1
+    
+        return arr.tolist()
+
 
     def load_probes(self, probes):
         big_probe = pd.concat(probes, axis=0)
