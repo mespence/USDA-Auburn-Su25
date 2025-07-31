@@ -34,7 +34,7 @@ class LiveDataWindow(PlotWidget):
     - Periodic auto-backup of waveform and comments.
     - Export functionality for waveform data and comments.
     """
-    def __init__(self, parent = None):
+    def __init__(self, recording_settings = None, parent = None):
         """
         Initializes the LiveDataWindow widget.
 
@@ -60,8 +60,14 @@ class LiveDataWindow(PlotWidget):
         self.scene().addItem(self.compression_text)
 
         # --- INITIAL SETTINGS ---
-        self.min_voltage = settings.get("default_min_voltage")
-        self.max_voltage = settings.get("default_max_voltage")
+        if recording_settings:
+            self.recording_filename = recording_settings.get("filename")
+            self.min_voltage = recording_settings.get("min_voltage")
+            self.max_voltage = recording_settings.get("max_voltage")
+        else:
+            self.recording_filename = None
+            self.min_voltage = settings.get("default_min_voltage")
+            self.max_voltage = settings.get("default_max_voltage")
         self.viewbox.setYRange(self.min_voltage, self.max_voltage, padding=0)
         self.base_data_directory = settings.get("default_recording_directory")
 
@@ -278,7 +284,7 @@ class LiveDataWindow(PlotWidget):
             reply = msg_box.exec()
 
             if reply == QMessageBox.StandardButton.Save:
-                export_successful = self.save_df()
+                export_successful = self.export_df()
                 if not export_successful:
                     # export_df cancelled by the user, so cancel closing application
                     event.ignore()
@@ -927,6 +933,7 @@ class LiveDataWindow(PlotWidget):
         filename, _ = QFileDialog.getSaveFileName(
             parent=self,
             caption="Export Data As",
+            directory=self.recording_filename,
             filter="CSV Files (*.csv);;All Files (*)"
         )
 

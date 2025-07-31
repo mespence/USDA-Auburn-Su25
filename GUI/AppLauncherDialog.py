@@ -83,7 +83,7 @@ def launch_application():
     def launch_main_window_with_settings(settings):
         nonlocal main_window_instance
 
-        main_window_instance = main(app)
+        main_window_instance = main(app, recording_settings=settings)
         launcher_dialog.accept() 
 
     def launch_main_window_with_file(file, channel_index):

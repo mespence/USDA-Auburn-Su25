@@ -37,7 +37,7 @@ from label_view.LabelViewTab import LabelViewTab
 class MainWindow(QMainWindow):
     #start_labeling = pyqtSignal()
 
-    def __init__(self, file = None, channel_index = None) -> None:
+    def __init__(self, recording_settings = None, file = None, channel_index = None) -> None:
         if os.name == "nt":  # windows
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
                 "company.app.1"  # needed to set taskbar icon on windows
@@ -55,7 +55,10 @@ class MainWindow(QMainWindow):
         if file and self.channel_index:
             self.epgdata.load_data(file, self.channel_index)
 
-        self.live_view_tab = LiveViewTab(self)
+        if recording_settings:
+            self.live_view_tab = LiveViewTab(recording_settings, parent=self)
+        else:
+            self.live_view_tab = LiveViewTab(parent=self)
         self.label_tab = LabelViewTab(self)
 
         self.settings_window = SettingsWindow(self)
@@ -197,7 +200,7 @@ class MainWindow(QMainWindow):
     def save_data(self):
         current_widget = self.tabs.currentWidget()
         if isinstance(current_widget, LiveViewTab):
-            current_widget.datawindow.save_df()
+            current_widget.datawindow.export_df()
         elif isinstance(current_widget, LabelViewTab):
             # for now all saving is exporting
             current_widget.datawindow.export_df()

@@ -15,7 +15,7 @@ def load_fonts():
     for font in fonts:
         QFontDatabase.addApplicationFont(resource_path(font))
 
-def start_main_application(app_instance, file=None, channel_index=None):
+def start_main_application(app_instance, recording_settings = None, file=None, channel_index=None):
     load_fonts()
 
     splash = LoadingScreen()
@@ -28,7 +28,7 @@ def start_main_application(app_instance, file=None, channel_index=None):
     if os.name == "nt":
         setConfigOptions(useOpenGL=True)
 
-    window = MainWindow(file=file, channel_index=channel_index)
+    window = MainWindow(recording_settings=recording_settings, file=file, channel_index=channel_index)
 
     window.showMaximized()
     window.raise_()

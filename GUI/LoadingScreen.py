@@ -47,7 +47,7 @@ class LoadingScreen(QWidget):
         loading.setStyleSheet("color: #BBBAB9;")
         loading.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
-        version = QLabel("Version 0.1.2\nUSDA / Auburn University / Harvey Mudd College")
+        version = QLabel("Version 0.1.3\nUSDA / Auburn University / Harvey Mudd College")
         version.setFont(QFont("Inter", 10))
         version.setStyleSheet("color: #FFFEF9;")
         version.setAlignment(Qt.AlignmentFlag.AlignLeft)

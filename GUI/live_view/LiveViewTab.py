@@ -19,7 +19,7 @@ from utils.ResourcePath import resource_path
 
 
 class LiveViewTab(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, recording_settings = None, parent=None):
         super().__init__(parent)
         self.connection_indicator = ConnectionIndicator()
 
@@ -27,7 +27,10 @@ class LiveViewTab(QWidget):
         self.total_pause_time: float = 0  # the cumulative length of any pauses
         self.pause_start_time: float = None # unix timestamp of the most recent pause
 
-        self.datawindow = LiveDataWindow(self)
+        if recording_settings:
+            self.datawindow = LiveDataWindow(recording_settings, parent=self)
+        else:
+            self.datawindow = LiveDataWindow(parent=self)
         self.datawindow.getPlotItem().hideButtons()
 
 
