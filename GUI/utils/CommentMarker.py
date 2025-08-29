@@ -92,8 +92,10 @@ class CommentMarker:
         icon_scene_x = icon_scene_rect.right()
         icon_right_x = self.viewbox.mapSceneToView(QPointF(icon_scene_x, 0)).x()
         x_min, x_max = self.viewbox.viewRange()[0]
-        self.icon_item.setVisible(x_min <= self.time <= x_max and icon_right_x <= x_max)
-        self.marker.setVisible(x_min <= self.time <= x_max)
+        icon_visible= bool(x_min <= self.time <= x_max and icon_right_x <= x_max) # cast to bulit-in bool rather than numpy.bool
+        marker_visible = bool(x_min <= self.time <= x_max)
+        self.icon_item.setVisible(icon_visible)
+        self.marker.setVisible(marker_visible)
 
     def show_comment_editor(self, event: None):
         """

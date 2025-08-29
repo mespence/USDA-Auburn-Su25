@@ -30,7 +30,7 @@ class PanZoomViewBox(ViewBox):
         """
         super().__init__()
         self.datawindow = None
-        self.zoom_viewbox_limit: float = 0.8
+        self.zoom_viewbox_limit: float = 0.5
 
     def wheelEvent(self, event: QWheelEvent, axis=None) -> None:
         """

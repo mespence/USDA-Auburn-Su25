@@ -18,7 +18,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtCore import Qt, QPointF, QTimer, QObject, QEvent
 
 from PyQt6.QtWidgets import (
-    QPushButton, QVBoxLayout, QLabel, QDialog, QMessageBox, QMenu, QDialogButtonBox, QFileDialog
+    QVBoxLayout, QLabel, QDialog, QMessageBox, QMenu, QDialogButtonBox, QFileDialog
 )
 
 from settings import settings
@@ -678,7 +678,33 @@ class DataWindow(PlotWidget):
         nearest_idx = (self.df['time'] - time).abs().idxmin()
         comment_time = float(self.df.at[nearest_idx, 'time'])
         return (nearest_idx, comment_time)
+    
+    def export_txt(self):
+        if not self.labels:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("No Waveform labels")
+            msg_box.setText("There are no waveforms labels to export from this viewing.")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.exec()
+            return
+        
+        filename, _ = QFileDialog.getSaveFileName(
+            parent=self,
+            caption="Export Waveforms As",
+            filter="TXT Files (*.txt);;All Files (*)"
+        )
 
+        if filename:
+            with open(filename, 'w', encoding='utf-8') as f:
+                for label_area in self.labels:
+                    tbf_str = f"{label_area.start_time + label_area.duration:.3f}"
+                    indent = " " * (12 - len(tbf_str))
+                    label = label_area.label
+                    padding = " " * (12 - len(label) - 1)
+
+                    f.write(f"\"{label}{padding}\"\n")
+                    f.write(f"{indent}{tbf_str}\n")  # 4 spaces, 3 decimal places
+    
     def export_comments(self):
         """ export comments in csv format """
         

@@ -32,6 +32,7 @@ from settings.SettingsWindow import SettingsWindow
 
 from live_view.LiveViewTab import LiveViewTab
 from label_view.LabelViewTab import LabelViewTab
+from utils.AboutDialog import AboutDialog
 
 
 class MainWindow(QMainWindow):
@@ -62,6 +63,7 @@ class MainWindow(QMainWindow):
         self.label_tab = LabelViewTab(self)
 
         self.settings_window = SettingsWindow(self)
+        self.about_window = AboutDialog(self)
 
         if settings.get("default_recording_directory") is None:
             settings.set("default_recording_directory", os.getcwd())
@@ -89,12 +91,13 @@ class MainWindow(QMainWindow):
         )
         file_menu.addSeparator()
 
-        save_data = file_menu.addAction("Save As")
-        save_data.triggered.connect(self.save_data)
+        save_csv = file_menu.addAction("Save to CSV")
+        save_csv.triggered.connect(self.save_data)
+        self.export_to_txt = file_menu.addAction("Export to TXT")
+        self.export_to_txt.triggered.connect(self.export_waveforms_to_txt)
         export_comment_csv = file_menu.addAction("Export Comments")
         export_comment_csv.triggered.connect(self.export_comments_from_current_tab)
-        #export_data = file_menu.addAction("Export Data")
-        #export_data.triggered.connect(self.export_data)
+
         
         file_menu.addSeparator()
         file_menu.addAction("Settings", self.open_settings)
@@ -111,8 +114,7 @@ class MainWindow(QMainWindow):
 
 
         help_menu = QMenu("Help", self)
-        placeholder = help_menu.addAction("Nothing here yet! (sorry!)")
-        placeholder.setEnabled(False)
+        help_menu.addAction("About", self.open_about)
 
         # TODO add menu functionality
         menubar.addMenu(file_menu)
@@ -173,6 +175,11 @@ class MainWindow(QMainWindow):
         self.settings_window.raise_()
         self.settings_window.activateWindow()
 
+    def open_about(self):
+        self.about_window.show()
+        self.settings_window.raise_()
+        self.settings_window.activateWindow()
+
     def export_comments_from_current_tab(self):
         current_widget = self.tabs.currentWidget()
         if isinstance(current_widget, LiveViewTab) or isinstance(current_widget, LabelViewTab):
@@ -183,20 +190,15 @@ class MainWindow(QMainWindow):
             msg.setText("Current tab does not support exporting comments.")
             msg.setStandardButtons(QMessageBox.StandardButton.Ok)
             msg.exec()
-    
-    def export_data(self):
+
+    def export_waveforms_to_txt(self):
         current_widget = self.tabs.currentWidget()
-        if isinstance(current_widget, LiveViewTab):
-            current_widget.datawindow.export_df()
-        elif isinstance(current_widget, LabelViewTab):
-            current_widget.datawindow.export_df()
-        else:
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Cannot Export Data")
-            msg.setText("Current tab does not support exporting comments.")
-            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msg.exec()
-    
+        if isinstance(current_widget, LabelViewTab):
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            current_widget.datawindow.export_txt()
+            QApplication.restoreOverrideCursor()
+
+
     def save_data(self):
         current_widget = self.tabs.currentWidget()
         if isinstance(current_widget, LiveViewTab):
@@ -228,8 +230,10 @@ class MainWindow(QMainWindow):
         # Enable/disable "Open" action
         if isinstance(widget, LiveViewTab):
             self.file_open.setEnabled(False)
+            self.export_to_txt.setEnabled(False)
         else:
             self.file_open.setEnabled(True)
+            self.export_to_txt.setEnabled(True)
     
     # def start_labeling(self):
     #     task = LabelingTask(self.labeler, self.epgdata, self.datawindow)
