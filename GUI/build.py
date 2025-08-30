@@ -7,7 +7,7 @@ logo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'SCIDO.png')
 ico_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'SCIDO.ico'))
 
 subprocess.run([
-    r"C:\Users\jomo\AppData\Local\Programs\Python\Python311\python.exe",
+    r"D:\USDA-Auburn\CS-Repository\.venv\Scripts\python.exe",
     '-m', 'PyInstaller',
     './AppLauncherDialog.py',
     '--name=SCIDO',

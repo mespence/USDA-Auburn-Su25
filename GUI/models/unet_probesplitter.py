@@ -6,7 +6,7 @@ from pathlib import Path
 import torch
 from torch import nn
 import torch.optim as optim
-import distinctipy
+#import distinctipy
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 import random
@@ -813,122 +813,122 @@ class DataImport:
 
 
 
-def generate_probesplitter_report(test_data, predicted_labels, test_names, save_path, model_name, fold):
-    # Flatten everything
-    with open(".\label_map.json", "r") as f:
-        full_label_map = json.load(f)
-        bin_label_map = {"NP": 0, "P": 1}
+# def generate_probesplitter_report(test_data, predicted_labels, test_names, save_path, model_name, fold):
+#     # Flatten everything
+#     with open(".\label_map.json", "r") as f:
+#         full_label_map = json.load(f)
+#         bin_label_map = {"NP": 0, "P": 1}
         
-    labels_true = []
-    labels_pred = []
-    for df, preds in zip(test_data, predicted_labels):
-        labels_true.extend(np.vectorize(full_label_map.get)(df["labels"].values))
-        labels_pred.extend((preds))
+#     labels_true = []
+#     labels_pred = []
+#     for df, preds in zip(test_data, predicted_labels):
+#         labels_true.extend(np.vectorize(full_label_map.get)(df["labels"].values))
+#         labels_pred.extend((preds))
 
-    # Make sure we have a place to save everything
-    if not os.path.isdir(save_path):
-        os.mkdir(save_path)
+#     # Make sure we have a place to save everything
+#     if not os.path.isdir(save_path):
+#         os.mkdir(save_path)
         
 
-    print("\n=== Binary Classification Report ===")
+#     print("\n=== Binary Classification Report ===")
     
-    print(classification_report(
-        labels_true, labels_pred,
-        target_names=["Non-Probing", "Probing"], digits=4
-    ))
+#     print(classification_report(
+#         labels_true, labels_pred,
+#         target_names=["Non-Probing", "Probing"], digits=4
+#     ))
 
-    precision, recall, fscore, _ = precision_recall_fscore_support(
-        labels_true, labels_pred, average=None, labels=[0, 1], zero_division=0
-    )
+#     precision, recall, fscore, _ = precision_recall_fscore_support(
+#         labels_true, labels_pred, average=None, labels=[0, 1], zero_division=0
+#     )
 
-    metrics = {}
-    for label_idx, label_name in enumerate(["Non-Probing", "Probing"]):
-        metrics[f"{label_name}_precision"] = precision[label_idx]
-        metrics[f"{label_name}_recall"] = recall[label_idx]
-        metrics[f"{label_name}_fscore"] = fscore[label_idx]
-
-
-    out_dataframe = pd.DataFrame([metrics])
-
-    # accuracy
-    accuracy = accuracy_score(labels_true, labels_pred)
-    out_dataframe["accuracy"] = accuracy
-
-    # confusion matrix
-    ConfusionMatrixDisplay.from_predictions(labels_true, labels_pred, display_labels=["Non-Probing", "Probing"],
-                                             normalize = 'true')
-    plt.savefig(rf"{save_path}/{model_name}_ConfusionMatrix_Fold{fold}.png")
-
-    # difference plots
-    base_name = Path(model_name).name
-    for df, preds, name in zip(test_data, predicted_labels, test_names):
-        fig = plot_labels(
-            df["time"],
-            df["voltage"],
-            df["labels"].values,
-            np.asarray(preds)
-        )
-        file_stem = Path(name).stem
-        fig_path = Path(save_path) / "difference_plots" / f"{base_name}_{file_stem}_Fold{fold}.png"
-        fig_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(fig_path)
-        plt.close(fig)
-
-    print(f"Fold {fold} Overall Accuracy: {accuracy}")
-    return labels_true, labels_pred, out_dataframe
-
-def plot_labels(time, voltage, true_labels, pred_labels, probs = None):
-    """
-    plot_labels produced a matplotlib figure containing three subplots
-        that visualize a waveform along with the true and predicted labels
-    Input:
-        time: a series of time values
-        voltage: a time series of voltage values from the waveform
-        true_labels: a time series of the true label for each time point
-        pred_labels: a time series of the predicted labels for each time point
-    Output:
-        (fig, axs): a tuple
-    """
+#     metrics = {}
+#     for label_idx, label_name in enumerate(["Non-Probing", "Probing"]):
+#         metrics[f"{label_name}_precision"] = precision[label_idx]
+#         metrics[f"{label_name}_recall"] = recall[label_idx]
+#         metrics[f"{label_name}_fscore"] = fscore[label_idx]
 
 
-    def generate_label_colors(labels):
-        labels = sorted(set(labels))
-        colors = distinctipy.get_colors(len(labels))
-        hex_colors = [distinctipy.get_hex(color) for color in colors]
-        return dict(zip(labels, hex_colors))
+#     out_dataframe = pd.DataFrame([metrics])
+
+#     # accuracy
+#     accuracy = accuracy_score(labels_true, labels_pred)
+#     out_dataframe["accuracy"] = accuracy
+
+#     # confusion matrix
+#     ConfusionMatrixDisplay.from_predictions(labels_true, labels_pred, display_labels=["Non-Probing", "Probing"],
+#                                              normalize = 'true')
+#     plt.savefig(rf"{save_path}/{model_name}_ConfusionMatrix_Fold{fold}.png")
+
+#     # difference plots
+#     base_name = Path(model_name).name
+#     for df, preds, name in zip(test_data, predicted_labels, test_names):
+#         fig = plot_labels(
+#             df["time"],
+#             df["voltage"],
+#             df["labels"].values,
+#             np.asarray(preds)
+#         )
+#         file_stem = Path(name).stem
+#         fig_path = Path(save_path) / "difference_plots" / f"{base_name}_{file_stem}_Fold{fold}.png"
+#         fig_path.parent.mkdir(parents=True, exist_ok=True)
+#         fig.savefig(fig_path)
+#         plt.close(fig)
+
+#     print(f"Fold {fold} Overall Accuracy: {accuracy}")
+#     return labels_true, labels_pred, out_dataframe
+
+# def plot_labels(time, voltage, true_labels, pred_labels, probs = None):
+#     """
+#     plot_labels produced a matplotlib figure containing three subplots
+#         that visualize a waveform along with the true and predicted labels
+#     Input:
+#         time: a series of time values
+#         voltage: a time series of voltage values from the waveform
+#         true_labels: a time series of the true label for each time point
+#         pred_labels: a time series of the predicted labels for each time point
+#     Output:
+#         (fig, axs): a tuple
+#     """
+
+
+#     def generate_label_colors(labels):
+#         labels = sorted(set(labels))
+#         colors = distinctipy.get_colors(len(labels))
+#         hex_colors = [distinctipy.get_hex(color) for color in colors]
+#         return dict(zip(labels, hex_colors))
     
-    unique_labels = ['B', 'B2', 'B4', 'C', 'CG', 'D', 'DG', 'F', 'F1', 'F2', 'F3', 'F4', 'FB', 'G', 'N', 'P', 'Z'] # hardcoded for now
-    label_to_color = generate_label_colors(unique_labels)
+#     unique_labels = ['B', 'B2', 'B4', 'C', 'CG', 'D', 'DG', 'F', 'F1', 'F2', 'F3', 'F4', 'FB', 'G', 'N', 'P', 'Z'] # hardcoded for now
+#     label_to_color = generate_label_colors(unique_labels)
 
-    fig, axs = plt.subplots(3, 1, sharex = True)
-    recording = 1
-    fill_min, fill_max = voltage.min(), voltage.max()
+#     fig, axs = plt.subplots(3, 1, sharex = True)
+#     recording = 1
+#     fill_min, fill_max = voltage.min(), voltage.max()
     
-    # First plot will be the true labels
-    axs[0].plot(time, voltage, color = "black")
-    for label, color in label_to_color.items():
-        fill = axs[0].fill_between(time, fill_min, fill_max, 
-                where = (true_labels == label), color=color, alpha = 0.5)
-        fill.set_label(label)
-    axs[0].legend(bbox_to_anchor=(0.5, 1), 
-                  bbox_transform=fig.transFigure, loc="upper center", ncol=9)
-    axs[0].set_title("True Labels")
-    # Second plot will be the predicted labels
-    axs[1].plot(time, voltage, color = "black")
-    for label, color in label_to_color.items():
-        axs[1].fill_between(time, fill_min, fill_max, 
-                where = (pred_labels == label), color=color, alpha = 0.5)
-    axs[1].set_title("Predicted Labels")
-    # Third plot will be marked where there is a difference between the two
-    axs[2].plot(time, voltage, color = "black")
-    axs[2].fill_between(time, fill_min, fill_max, 
-            where = (pred_labels != true_labels), color = "gray", alpha = 0.5)
-    axs[2].set_title("Incorrect Labels")
-    # Axes titles and such
-    fig.supxlabel("Time (s)")
-    fig.supylabel("Volts")
-    fig.tight_layout()
-    return fig
+#     # First plot will be the true labels
+#     axs[0].plot(time, voltage, color = "black")
+#     for label, color in label_to_color.items():
+#         fill = axs[0].fill_between(time, fill_min, fill_max, 
+#                 where = (true_labels == label), color=color, alpha = 0.5)
+#         fill.set_label(label)
+#     axs[0].legend(bbox_to_anchor=(0.5, 1), 
+#                   bbox_transform=fig.transFigure, loc="upper center", ncol=9)
+#     axs[0].set_title("True Labels")
+#     # Second plot will be the predicted labels
+#     axs[1].plot(time, voltage, color = "black")
+#     for label, color in label_to_color.items():
+#         axs[1].fill_between(time, fill_min, fill_max, 
+#                 where = (pred_labels == label), color=color, alpha = 0.5)
+#     axs[1].set_title("Predicted Labels")
+#     # Third plot will be marked where there is a difference between the two
+#     axs[2].plot(time, voltage, color = "black")
+#     axs[2].fill_between(time, fill_min, fill_max, 
+#             where = (pred_labels != true_labels), color = "gray", alpha = 0.5)
+#     axs[2].set_title("Incorrect Labels")
+#     # Axes titles and such
+#     fig.supxlabel("Time (s)")
+#     fig.supylabel("Volts")
+#     fig.tight_layout()
+#     return fig
 
 
 
