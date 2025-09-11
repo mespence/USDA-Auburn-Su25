@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from itertools import groupby
 
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..\..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), r"..\..")))
 
 from models.label_mapper import load_label_map, build_label_map
 from models.data_loader import import_data, stratified_split
@@ -235,20 +235,21 @@ class UNetProbeSplitter:
 
     def predict(self, probes, smooth = True, return_logits=False):
         test_dataset = TimeSeriesDataset(probes, self.label_map, data_columns=self.data_columns,
-                                         class_column = "labels", ignore_N=self.ignore_N)
+                                         class_column = None, ignore_N=self.ignore_N)
         test_dataloader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)
+
         all_predictions = []
         all_logits = []
+
         self.model.eval()
         with torch.no_grad():
-            for probe in test_dataloader:
-                x, _, _ = probe
+            for batch in test_dataloader:
+                x, _, _ = batch
                 x = x.to(self.device)
-
                 outputs = self.model.forward(x.permute(0,2,1))
+
                 if return_logits:
                     all_logits.append(outputs.cpu())
-
                 outputs = outputs.argmax(dim=1).view(-1).cpu().tolist()
 
                 """ try out instead of argmax, a threshold -> this didn't look too promising
@@ -274,10 +275,7 @@ class UNetProbeSplitter:
                 
                 all_predictions = smoothed_predictions
 
-            if return_logits:
-                return all_predictions, all_logits
-            else:
-                return all_predictions
+            return (all_predictions, all_logits) if return_logits else all_predictions
 
     def enforce_min_np_length(self, binary_preds, min_np_length):
         arr = np.array(binary_preds, dtype=int)
@@ -351,16 +349,33 @@ class TimeSeriesDataset(Dataset):
         for df in dfs:
             # Extract time series data and labels for each df
             x_tensor = torch.tensor(df[self.data_columns].values, dtype=torch.float32)
-            mapped = df[self.class_column].map(label_map)
-
-            # ✅ Check for unmapped labels
-            if mapped.isnull().any():
-                missing = df[self.class_column][mapped.isnull()].unique()
-                raise ValueError(f"[Label Mapping Error] Found unknown labels: {missing}")
-
-            y_tensor = torch.tensor(mapped.values, dtype=torch.long)
             self.x.append(x_tensor)
+
+
+           # Handle labels if provided
+            if self.class_column and self.class_column in df.columns:
+                mapped = df[self.class_column].map(label_map)
+                if mapped.isnull().all():
+                    y_tensor = None
+                    weights_tensor = None
+                elif mapped.isnull().any():
+                    missing = df[self.class_column][mapped.isnull()].unique()
+                    raise ValueError(f"[Label Mapping Error] Found unknown labels: {missing}")
+                else:
+                    y_tensor = torch.tensor(mapped.values, dtype=torch.long)
+                    if weight:
+                        weights_tensor = torch.tensor(self.calculate_weights(df).tolist(), dtype=torch.float32)
+                    else:
+                        weights_tensor = torch.ones(x_tensor.shape, dtype=torch.float32)
+                    if ignore_N:
+                        mask = (df[self.class_column] == "N").values
+                        weights_tensor[mask] = 0.0
+            else:
+                y_tensor = None
+                weights_tensor = None
+
             self.y.append(y_tensor)
+            self.weights.append(weights_tensor)
 
             # Handle weights if requested
             if weight:
@@ -393,8 +408,8 @@ class TimeSeriesDataset(Dataset):
 
     def __getitem__(self, idx):
         x = self.x[idx]
-        y = self.y[idx]
-        weight = self.weights[idx]
+        y = self.y[idx] if self.y[idx] is not None else torch.tensor([-1])  # dummy label
+        weight = self.weights[idx] if self.weights[idx] is not None else torch.ones(x.shape)
         if self.transform:
             x = self.transform(x)
         return x, y, weight

@@ -693,6 +693,10 @@ class DataWindow(PlotWidget):
             caption="Export Waveforms As",
             filter="TXT Files (*.txt);;All Files (*)"
         )
+        
+        # BUG: if there is a blank area before the first label area, we need to append
+        # the tbf for that with a blank label (maybe?). Right now the export just
+        # makes it look like it starts with the first label, even if theres a gap.
 
         if filename:
             with open(filename, 'w', encoding='utf-8') as f:
